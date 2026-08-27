@@ -92,6 +92,12 @@ All changes apply instantly with WARN logs in the console.
 - **Zero code modification** -- No annotations needed. Fully automatic instrumentation.
 - **Explicit logging** -- WARN log emitted when chaos is active.
 
+## Documentation
+
+The full AsciiDoc guide lives in [`docs/src/main/asciidoc/`](docs/src/main/asciidoc/) (`index.adoc`), covering assault types, targeting, the Dev UI (with screenshots), an end-to-end example, a JSON-RPC reference, and a FAQ.
+
+Screenshots of the Dev UI are stored in [`docs/src/main/asciidoc/assets/`](docs/src/main/asciidoc/assets/). See the `README.md` there for how to (re)capture them.
+
 ## Requirements
 
 - Java 25+
