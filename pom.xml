@@ -39,7 +39,7 @@
 
     <modules>
         <module>runtime-dev</module>
-        <module>deployment</module>
+        <module>deployment-dev</module>
         <module>integration-tests</module>
         <module>docs</module>
     </modules>

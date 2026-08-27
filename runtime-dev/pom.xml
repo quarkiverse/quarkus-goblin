@@ -10,7 +10,7 @@
     </parent>
 
     <artifactId>quarkus-goblin</artifactId>
-    <name>Goblin - Runtime</name>
+    <name>Goblin - Runtime (dev only)</name>
     <description>Runtime components for the Goblin chaos engineering extension</description>
 
     <properties>

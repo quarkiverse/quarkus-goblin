@@ -10,7 +10,7 @@
     </parent>
 
     <artifactId>quarkus-goblin-deployment</artifactId>
-    <name>Goblin - Deployment</name>
+    <name>Goblin - Deployment (dev only)</name>
     <description>Build-time logic for the Goblin chaos engineering extension</description>
 
     <properties>
