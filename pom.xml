@@ -18,6 +18,13 @@
     <name>Goblin - Parent</name>
     <description>Chaos engineering extension for Quarkus - inject latency, exceptions and failures in dev mode</description>
 
+    <scm>
+        <connection>scm:git:git@github.com:quarkiverse/quarkus-goblin.git</connection>
+        <developerConnection>scm:git:git@github.com:quarkiverse/quarkus-goblin.git</developerConnection>
+        <url>https://github.com/quarkiverse/quarkus-goblin</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
@@ -32,7 +39,7 @@
 
     <modules>
         <module>runtime-dev</module>
-        <module>deployment</module>
+        <module>deployment-dev</module>
         <module>integration-tests</module>
         <module>docs</module>
     </modules>

@@ -1,0 +1,16 @@
+name: Goblin - Chaos Engineering
+description: Chaos engineering extension for Quarkus - inject latency, exceptions and failures in dev mode
+metadata:
+  keywords:
+    - chaos-engineering
+    - resilience
+    - testing
+    - latency
+    - fault-injection
+  categories:
+    - testing
+    - observability
+  status: experimental
+  guide: https://quarkiverse.github.io/quarkus-goblin/
+  config:
+    - "quarkus.goblin"
