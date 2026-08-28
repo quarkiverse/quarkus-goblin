@@ -7,7 +7,7 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-goblin</artifactId>
+    <artifactId>quarkus-goblin-dev</artifactId>
     <name>Goblin - Runtime (dev only)</name>
     <description>Runtime components for the Goblin chaos engineering extension</description>
 

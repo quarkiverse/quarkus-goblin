@@ -7,7 +7,7 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-goblin-deployment</artifactId>
+    <artifactId>quarkus-goblin-dev-deployment</artifactId>
     <name>Goblin - Deployment (dev only)</name>
     <description>Build-time logic for the Goblin chaos engineering extension</description>
 
@@ -28,7 +28,7 @@
         </dependency>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
-            <artifactId>quarkus-goblin</artifactId>
+            <artifactId>quarkus-goblin-dev</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

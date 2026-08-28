@@ -29,7 +29,7 @@ Add the dependency:
 ```xml
 <dependency>
     <groupId>io.quarkiverse.goblin</groupId>
-    <artifactId>quarkus-goblin</artifactId>
+    <artifactId>quarkus-goblin-dev</artifactId>
     <version>${goblin.version}</version>
 </dependency>
 ```

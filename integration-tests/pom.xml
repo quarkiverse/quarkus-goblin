@@ -20,12 +20,12 @@
     <dependencies>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
-            <artifactId>quarkus-goblin</artifactId>
+            <artifactId>quarkus-goblin-dev</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
-            <artifactId>quarkus-goblin-deployment</artifactId>
+            <artifactId>quarkus-goblin-dev-deployment</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
