@@ -1,0 +1,5 @@
+name: goblin
+title: Goblin
+version: dev
+nav:
+  - modules/ROOT/nav.adoc
