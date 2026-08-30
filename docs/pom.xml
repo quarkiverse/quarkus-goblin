@@ -8,6 +8,7 @@
     </parent>
 
     <artifactId>quarkus-goblin-docs</artifactId>
+    <packaging>pom</packaging>
     <name>Goblin - Documentation</name>
     <description>Documentation for the Goblin chaos engineering extension</description>
 
@@ -16,4 +17,29 @@
         <maven.install.skip>true</maven.install.skip>
     </properties>
 
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>quarkus-goblin-deployment</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-config-doc-maven-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <targetDirectory>${project.build.directory}/generated-docs/</targetDirectory>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.asciidoctor</groupId>
+                <artifactId>asciidoctor-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>
