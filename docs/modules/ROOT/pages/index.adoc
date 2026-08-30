@@ -234,7 +234,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 
 When running in dev mode, Goblin provides a control panel in the Quarkus Dev UI (accessible at `/q/dev`). You reach it by clicking the **Goblin** card in the extension grid:
 
-image::../assets/images/dev-ui-extension-card.png[Goblin card in the Quarkus Dev UI,width=560,align=center]
+image::dev-ui-extension-card.png[Goblin card in the Quarkus Dev UI,width=560,align=center]
 [.text-center]
 The Goblin card in the Dev UI extension grid.
 
@@ -242,7 +242,7 @@ The Goblin card in the Dev UI extension grid.
 
 The dashboard is the main control surface. It exposes the master toggle, per-type toggles, per-type configuration forms, and the target level.
 
-image::../assets/images/dev-ui-dashboard.png[Goblin Chaos Dashboard,width=720,align=center]
+image::dev-ui-dashboard.png[Goblin Chaos Dashboard,width=720,align=center]
 [.text-center]
 The Chaos Dashboard with latency enabled at 100% target level.
 
@@ -258,7 +258,7 @@ NOTE: When chaos is deactivated, the configuration sections remain visible but a
 
 A real-time log of every assault triggered, including the endpoint method, assault type, and timestamp. Clear the history between test sessions.
 
-image::../assets/images/dev-ui-history.png[Goblin Assault History,width=720,align=center]
+image::dev-ui-history.png[Goblin Assault History,width=720,align=center]
 [.text-center]
 The Assault History panel showing past triggered assaults.
 
