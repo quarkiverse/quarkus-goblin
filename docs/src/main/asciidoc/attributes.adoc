@@ -1,3 +1,0 @@
-:goblin-version: 1.0.0-SNAPSHOT
-:quarkus-version: 3.38.3
-:java-version: 25

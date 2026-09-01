@@ -74,6 +74,18 @@ export class QwcGoblinDashboard extends LitElement {
         }
         .assault-toggle .label { flex: 1; font-size: 14px; }
         .assault-toggle .desc { font-size: 12px; color: var(--lumo-contrast-60pct); }
+        .section .assault-toggle {
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--lumo-contrast-10pct);
+            border-radius: 6px 6px 0 0;
+        }
+        .section .assault-toggle + .form-row,
+        .section .assault-toggle + .save-btn {
+            margin-top: 6px;
+        }
+        .section .assault-toggle + .helper {
+            margin-top: 4px;
+        }
         .switch {
             position: relative;
             width: 40px; height: 22px;
@@ -282,85 +294,43 @@ export class QwcGoblinDashboard extends LitElement {
             ${c ? html`
 
                 <div class="section">
-                    <h4>Assault Types</h4>
-                    <div class="assault-toggles">
-                        <div class="assault-toggle ${c.latencyEnabled ? 'enabled' : ''}"
-                             @click="${() => this._toggleAssault('latencyEnabled', 'toggleLatency')}">
-                            <label class="switch" @click="${e => e.stopPropagation()}">
-                                <input type="checkbox" ?checked="${c.latencyEnabled}"
-                                       @change="${() => this._toggleAssault('latencyEnabled', 'toggleLatency')}">
-                                <span class="slider"></span>
-                            </label>
-                            <div>
-                                <div class="label">Latency</div>
-                                <div class="desc">Artificial delay before processing</div>
-                            </div>
-                        </div>
-                        <div class="assault-toggle ${c.exceptionEnabled ? 'enabled' : ''}"
-                             @click="${() => this._toggleAssault('exceptionEnabled', 'toggleException')}">
-                            <label class="switch" @click="${e => e.stopPropagation()}">
-                                <input type="checkbox" ?checked="${c.exceptionEnabled}"
-                                       @change="${() => this._toggleAssault('exceptionEnabled', 'toggleException')}">
-                                <span class="slider"></span>
-                            </label>
-                            <div>
-                                <div class="label">Exception</div>
-                                <div class="desc">Throw exception before method execution</div>
-                            </div>
-                        </div>
-                        <div class="assault-toggle ${c.httpStatusEnabled ? 'enabled' : ''}"
-                             @click="${() => this._toggleAssault('httpStatusEnabled', 'toggleHttpStatus')}">
-                            <label class="switch" @click="${e => e.stopPropagation()}">
-                                <input type="checkbox" ?checked="${c.httpStatusEnabled}"
-                                       @change="${() => this._toggleAssault('httpStatusEnabled', 'toggleHttpStatus')}">
-                                <span class="slider"></span>
-                            </label>
-                            <div>
-                                <div class="label">HTTP Status</div>
-                                <div class="desc">Return specific HTTP status code</div>
-                            </div>
-                        </div>
-                        <div class="assault-toggle ${c.dependencyDegradationEnabled ? 'enabled' : ''}"
-                             @click="${() => this._toggleAssault('dependencyDegradationEnabled', 'toggleDependencyDegradation')}">
-                            <label class="switch" @click="${e => e.stopPropagation()}">
-                                <input type="checkbox" ?checked="${c.dependencyDegradationEnabled}"
-                                       @change="${() => this._toggleAssault('dependencyDegradationEnabled', 'toggleDependencyDegradation')}">
-                                <span class="slider"></span>
-                            </label>
-                            <div>
-                                <div class="label">Dependency Degradation</div>
-                                <div class="desc">Simulate downstream service failure (503)</div>
-                            </div>
+                    <div class="assault-toggle ${c.latencyEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('latencyEnabled', 'toggleLatency')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.latencyEnabled}"
+                                   @change="${() => this._toggleAssault('latencyEnabled', 'toggleLatency')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">Latency</div>
+                            <div class="desc">Artificial delay before processing</div>
                         </div>
                     </div>
-                </div>
-
-                ${c.latencyEnabled ? html`
-                <div class="section">
-                    <h4>Latency (ms)</h4>
+                    ${c.latencyEnabled ? html`
                     <div class="form-row">
                         <label>Min</label>
                         <input type="number" id="lat-min" .value="${c.latency.minMilliseconds}" min="0">
                         <label>Max</label>
                         <input type="number" id="lat-max" .value="${c.latency.maxMilliseconds}" min="0">
                         <button class="save-btn" @click="${this._saveLatency}">Save</button>
-                    </div>
-                </div>` : html`
-                <div class="section" style="opacity: 0.4;">
-                    <h4>Latency (ms)</h4>
-                    <div class="form-row">
-                        <label>Min</label>
-                        <input type="number" disabled placeholder="100">
-                        <label>Max</label>
-                        <input type="number" disabled placeholder="5000">
-                        <button class="save-btn" disabled>Save</button>
-                    </div>
-                    <div class="helper">Enable latency assault to configure</div>
-                </div>`}
+                    </div>` : html`
+                    <div class="helper">Enable latency assault to configure</div>`}
+                </div>
 
-                ${c.exceptionEnabled ? html`
                 <div class="section">
-                    <h4>Exception</h4>
+                    <div class="assault-toggle ${c.exceptionEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('exceptionEnabled', 'toggleException')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.exceptionEnabled}"
+                                   @change="${() => this._toggleAssault('exceptionEnabled', 'toggleException')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">Exception</div>
+                            <div class="desc">Throw exception before method execution</div>
+                        </div>
+                    </div>
+                    ${c.exceptionEnabled ? html`
                     <div class="form-row">
                         <label>Class</label>
                         <input type="text" id="exc-type" .value="${c.exception.type}">
@@ -369,25 +339,24 @@ export class QwcGoblinDashboard extends LitElement {
                         <label>Message</label>
                         <input type="text" id="exc-msg" .value="${c.exception.message}">
                     </div>
-                    <button class="save-btn" @click="${this._saveException}">Save</button>
-                </div>` : html`
-                <div class="section" style="opacity: 0.4;">
-                    <h4>Exception</h4>
-                    <div class="form-row">
-                        <label>Class</label>
-                        <input type="text" disabled placeholder="java.lang.RuntimeException">
-                    </div>
-                    <div class="form-row">
-                        <label>Message</label>
-                        <input type="text" disabled placeholder="Goblin chaos: simulated exception">
-                    </div>
-                    <button class="save-btn" disabled>Save</button>
-                    <div class="helper">Enable exception assault to configure</div>
-                </div>`}
+                    <button class="save-btn" @click="${this._saveException}">Save</button>` : html`
+                    <div class="helper">Enable exception assault to configure</div>`}
+                </div>
 
-                ${c.httpStatusEnabled ? html`
                 <div class="section">
-                    <h4>HTTP Status</h4>
+                    <div class="assault-toggle ${c.httpStatusEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('httpStatusEnabled', 'toggleHttpStatus')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.httpStatusEnabled}"
+                                   @change="${() => this._toggleAssault('httpStatusEnabled', 'toggleHttpStatus')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">HTTP Status</div>
+                            <div class="desc">Return specific HTTP status code</div>
+                        </div>
+                    </div>
+                    ${c.httpStatusEnabled ? html`
                     <div class="form-row">
                         <label>Code</label>
                         <input type="number" id="http-code" .value="${c.httpStatus.code}" min="100" max="599">
@@ -396,21 +365,27 @@ export class QwcGoblinDashboard extends LitElement {
                         <label>Message</label>
                         <input type="text" id="http-msg" .value="${c.httpStatus.message}">
                     </div>
-                    <button class="save-btn" @click="${this._saveHttpStatus}">Save</button>
-                </div>` : html`
-                <div class="section" style="opacity: 0.4;">
-                    <h4>HTTP Status</h4>
-                    <div class="form-row">
-                        <label>Code</label>
-                        <input type="number" disabled placeholder="503">
+                    <button class="save-btn" @click="${this._saveHttpStatus}">Save</button>` : html`
+                    <div class="helper">Enable HTTP status assault to configure</div>`}
+                </div>
+
+                <div class="section">
+                    <div class="assault-toggle ${c.dependencyDegradationEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('dependencyDegradationEnabled', 'toggleDependencyDegradation')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.dependencyDegradationEnabled}"
+                                   @change="${() => this._toggleAssault('dependencyDegradationEnabled', 'toggleDependencyDegradation')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">Dependency Degradation</div>
+                            <div class="desc">Simulate downstream service failure (503)</div>
+                        </div>
                     </div>
-                    <div class="form-row">
-                        <label>Message</label>
-                        <input type="text" disabled placeholder="Service Unavailable (Goblin chaos)">
-                    </div>
-                    <button class="save-btn" disabled>Save</button>
-                    <div class="helper">Enable HTTP status assault to configure</div>
-                </div>`}
+                    ${c.dependencyDegradationEnabled ? html`
+                    <div class="helper">Returns HTTP 503 with a fixed "Dependency unavailable (Goblin chaos)" body.</div>` : html`
+                    <div class="helper">Enable dependency degradation assault.</div>`}
+                </div>
 
                 <div class="section">
                     <h4>Target Level</h4>

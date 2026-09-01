@@ -11,6 +11,7 @@ metadata:
     - testing
     - observability
   status: experimental
-  guide: https://quarkiverse.github.io/quarkus-goblin/
+  guide: https://docs.quarkiverse.io/quarkus-goblin/dev/
+  icon-url: https://github.com/quarkiverse/quarkus-goblin/blob/main/docs/modules/ROOT/assets/images/goblin-img.png?raw=true
   config:
     - "quarkus.goblin"
