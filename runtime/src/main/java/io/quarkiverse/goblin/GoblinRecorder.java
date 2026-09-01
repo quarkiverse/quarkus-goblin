@@ -1,4 +1,4 @@
-package io.quarkiverse.goblin.runtime;
+package io.quarkiverse.goblin;
 
 import io.quarkus.runtime.annotations.Recorder;
 

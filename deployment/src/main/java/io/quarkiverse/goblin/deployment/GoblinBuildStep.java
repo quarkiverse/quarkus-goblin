@@ -1,7 +1,7 @@
 package io.quarkiverse.goblin.deployment;
 
-import io.quarkiverse.goblin.runtime.GoblinConfig;
-import io.quarkiverse.goblin.runtime.GoblinRecorder;
+import io.quarkiverse.goblin.GoblinConfig;
+import io.quarkiverse.goblin.GoblinRecorder;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.annotations.ExecutionTime;
 import io.quarkus.deployment.annotations.Record;

@@ -428,7 +428,7 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 
 *Does Goblin run in production?*
 
-No. The chaos implementation lives in the `runtime-dev` module, which is only attached in dev mode. In a production build the artifacts are physically absent -- there is no configuration that can re-enable them.
+No. The chaos implementation is only activated in dev and test mode. The runtime ships in `quarkus-goblin`, while the Dev UI components live in the `runtime-dev` module (`quarkus-goblin-dev`), which is only attached in dev mode.
 
 *Do I need to annotate my endpoints?*
 

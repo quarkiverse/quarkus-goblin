@@ -1,10 +1,13 @@
-package io.quarkiverse.goblin.runtime;
+package io.quarkiverse.goblin.dev;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
+import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.MarkdownReportGenerator;
+import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
