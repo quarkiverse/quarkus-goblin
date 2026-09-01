@@ -36,6 +36,61 @@ export class QwcGoblinHistory extends LitElement {
         .clear-btn:hover {
             background: var(--lumo-error-color-10pct);
         }
+        .export-btn {
+            padding: 6px 14px;
+            border: 1px solid var(--lumo-primary-color-50pct);
+            border-radius: 4px;
+            background: var(--lumo-base-color);
+            color: var(--lumo-primary-color);
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 8px;
+        }
+        .export-btn:hover {
+            background: var(--lumo-primary-color-10pct);
+        }
+        .report {
+            margin-top: 16px;
+            border: 1px solid var(--lumo-contrast-10pct);
+            border-radius: 6px;
+        }
+        .report-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--lumo-contrast-10pct);
+        }
+        .report-toolbar span {
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--lumo-contrast-60pct);
+        }
+        .copy-btn {
+            padding: 4px 12px;
+            border: 1px solid var(--lumo-contrast-30pct);
+            border-radius: 4px;
+            background: var(--lumo-base-color);
+            color: var(--lumo-primary-color);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .copy-btn:hover {
+            background: var(--lumo-primary-color-10pct);
+        }
+        pre {
+            margin: 0;
+            padding: 16px;
+            overflow: auto;
+            max-height: 400px;
+            font-family: var(--lumo-font-family-mono);
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--lumo-contrast-color);
+            background: var(--lumo-shade-5pct);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -65,11 +120,13 @@ export class QwcGoblinHistory extends LitElement {
 
     static properties = {
         _history: {state: true},
+        _markdown: {state: true},
     };
 
     constructor() {
         super();
         this._history = [];
+        this._markdown = null;
         this.jsonRpc = new JsonRpc(this);
     }
 
@@ -86,6 +143,20 @@ export class QwcGoblinHistory extends LitElement {
         this.jsonRpc.clearHistory().then(() => { this._history = []; });
     }
 
+    _exportMarkdown() {
+        this.jsonRpc.getMarkdownReport().then(r => { this._markdown = r.result.markdown; });
+    }
+
+    _closeReport() {
+        this._markdown = null;
+    }
+
+    _copyMarkdown() {
+        if (this._markdown) {
+            navigator.clipboard.writeText(this._markdown);
+        }
+    }
+
     _formatTimestamp(ts) {
         return new Date(ts).toLocaleTimeString();
     }
@@ -94,7 +165,10 @@ export class QwcGoblinHistory extends LitElement {
         return html`
             <div class="toolbar">
                 <h3>Assault History <span class="count">(${this._history.length})</span></h3>
-                <button class="clear-btn" @click="${this._clearHistory}">Clear History</button>
+                <div>
+                    <button class="export-btn" @click="${this._exportMarkdown}">Export Markdown</button>
+                    <button class="clear-btn" @click="${this._clearHistory}">Clear History</button>
+                </div>
             </div>
 
             ${this._history.length === 0
@@ -106,6 +180,8 @@ export class QwcGoblinHistory extends LitElement {
                                 <th>Time</th>
                                 <th>Method</th>
                                 <th>Type</th>
+                                <th>Duration</th>
+                                <th>Active Config</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -114,11 +190,26 @@ export class QwcGoblinHistory extends LitElement {
                                     <td>${this._formatTimestamp(record.timestamp)}</td>
                                     <td>${record.method}</td>
                                     <td>${record.type}</td>
+                                    <td>${record.latencyMs ? record.latencyMs + ' ms' : '-'}</td>
+                                    <td>${record.config || ''}</td>
                                 </tr>
                             `)}
                         </tbody>
                     </table>
                 `}
+
+            ${this._markdown ? html`
+                <div class="report">
+                    <div class="report-toolbar">
+                        <span>Markdown Report</span>
+                        <div>
+                            <button class="copy-btn" @click="${this._copyMarkdown}">Copy</button>
+                            <button class="copy-btn" @click="${this._closeReport}">Close</button>
+                        </div>
+                    </div>
+                    <pre>${this._markdown}</pre>
+                </div>
+            ` : ''}
         `;
     }
 }

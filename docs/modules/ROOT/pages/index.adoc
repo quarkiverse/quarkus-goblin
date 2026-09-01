@@ -256,13 +256,27 @@ NOTE: When chaos is deactivated, the configuration sections remain visible but a
 
 === History
 
-A real-time log of every assault triggered, including the endpoint method, assault type, and timestamp. Clear the history between test sessions.
+A real-time log of every assault triggered, including the endpoint method, assault type, timestamp, the actual applied latency duration (when the assault was a latency injection), and a snapshot of the active assault configuration **at the time of the assault**. Clear the history between test sessions.
 
 image::dev-ui-history.png[Goblin Assault History,width=720,align=center]
 [.text-center]
 The Assault History panel showing past triggered assaults.
 
 The history is an in-memory buffer capped at the latest 1000 assaults. Use it to confirm that your targeting rules and level are applying to the expected endpoints before drawing conclusions about your resilience checks.
+
+=== Markdown report export
+
+The History panel also offers an **Export Markdown** button. Clicking it generates a factual Markdown report of the current Goblin session and displays it in a copyable panel:
+
+* the current status (active/inactive) and target level
+* the current assault configuration (latency, exception, HTTP status, dependency degradation toggles and values)
+* the full assault history, including the actual latency duration applied for each latency assault and a snapshot of the active configuration at the time of each assault -- so a config change between two calls is clearly visible (e.g. `latency enabled (100 - 500 ms)` vs `latency enabled (1000 - 5000 ms)`)
+
+image::dev-ui-history-report.png[Goblin Markdown report export,width=720,align=center]
+[.text-center]
+The exported Markdown report with the assault history table.
+
+The report is intentionally *factual*: it records what Goblin observed (configuration and assault history), without judging your application's resilience. This makes it directly usable as input for an LLM assistant tasked with reviewing and hardening your endpoints -- the facts ("`GET /api/orders` was subject to a 4945 ms latency at 10:37 UTC") are there, the verdict is left to the reviewer.
 
 == How it works
 
@@ -401,10 +415,13 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Set the percentage of affected requests (clamped to 0-100).
 
 | `getHistory`
-| Return the assault history buffer.
+| Return the assault history buffer. Each entry exposes the method, type, timestamp, the applied latency duration (`latencyMs`, 0 for non-latency assaults), and the active assault config snapshot at the time of the assault (`config`).
 
 | `clearHistory`
 | Empty the assault history buffer.
+
+| `getMarkdownReport`
+| Return `{ markdown, generatedAt }` with a factual Markdown report of the current configuration and assault history.
 |===
 
 == FAQ

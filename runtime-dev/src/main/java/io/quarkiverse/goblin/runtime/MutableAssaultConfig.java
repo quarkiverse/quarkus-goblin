@@ -1,5 +1,8 @@
 package io.quarkiverse.goblin.runtime;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class MutableAssaultConfig {
 
     private volatile boolean latencyEnabled = true;
@@ -66,6 +69,23 @@ public class MutableAssaultConfig {
 
     public boolean hasAnyAssaultEnabled() {
         return latencyEnabled || exceptionEnabled || httpStatusEnabled || dependencyDegradationEnabled;
+    }
+
+    public String describeAssaults() {
+        List<String> parts = new ArrayList<>();
+        if (latencyEnabled) {
+            parts.add("latency enabled (" + latencyMinMs + " - " + latencyMaxMs + " ms)");
+        }
+        if (exceptionEnabled) {
+            parts.add("exception enabled (" + exceptionType + ": \"" + exceptionMessage + "\")");
+        }
+        if (httpStatusEnabled) {
+            parts.add("httpStatus enabled (" + httpStatusCode + ": \"" + httpStatusMessage + "\")");
+        }
+        if (dependencyDegradationEnabled) {
+            parts.add("dependencyDegradation enabled (HTTP 503)");
+        }
+        return parts.isEmpty() ? "no assault enabled" : String.join(", ", parts);
     }
 
     public long getLatencyMinMs() {
