@@ -7,10 +7,10 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.runtime.AssaultEngine;
-import io.quarkiverse.goblin.runtime.AssaultType;
-import io.quarkiverse.goblin.runtime.GoblinJsonRPCService;
-import io.quarkiverse.goblin.runtime.MutableAssaultConfig;
+import io.quarkiverse.goblin.dev.AssaultEngine;
+import io.quarkiverse.goblin.dev.AssaultType;
+import io.quarkiverse.goblin.dev.GoblinJsonRPCService;
+import io.quarkiverse.goblin.dev.MutableAssaultConfig;
 import io.quarkus.test.junit.QuarkusTest;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;

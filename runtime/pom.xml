@@ -7,9 +7,9 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-goblin</artifactId>
-    <name>Goblin - Runtime (dev only)</name>
-    <description>Runtime components for the Goblin chaos engineering extension</description>
+    <artifactId>quarkus-goblin-dev</artifactId>
+    <name>Goblin - Runtime Dev</name>
+    <description>Runtime components (dev only) for the Goblin chaos engineering extension</description>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
@@ -62,7 +62,7 @@
                             <goal>extension-descriptor</goal>
                         </goals>
                         <configuration>
-                            <deployment>${project.groupId}:${project.artifactId}-deployment:${project.version}</deployment>
+                            <deployment>${project.groupId}:quarkus-goblin-deployment:${project.version}</deployment>
                         </configuration>
                     </execution>
                 </executions>

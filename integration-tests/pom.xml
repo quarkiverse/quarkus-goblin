@@ -20,7 +20,7 @@
     <dependencies>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
-            <artifactId>quarkus-goblin</artifactId>
+            <artifactId>quarkus-goblin-dev</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

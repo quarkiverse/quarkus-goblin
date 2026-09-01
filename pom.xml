@@ -36,8 +36,8 @@
     </properties>
 
     <modules>
-        <module>runtime-dev</module>
-        <module>deployment-dev</module>
+        <module>runtime</module>
+        <module>deployment</module>
         <module>integration-tests</module>
         <module>docs</module>
     </modules>

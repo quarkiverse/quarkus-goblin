@@ -1,4 +1,4 @@
-package io.quarkiverse.goblin.runtime;
+package io.quarkiverse.goblin.dev;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

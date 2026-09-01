@@ -1,6 +1,6 @@
 package io.quarkiverse.goblin.deployment;
 
-import io.quarkiverse.goblin.runtime.GoblinJsonRPCService;
+import io.quarkiverse.goblin.dev.GoblinJsonRPCService;
 import io.quarkus.deployment.IsLocalDevelopment;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;

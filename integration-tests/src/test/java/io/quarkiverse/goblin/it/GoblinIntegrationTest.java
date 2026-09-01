@@ -8,9 +8,9 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.runtime.AssaultEngine;
-import io.quarkiverse.goblin.runtime.GoblinConfig;
-import io.quarkiverse.goblin.runtime.MutableAssaultConfig;
+import io.quarkiverse.goblin.dev.AssaultEngine;
+import io.quarkiverse.goblin.dev.GoblinConfig;
+import io.quarkiverse.goblin.dev.MutableAssaultConfig;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 
