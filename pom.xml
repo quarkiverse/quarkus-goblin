@@ -10,7 +10,7 @@
 
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin-parent</artifactId>
-    <version>999-SNAPSHOT</version>
+    <version>0.0.2</version>
     <packaging>pom</packaging>
 
     <name>Goblin - Parent</name>
@@ -20,7 +20,7 @@
         <connection>scm:git:git@github.com:quarkiverse/quarkus-goblin.git</connection>
         <developerConnection>scm:git:git@github.com:quarkiverse/quarkus-goblin.git</developerConnection>
         <url>https://github.com/quarkiverse/quarkus-goblin</url>
-        <tag>HEAD</tag>
+        <tag>0.0.2</tag>
     </scm>
 
     <properties>
