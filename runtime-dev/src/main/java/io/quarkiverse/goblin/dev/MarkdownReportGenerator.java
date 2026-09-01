@@ -1,4 +1,4 @@
-package io.quarkiverse.goblin.runtime;
+package io.quarkiverse.goblin.dev;
 
 import java.time.Instant;
 import java.util.List;
