@@ -159,7 +159,8 @@ public class GoblinJsonRPCService {
             history.add(new JsonObject()
                     .put("method", record.method())
                     .put("type", record.type())
-                    .put("timestamp", record.timestamp()));
+                    .put("timestamp", record.timestamp())
+                    .put("latencyMs", record.latencyMs()));
         }
         return history;
     }
@@ -169,5 +170,15 @@ public class GoblinJsonRPCService {
         LOG.info("Goblin assault history cleared via Dev UI");
         return new JsonObject()
                 .put("cleared", true);
+    }
+
+    public JsonObject getMarkdownReport() {
+        String report = MarkdownReportGenerator.build(
+                engine.isActive(),
+                engine.getMutableConfig(),
+                engine.getHistory());
+        return new JsonObject()
+                .put("markdown", report)
+                .put("generatedAt", System.currentTimeMillis());
     }
 }

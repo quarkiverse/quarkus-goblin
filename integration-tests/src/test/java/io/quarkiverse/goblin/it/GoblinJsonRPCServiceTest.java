@@ -231,4 +231,37 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(result.getBoolean("cleared"));
         assertTrue(engine.getHistory().isEmpty());
     }
+
+    // ==================== markdown report ====================
+
+    @Test
+    public void testGetMarkdownReport() {
+        engine.recordAssault("SampleResource.hello", "latency", 1234);
+        engine.recordAssault("SampleResource.slow", "http-status");
+
+        JsonObject result = jsonRpc.getMarkdownReport();
+        assertNotNull(result);
+        assertTrue(result.containsKey("generatedAt"));
+        assertTrue(result.containsKey("markdown"));
+
+        String markdown = result.getString("markdown");
+        assertNotNull(markdown);
+        assertTrue(markdown.startsWith("# Goblin Chaos Report"));
+        assertTrue(markdown.contains("## Current Configuration"));
+        assertTrue(markdown.contains("## Assault History"));
+        assertTrue(markdown.contains("SampleResource.hello"));
+        assertTrue(markdown.contains("SampleResource.slow"));
+        assertTrue(markdown.contains("latency"));
+        assertTrue(markdown.contains("http-status"));
+        assertTrue(markdown.contains("1234 ms"));
+    }
+
+    @Test
+    public void testRecordAssaultWithLatency() {
+        engine.recordAssault("SampleResource.hello", "latency", 2500);
+        AssaultEngine.AssaultRecord record = engine.getHistory().get(0);
+        assertEquals(2500, record.latencyMs());
+        assertEquals("latency", record.type());
+        assertEquals("SampleResource.hello", record.method());
+    }
 }

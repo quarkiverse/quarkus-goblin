@@ -43,8 +43,8 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         // Apply latency first (adds delay before processing)
         if (cfg.isLatencyEnabled()) {
             LOG.debugf("Goblin: injecting latency on %s", methodName);
-            engine.applyLatency();
-            engine.recordAssault(methodName, "latency");
+            long delay = engine.applyLatency();
+            engine.recordAssault(methodName, "latency", delay);
         }
 
         // Then exception (aborts the request)

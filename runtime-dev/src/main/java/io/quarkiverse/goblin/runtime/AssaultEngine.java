@@ -76,14 +76,18 @@ public class AssaultEngine {
     }
 
     public void recordAssault(String method, String type) {
-        AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis());
+        recordAssault(method, type, 0);
+    }
+
+    public void recordAssault(String method, String type, long latencyMs) {
+        AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs);
         history.add(record);
         if (history.size() > 1000) {
             history.removeFirst();
         }
     }
 
-    public void applyLatency() {
+    public long applyLatency() {
         long min = mutableConfig.getLatencyMinMs();
         long max = mutableConfig.getLatencyMaxMs();
         long delay = ThreadLocalRandom.current().nextLong(min, max + 1);
@@ -92,6 +96,7 @@ public class AssaultEngine {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        return delay;
     }
 
     public RuntimeException createException() {
@@ -114,6 +119,6 @@ public class AssaultEngine {
         return mutableConfig.getHttpStatusMessage();
     }
 
-    public record AssaultRecord(String method, String type, long timestamp) {
+    public record AssaultRecord(String method, String type, long timestamp, long latencyMs) {
     }
 }
