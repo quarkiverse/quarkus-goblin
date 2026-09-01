@@ -1,5 +1,5 @@
 :extension-name: Goblin
-:extension-artifact-id: quarkus-goblin-dev
+:extension-artifact-id: quarkus-goblin
 :project-version: {page-component-version}
 :quarkus-version: 3.38.3
 :java-version: 25

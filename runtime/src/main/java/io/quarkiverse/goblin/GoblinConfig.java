@@ -1,4 +1,4 @@
-package io.quarkiverse.goblin.dev;
+package io.quarkiverse.goblin;
 
 import java.util.Optional;
 

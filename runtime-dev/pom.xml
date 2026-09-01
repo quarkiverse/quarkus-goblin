@@ -7,9 +7,9 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-goblin-deployment</artifactId>
-    <name>Goblin - Deployment (dev only)</name>
-    <description>Build-time logic for the Goblin chaos engineering extension</description>
+    <artifactId>quarkus-goblin-dev</artifactId>
+    <name>Goblin - Runtime Dev</name>
+    <description>Runtime Dev components (dev only) for the Goblin chaos engineering extension</description>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
@@ -19,22 +19,30 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-core-deployment</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-devui-deployment-spi</artifactId>
-        </dependency>
-        <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
             <artifactId>quarkus-goblin</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.quarkiverse.goblin</groupId>
-            <artifactId>quarkus-goblin-dev</artifactId>
-            <version>${project.version}</version>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.logging</groupId>
+            <artifactId>jboss-logging</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-core</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -56,6 +64,19 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>make-index</id>
+                        <goals>
+                            <goal>jandex</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

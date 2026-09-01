@@ -7,9 +7,9 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-goblin-dev</artifactId>
-    <name>Goblin - Runtime Dev</name>
-    <description>Runtime components (dev only) for the Goblin chaos engineering extension</description>
+    <artifactId>quarkus-goblin</artifactId>
+    <name>Goblin - Runtime</name>
+    <description>Runtime components for the Goblin chaos engineering extension</description>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
@@ -42,11 +42,6 @@
             <groupId>io.smallrye.config</groupId>
             <artifactId>smallrye-config</artifactId>
         </dependency>
-        <dependency>
-            <groupId>io.vertx</groupId>
-            <artifactId>vertx-core</artifactId>
-            <scope>provided</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -63,6 +58,9 @@
                         </goals>
                         <configuration>
                             <deployment>${project.groupId}:quarkus-goblin-deployment:${project.version}</deployment>
+                            <conditionalDevDependencies>
+                                <artifact>${project.groupId}:quarkus-goblin-dev:${project.version}</artifact>
+                            </conditionalDevDependencies>
                         </configuration>
                     </execution>
                 </executions>

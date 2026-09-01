@@ -1,9 +1,9 @@
-package io.quarkiverse.goblin.dev;
+package io.quarkiverse.goblin;
 
 import java.time.Instant;
 import java.util.List;
 
-final class MarkdownReportGenerator {
+public final class MarkdownReportGenerator {
 
     private static final String CONFIG_TEMPLATE = """
             - Latency (enabled: %s): %d - %d ms
@@ -33,7 +33,7 @@ final class MarkdownReportGenerator {
     private MarkdownReportGenerator() {
     }
 
-    static String build(boolean active, MutableAssaultConfig cfg, List<AssaultEngine.AssaultRecord> history) {
+    public static String build(boolean active, MutableAssaultConfig cfg, List<AssaultEngine.AssaultRecord> history) {
         String configSection = formatConfig(cfg);
         String historySection = formatHistory(history);
 
