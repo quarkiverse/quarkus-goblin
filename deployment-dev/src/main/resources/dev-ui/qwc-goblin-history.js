@@ -181,6 +181,7 @@ export class QwcGoblinHistory extends LitElement {
                                 <th>Method</th>
                                 <th>Type</th>
                                 <th>Duration</th>
+                                <th>Active Config</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -190,6 +191,7 @@ export class QwcGoblinHistory extends LitElement {
                                     <td>${record.method}</td>
                                     <td>${record.type}</td>
                                     <td>${record.latencyMs ? record.latencyMs + ' ms' : '-'}</td>
+                                    <td>${record.config || ''}</td>
                                 </tr>
                             `)}
                         </tbody>

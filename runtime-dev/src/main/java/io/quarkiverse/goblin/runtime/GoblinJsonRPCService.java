@@ -160,7 +160,8 @@ public class GoblinJsonRPCService {
                     .put("method", record.method())
                     .put("type", record.type())
                     .put("timestamp", record.timestamp())
-                    .put("latencyMs", record.latencyMs()));
+                    .put("latencyMs", record.latencyMs())
+                    .put("config", record.configSnapshot()));
         }
         return history;
     }

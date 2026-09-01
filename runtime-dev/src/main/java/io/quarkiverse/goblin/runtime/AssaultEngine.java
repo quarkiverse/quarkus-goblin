@@ -80,7 +80,8 @@ public class AssaultEngine {
     }
 
     public void recordAssault(String method, String type, long latencyMs) {
-        AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs);
+        String configSnapshot = mutableConfig != null ? mutableConfig.describeAssaults() : "no assault enabled";
+        AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, configSnapshot);
         history.add(record);
         if (history.size() > 1000) {
             history.removeFirst();
@@ -119,6 +120,6 @@ public class AssaultEngine {
         return mutableConfig.getHttpStatusMessage();
     }
 
-    public record AssaultRecord(String method, String type, long timestamp, long latencyMs) {
+    public record AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot) {
     }
 }

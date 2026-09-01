@@ -83,7 +83,7 @@ The Chaos Dashboard provides:
 - **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation
 - **Config sections** -- Edit parameters per type (disabled with placeholders when type is off)
 - **Target level** -- Adjust percentage of affected requests
-- **History** -- Real-time log of every assault triggered (with the applied latency duration)
+- **History** -- Real-time log of every assault triggered (with the applied latency duration and the active config snapshot at the time of the assault)
 - **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history, handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
 
 All changes apply instantly with WARN logs in the console.

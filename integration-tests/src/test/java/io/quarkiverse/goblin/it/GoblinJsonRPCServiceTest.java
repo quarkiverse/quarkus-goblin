@@ -236,7 +236,17 @@ public class GoblinJsonRPCServiceTest {
 
     @Test
     public void testGetMarkdownReport() {
-        engine.recordAssault("SampleResource.hello", "latency", 1234);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLatencyEnabled(true);
+        cfg.setLatencyMinMs(100);
+        cfg.setLatencyMaxMs(500);
+
+        engine.recordAssault("SampleResource.hello", "latency", 423);
+        cfg.setLatencyMinMs(1000);
+        cfg.setLatencyMaxMs(5000);
+        engine.recordAssault("SampleResource.hello", "latency", 3922);
+        cfg.setHttpStatusEnabled(true);
+        cfg.setHttpStatusCode(503);
         engine.recordAssault("SampleResource.slow", "http-status");
 
         JsonObject result = jsonRpc.getMarkdownReport();
@@ -253,15 +263,35 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(markdown.contains("SampleResource.slow"));
         assertTrue(markdown.contains("latency"));
         assertTrue(markdown.contains("http-status"));
-        assertTrue(markdown.contains("1234 ms"));
+        assertTrue(markdown.contains("423 ms"));
+        assertTrue(markdown.contains("3922 ms"));
+        assertTrue(markdown.contains("Active Config at Time of Assault"));
+        assertTrue(markdown.contains("latency enabled (100 - 500 ms)"));
+        assertTrue(markdown.contains("latency enabled (1000 - 5000 ms)"));
+        assertTrue(markdown.contains("httpStatus enabled"));
     }
 
     @Test
-    public void testRecordAssaultWithLatency() {
-        engine.recordAssault("SampleResource.hello", "latency", 2500);
+    public void testRecordAssaultCapturesConfigSnapshot() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLatencyEnabled(true);
+        cfg.setExceptionEnabled(true);
+        cfg.setLatencyMinMs(100);
+        cfg.setLatencyMaxMs(500);
+
+        engine.recordAssault("SampleResource.hello", "latency", 250);
         AssaultEngine.AssaultRecord record = engine.getHistory().get(0);
-        assertEquals(2500, record.latencyMs());
+
+        assertEquals(250, record.latencyMs());
         assertEquals("latency", record.type());
         assertEquals("SampleResource.hello", record.method());
+        assertTrue(record.configSnapshot().contains("latency enabled (100 - 500 ms)"));
+        assertTrue(record.configSnapshot().contains("exception enabled"));
+
+        cfg.setLatencyEnabled(false);
+        cfg.setExceptionEnabled(false);
+        engine.recordAssault("SampleResource.hello", "http-status");
+        AssaultEngine.AssaultRecord second = engine.getHistory().get(1);
+        assertEquals("no assault enabled", second.configSnapshot());
     }
 }
