@@ -57,7 +57,7 @@ class GoblinStatePersistenceTest {
 
     @Test
     void loadReturnsDefaultsWhenFileIsCorrupted() throws IOException {
-        Files.write(Path.of(STATE_FILE), new byte[] { 0x00, 0x01, 0x02 });
+        Files.write(Path.of(STATE_FILE), "this is not json at all".getBytes());
 
         MutableAssaultConfig loaded = GoblinStatePersistence.load();
         assertNotNull(loaded);
@@ -97,5 +97,46 @@ class GoblinStatePersistenceTest {
         assertTrue(config.isLatencyEnabled());
         assertEquals(100, config.getLatencyMinMs());
         assertEquals(100, config.getTargetLevel());
+    }
+
+    @Test
+    void fromJsonHandlesQuotedCommasInValues() {
+        String json = "{\"exceptionMessage\": \"Error: invalid, request\", \"httpStatusMessage\": \"Service\\nUnavailable\"}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+
+        assertNotNull(config);
+        assertEquals("Error: invalid, request", config.getExceptionMessage());
+        assertEquals("Service\nUnavailable", config.getHttpStatusMessage());
+    }
+
+    @Test
+    void fromJsonHandlesEscapedQuotesInValues() {
+        String json = "{\"exceptionMessage\": \"Say \\\"hello\\\"\"}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+
+        assertNotNull(config);
+        assertEquals("Say \"hello\"", config.getExceptionMessage());
+    }
+
+    @Test
+    void saveAndLoadPreservesEscapedStrings() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setExceptionMessage("Error: invalid, request");
+        config.setHttpStatusMessage("Service\nUnavailable");
+
+        GoblinStatePersistence.save(config);
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertEquals("Error: invalid, request", loaded.getExceptionMessage());
+        assertEquals("Service\nUnavailable", loaded.getHttpStatusMessage());
+    }
+
+    @Test
+    void parseJsonHandlesMultipleCommasInValue() {
+        String json = "{\"key\": \"a, b, c, d\"}";
+        var map = GoblinStatePersistence.parseJson(json);
+
+        assertEquals("a, b, c, d", map.get("key"));
     }
 }
