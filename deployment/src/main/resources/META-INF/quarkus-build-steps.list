@@ -1,1 +1,2 @@
 io.quarkiverse.goblin.deployment.GoblinBuildStep
+io.quarkiverse.goblin.deployment.GoblinDevUIProcessor

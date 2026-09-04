@@ -50,3 +50,6 @@ buildNumber.properties
 .quarkus/
 /.mvn/
 /mvnw
+
+# Goblin state
+.goblin-state.json

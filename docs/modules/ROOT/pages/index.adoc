@@ -23,6 +23,7 @@ Key design decisions:
 * **Zero code modification.** No `@ChaosLatency` annotations to scatter across your endpoints. Configuration is the only interface.
 * **Non-destructive.** You can target specific packages, exclude annotated methods, and control the percentage of affected requests.
 * **Composable.** Multiple assault types can be active simultaneously on the same request.
+* **Persistent state.** Dev UI config changes survive restarts via automatic disk persistence (`.goblin-state.json`).
 
 == Quick start
 
@@ -283,7 +284,7 @@ The report is intentionally *factual*: it records what Goblin observed (configur
 Goblin operates at the JAX-RS filter layer using a `ContainerRequestFilter`:
 
 1. At build time, the deployment module registers the filter and the `goblin` feature with Quarkus.
-2. At runtime startup, the `AssaultEngine` is initialized with the configuration and activated (in dev/test mode only).
+2. At runtime startup, the `AssaultEngine` is initialized: it first checks for a persisted state file (`.goblin-state.json`), then falls back to the configuration from `application.properties`. A change listener is registered so that every subsequent config mutation automatically persists the state to disk.
 3. For every incoming HTTP request, the filter checks:
    * Is chaos active?
    * Should this specific request be affected? (based on the `level` percentage)
@@ -306,6 +307,16 @@ All assault parameters can be modified at runtime through the Dev UI or via JSON
 * Drop the target level from 100% to 10% to test intermittent failures.
 
 Changes take effect on the **next request** -- no restart, no redeployment. A WARN log confirms every change in the console.
+
+=== State persistence
+
+Runtime config changes made through the Dev UI are automatically persisted to a `.goblin-state.json` file in the project working directory. On the next startup, Goblin checks for this file and restores the previous configuration instead of starting fresh from `application.properties`.
+
+This means your chaos scenario survives restarts -- no need to reconfigure the dashboard every time you restart in dev mode.
+
+TIP: Add `.goblin-state.json` to your `.gitignore` to avoid committing local chaos state to version control.
+
+If the state file is corrupted or unreadable, Goblin logs a warning and falls back to the configuration from `application.properties`.
 
 == Compatibility
 
@@ -331,6 +342,12 @@ Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter`
 * Verify at least one assault type is enabled in the Dev UI.
 * Look for the WARN log at startup confirming chaos activation.
 
+*Previous config is not restored on restart:*
+
+* Check that `.goblin-state.json` exists in the project working directory.
+* If the file is corrupted (e.g. manual edits), delete it and reconfigure via the Dev UI. Goblin will recreate it automatically.
+* Look for a WARN log: `Failed to load .goblin-state.json, falling back to application.properties`.
+
 *Endpoints are returning 500:*
 
 * If using EXCEPTION assault, verify the exception class exists and has a `String` constructor.
@@ -344,7 +361,7 @@ Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter`
 *Dev UI config changes not visible:*
 
 * Check the Quarkus console for WARN logs confirming the change.
-* Changes are in-memory only -- they reset on restart. Use `application.properties` for persistent defaults.
+* Changes are persisted to `.goblin-state.json` and restored on restart. If the file is missing or corrupted, Goblin falls back to `application.properties` defaults.
 
 == End-to-end example: prove your @Timeout works
 
@@ -448,7 +465,7 @@ If the configured class does not exist or has no `String` constructor, Goblin fa
 
 *Are Dev UI changes persisted?*
 
-No. Runtime changes are held in an in-memory `MutableAssaultConfig` and reset on restart. Use `application.properties` for any defaults that must survive a restart.
+Yes. Runtime changes are automatically saved to a `.goblin-state.json` file in the project working directory and restored on the next startup. The file is gitignored by default.
 
 == Non-goals (out of scope for V1)
 
