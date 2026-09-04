@@ -8,7 +8,7 @@ Current status: **experimental** (v0.0.2)
 
 ## v0.1.0 -- Stabilization & Robustness
 
-- [ ] **Persist Dev UI config across restarts**
+- [x] **Persist Dev UI config across restarts**
   Currently all Dev UI changes are lost on restart. Serialize `MutableAssaultConfig` to a `.goblin-state.json` file in the project directory on each change, and reload it at startup.
 
 - [ ] **Thread-safe assault history**

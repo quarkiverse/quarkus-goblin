@@ -5,6 +5,8 @@ import java.util.List;
 
 public class MutableAssaultConfig {
 
+    private Runnable onChange;
+
     private volatile boolean latencyEnabled = true;
     private volatile boolean exceptionEnabled = false;
     private volatile boolean httpStatusEnabled = false;
@@ -35,12 +37,17 @@ public class MutableAssaultConfig {
         return mutable;
     }
 
+    public void setOnChange(Runnable onChange) {
+        this.onChange = onChange;
+    }
+
     public boolean isLatencyEnabled() {
         return latencyEnabled;
     }
 
     public void setLatencyEnabled(boolean latencyEnabled) {
         this.latencyEnabled = latencyEnabled;
+        notifyChange();
     }
 
     public boolean isExceptionEnabled() {
@@ -49,6 +56,7 @@ public class MutableAssaultConfig {
 
     public void setExceptionEnabled(boolean exceptionEnabled) {
         this.exceptionEnabled = exceptionEnabled;
+        notifyChange();
     }
 
     public boolean isHttpStatusEnabled() {
@@ -57,6 +65,7 @@ public class MutableAssaultConfig {
 
     public void setHttpStatusEnabled(boolean httpStatusEnabled) {
         this.httpStatusEnabled = httpStatusEnabled;
+        notifyChange();
     }
 
     public boolean isDependencyDegradationEnabled() {
@@ -65,6 +74,7 @@ public class MutableAssaultConfig {
 
     public void setDependencyDegradationEnabled(boolean dependencyDegradationEnabled) {
         this.dependencyDegradationEnabled = dependencyDegradationEnabled;
+        notifyChange();
     }
 
     public boolean hasAnyAssaultEnabled() {
@@ -94,6 +104,7 @@ public class MutableAssaultConfig {
 
     public void setLatencyMinMs(long latencyMinMs) {
         this.latencyMinMs = latencyMinMs;
+        notifyChange();
     }
 
     public long getLatencyMaxMs() {
@@ -102,6 +113,7 @@ public class MutableAssaultConfig {
 
     public void setLatencyMaxMs(long latencyMaxMs) {
         this.latencyMaxMs = latencyMaxMs;
+        notifyChange();
     }
 
     public String getExceptionType() {
@@ -110,6 +122,7 @@ public class MutableAssaultConfig {
 
     public void setExceptionType(String exceptionType) {
         this.exceptionType = exceptionType;
+        notifyChange();
     }
 
     public String getExceptionMessage() {
@@ -118,6 +131,7 @@ public class MutableAssaultConfig {
 
     public void setExceptionMessage(String exceptionMessage) {
         this.exceptionMessage = exceptionMessage;
+        notifyChange();
     }
 
     public int getHttpStatusCode() {
@@ -126,6 +140,7 @@ public class MutableAssaultConfig {
 
     public void setHttpStatusCode(int httpStatusCode) {
         this.httpStatusCode = httpStatusCode;
+        notifyChange();
     }
 
     public String getHttpStatusMessage() {
@@ -134,6 +149,7 @@ public class MutableAssaultConfig {
 
     public void setHttpStatusMessage(String httpStatusMessage) {
         this.httpStatusMessage = httpStatusMessage;
+        notifyChange();
     }
 
     public int getTargetLevel() {
@@ -142,5 +158,12 @@ public class MutableAssaultConfig {
 
     public void setTargetLevel(int targetLevel) {
         this.targetLevel = Math.max(0, Math.min(100, targetLevel));
+        notifyChange();
+    }
+
+    private void notifyChange() {
+        if (onChange != null) {
+            onChange.run();
+        }
     }
 }

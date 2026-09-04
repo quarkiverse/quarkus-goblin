@@ -26,10 +26,16 @@ public class AssaultEngine {
     }
 
     void onStart(@Observes StartupEvent event) {
-        if (staticConfig != null) {
+        MutableAssaultConfig persisted = GoblinStatePersistence.load();
+        if (persisted != null) {
+            this.mutableConfig = persisted;
+            this.active = true;
+            LOG.info("Loaded previous Goblin state from .goblin-state.json");
+        } else if (staticConfig != null) {
             this.mutableConfig = MutableAssaultConfig.fromConfig(staticConfig);
             this.active = staticConfig.enabled();
         }
+        this.mutableConfig.setOnChange(this::persistConfig);
         if (active) {
             LOG.warnf(
                     "Chaos engineering active: %d%% of REST requests subject to assault (latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s)",
@@ -39,6 +45,10 @@ public class AssaultEngine {
                     mutableConfig.isHttpStatusEnabled(),
                     mutableConfig.isDependencyDegradationEnabled());
         }
+    }
+
+    private void persistConfig() {
+        GoblinStatePersistence.save(mutableConfig);
     }
 
     public boolean isActive() {

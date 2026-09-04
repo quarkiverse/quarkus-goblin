@@ -21,6 +21,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
+- **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`)
 - **Markdown report export** -- Generate a factual report of config + assault history, ready to hand to an LLM for resilience review
 - **Dev mode only** -- Chaos artifacts are physically absent from production builds
 
@@ -87,7 +88,7 @@ The Chaos Dashboard provides:
 - **History** -- Real-time log of every assault triggered (with the applied latency duration and the active config snapshot at the time of the assault)
 - **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history, handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
 
-All changes apply instantly with WARN logs in the console.
+All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts.
 
 ## Safety
 
