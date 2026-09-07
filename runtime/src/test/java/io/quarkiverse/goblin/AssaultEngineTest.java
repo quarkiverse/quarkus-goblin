@@ -102,8 +102,8 @@ class AssaultEngineTest {
 
         List<AssaultEngine.AssaultRecord> history = engine.getHistory();
         assertEquals(1000, history.size());
-        assertEquals(250L, history.getFirst().latencyMs());
-        assertEquals(1249L, history.getLast().latencyMs());
+        assertEquals(250L, history.get(0).latencyMs());
+        assertEquals(1249L, history.get(history.size() - 1).latencyMs());
     }
 
     @Test
