@@ -1,7 +1,7 @@
 package io.quarkiverse.goblin;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -19,7 +19,7 @@ public class AssaultEngine {
 
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
-    private final List<AssaultRecord> history = new ArrayList<>();
+    private final CopyOnWriteArrayList<AssaultRecord> history = new CopyOnWriteArrayList<>();
 
     public static void setStaticConfig(GoblinConfig config) {
         staticConfig = config;

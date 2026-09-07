@@ -11,7 +11,7 @@ Current status: **experimental** (v0.0.2)
 - [x] **Persist Dev UI config across restarts**
   Currently all Dev UI changes are lost on restart. Serialize `MutableAssaultConfig` to a `.goblin-state.json` file in the project directory on each change, and reload it at startup.
 
-- [ ] **Thread-safe assault history**
+- [x] **Thread-safe assault history**
   `AssaultEngine.history` uses a plain `ArrayList` which is not thread-safe. Concurrent HTTP requests can corrupt the list. Replace with `CopyOnWriteArrayList` or wrap access in synchronized blocks.
 
 - [ ] **Validate assault parameters at startup**
