@@ -1,7 +1,7 @@
 package io.quarkiverse.goblin;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -15,11 +15,12 @@ import io.quarkus.runtime.StartupEvent;
 public class AssaultEngine {
 
     private static final Logger LOG = Logger.getLogger(AssaultEngine.class);
+    static final int MAX_HISTORY = 1000;
     private static volatile GoblinConfig staticConfig;
 
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
-    private final List<AssaultRecord> history = new ArrayList<>();
+    private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
 
     public static void setStaticConfig(GoblinConfig config) {
         staticConfig = config;
@@ -92,9 +93,9 @@ public class AssaultEngine {
     public void recordAssault(String method, String type, long latencyMs) {
         String configSnapshot = mutableConfig != null ? mutableConfig.describeAssaults() : "no assault enabled";
         AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, configSnapshot);
-        history.add(record);
-        if (history.size() > 1000) {
-            history.removeFirst();
+        history.addLast(record);
+        while (history.size() > MAX_HISTORY) {
+            history.pollFirst();
         }
     }
 
