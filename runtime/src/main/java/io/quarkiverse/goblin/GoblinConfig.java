@@ -66,7 +66,8 @@ public interface GoblinConfig {
     interface LatencyConfig {
 
         /**
-         * Minimum latency in milliseconds.
+         * Minimum latency in milliseconds. Must be lower than or equal to max-milliseconds; inverted values are swapped with a
+         * WARN log at startup.
          */
         @WithDefault("100")
         long minMilliseconds();
@@ -85,7 +86,8 @@ public interface GoblinConfig {
     interface ExceptionConfig {
 
         /**
-         * The exception class to throw.
+         * The exception class to throw. Must have a String constructor; otherwise the engine falls back to RuntimeException
+         * with an ERROR log at startup.
          */
         @WithDefault("java.lang.RuntimeException")
         String type();
@@ -104,7 +106,8 @@ public interface GoblinConfig {
     interface HttpStatusConfig {
 
         /**
-         * The HTTP status code to return.
+         * The HTTP status code to return. Must be in the 100-599 range; out-of-range values default to 503 with an ERROR log at
+         * startup.
          */
         @WithDefault("503")
         int code();

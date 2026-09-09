@@ -139,6 +139,15 @@ public class GoblinJsonRPCServiceTest {
         assertEquals(1000, engine.getMutableConfig().getLatencyMaxMs());
     }
 
+    @Test
+    public void testSetLatencyRangeSwappedReportsWarning() {
+        JsonObject result = jsonRpc.setLatencyRange(1000, 500);
+        assertTrue(result.getBoolean("ok"));
+        assertEquals(500, result.getInteger("minMilliseconds"));
+        assertEquals(1000, result.getInteger("maxMilliseconds"));
+        assertTrue(result.getString("warning").contains("Swapping"));
+    }
+
     // ==================== setExceptionConfig ====================
 
     @Test
@@ -161,6 +170,14 @@ public class GoblinJsonRPCServiceTest {
         assertEquals(429, engine.getMutableConfig().getHttpStatusCode());
     }
 
+    @Test
+    public void testSetHttpStatusOutOfRangeDefaultsTo503WithWarning() {
+        JsonObject result = jsonRpc.setHttpStatusConfig(999, "Nope");
+        assertTrue(result.getBoolean("ok"));
+        assertEquals(503, result.getInteger("code"));
+        assertTrue(result.getString("warning").contains("100-599"));
+    }
+
     // ==================== setTargetLevel ====================
 
     @Test
@@ -178,6 +195,13 @@ public class GoblinJsonRPCServiceTest {
 
         jsonRpc.setTargetLevel(-10);
         assertEquals(0, engine.getMutableConfig().getTargetLevel());
+    }
+
+    @Test
+    public void testSetTargetLevelClampedReportsWarning() {
+        JsonObject result = jsonRpc.setTargetLevel(150);
+        assertEquals(100, result.getInteger("level"));
+        assertTrue(result.getString("warning").contains("Clamping"));
     }
 
     // ==================== getConfig ====================

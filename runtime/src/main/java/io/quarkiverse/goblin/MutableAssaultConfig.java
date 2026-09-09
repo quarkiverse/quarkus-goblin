@@ -3,7 +3,11 @@ package io.quarkiverse.goblin;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jboss.logging.Logger;
+
 public class MutableAssaultConfig {
+
+    private static final Logger LOG = Logger.getLogger(MutableAssaultConfig.class);
 
     private Runnable onChange;
 
@@ -35,6 +39,48 @@ public class MutableAssaultConfig {
         mutable.httpStatusMessage = config.assault().httpStatus().message();
         mutable.targetLevel = config.target().level();
         return mutable;
+    }
+
+    public List<String> validateAndFix() {
+        List<String> issues = new ArrayList<>();
+        if (latencyMinMs > latencyMaxMs) {
+            String message = "Invalid latency range: min-milliseconds (" + latencyMinMs
+                    + ") is greater than max-milliseconds (" + latencyMaxMs + "). Swapping values.";
+            LOG.warnf("%s", message);
+            issues.add(message);
+            long tmp = latencyMinMs;
+            latencyMinMs = latencyMaxMs;
+            latencyMaxMs = tmp;
+        }
+        if (httpStatusCode < 100 || httpStatusCode > 599) {
+            String message = "Invalid HTTP status code: " + httpStatusCode
+                    + " is outside the valid range 100-599. Defaulting to 503.";
+            LOG.errorf("%s", message);
+            issues.add(message);
+            httpStatusCode = 503;
+        }
+        try {
+            Class.forName(exceptionType).getConstructor(String.class);
+        } catch (ClassNotFoundException e) {
+            String message = "Configured exception class '" + exceptionType
+                    + "' could not be found. The engine will fall back to RuntimeException.";
+            LOG.errorf("%s", message);
+            issues.add(message);
+        } catch (NoSuchMethodException e) {
+            String message = "Configured exception class '" + exceptionType
+                    + "' has no String constructor. The engine will fall back to RuntimeException.";
+            LOG.errorf("%s", message);
+            issues.add(message);
+        }
+        int clamped = Math.max(0, Math.min(100, targetLevel));
+        if (clamped != targetLevel) {
+            String message = "Invalid target level: " + targetLevel + " is outside the valid range 0-100. Clamping to "
+                    + clamped + ".";
+            LOG.warnf("%s", message);
+            issues.add(message);
+            targetLevel = clamped;
+        }
+        return issues;
     }
 
     public void setOnChange(Runnable onChange) {
@@ -107,6 +153,14 @@ public class MutableAssaultConfig {
         notifyChange();
     }
 
+    public List<String> setLatencyRange(long latencyMinMs, long latencyMaxMs) {
+        this.latencyMinMs = latencyMinMs;
+        this.latencyMaxMs = latencyMaxMs;
+        List<String> issues = validateAndFix();
+        notifyChange();
+        return issues;
+    }
+
     public long getLatencyMaxMs() {
         return latencyMaxMs;
     }
@@ -120,9 +174,11 @@ public class MutableAssaultConfig {
         return exceptionType;
     }
 
-    public void setExceptionType(String exceptionType) {
+    public List<String> setExceptionType(String exceptionType) {
         this.exceptionType = exceptionType;
+        List<String> issues = validateAndFix();
         notifyChange();
+        return issues;
     }
 
     public String getExceptionMessage() {
@@ -138,9 +194,11 @@ public class MutableAssaultConfig {
         return httpStatusCode;
     }
 
-    public void setHttpStatusCode(int httpStatusCode) {
+    public List<String> setHttpStatusCode(int httpStatusCode) {
         this.httpStatusCode = httpStatusCode;
+        List<String> issues = validateAndFix();
         notifyChange();
+        return issues;
     }
 
     public String getHttpStatusMessage() {
@@ -156,9 +214,11 @@ public class MutableAssaultConfig {
         return targetLevel;
     }
 
-    public void setTargetLevel(int targetLevel) {
-        this.targetLevel = Math.max(0, Math.min(100, targetLevel));
+    public List<String> setTargetLevel(int targetLevel) {
+        this.targetLevel = targetLevel;
+        List<String> issues = validateAndFix();
         notifyChange();
+        return issues;
     }
 
     private void notifyChange() {

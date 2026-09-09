@@ -174,7 +174,10 @@ export class QwcGoblinDashboard extends LitElement {
             font-size: 13px;
             z-index: 1000;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            animation: fadeOut 2s forwards;
+            animation: fadeOut 5.5s forwards;
+        }
+        .toast.toast-warning {
+            background: var(--lumo-error-color);
         }
         @keyframes fadeOut {
             0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; }
@@ -205,9 +208,9 @@ export class QwcGoblinDashboard extends LitElement {
         this.jsonRpc.getStatus().then(r => { this._status = r.result; });
     }
 
-    _showToast(msg) {
-        this._toast = msg;
-        setTimeout(() => { this._toast = ''; }, 2000);
+    _showToast(msg, warning) {
+        this._toast = {msg, warning: !!warning};
+        setTimeout(() => { this._toast = ''; }, 6000);
     }
 
     _toggleActive() {
@@ -235,7 +238,7 @@ export class QwcGoblinDashboard extends LitElement {
                 this._config = {...this._config, latency: {
                     minMilliseconds: r.result.minMilliseconds, maxMilliseconds: r.result.maxMilliseconds
                 }};
-                this._showToast('Latency updated');
+                this._showToast(r.result.warning || 'Latency updated', !!r.result.warning);
             }
         });
     }
@@ -246,7 +249,7 @@ export class QwcGoblinDashboard extends LitElement {
         this.jsonRpc.setExceptionConfig({type, message: msg}).then(r => {
             if (r.result.ok) {
                 this._config = {...this._config, exception: {type: r.result.type, message: r.result.message}};
-                this._showToast('Exception updated');
+                this._showToast(r.result.warning || 'Exception updated', !!r.result.warning);
             }
         });
     }
@@ -257,7 +260,7 @@ export class QwcGoblinDashboard extends LitElement {
         this.jsonRpc.setHttpStatusConfig({code, message: msg}).then(r => {
             if (r.result.ok) {
                 this._config = {...this._config, httpStatus: {code: r.result.code, message: r.result.message}};
-                this._showToast('HTTP status updated');
+                this._showToast(r.result.warning || 'HTTP status updated', !!r.result.warning);
             }
         });
     }
@@ -268,7 +271,7 @@ export class QwcGoblinDashboard extends LitElement {
             if (r.result.ok) {
                 this._config = {...this._config, level: r.result.level};
                 this._status = {...this._status, level: r.result.level};
-                this._showToast('Target level updated');
+                this._showToast(r.result.warning || 'Target level updated', !!r.result.warning);
             }
         });
     }
@@ -276,7 +279,7 @@ export class QwcGoblinDashboard extends LitElement {
     render() {
         const c = this._config;
         return html`
-            ${this._toast ? html`<div class="toast">${this._toast}</div>` : ''}
+            ${this._toast ? html`<div class="toast ${this._toast.warning ? 'toast-warning' : ''}">${this._toast.msg}</div>` : ''}
             <h3>Goblin Chaos Engineering</h3>
 
             ${this._status ? html`

@@ -1,5 +1,8 @@
 package io.quarkiverse.goblin.dev;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -113,47 +116,55 @@ public class GoblinJsonRPCService {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         long prevMin = cfg.getLatencyMinMs();
         long prevMax = cfg.getLatencyMaxMs();
-        cfg.setLatencyMinMs(minMs);
-        cfg.setLatencyMaxMs(maxMs);
-        LOG.warnf("Goblin latency changed: %d-%d ms -> %d-%d ms", prevMin, prevMax, minMs, maxMs);
+        List<String> issues = cfg.setLatencyRange(minMs, maxMs);
+        LOG.warnf("Goblin latency changed: %d-%d ms -> %d-%d ms", prevMin, prevMax,
+                cfg.getLatencyMinMs(), cfg.getLatencyMaxMs());
         return new JsonObject()
                 .put("ok", true)
                 .put("minMilliseconds", cfg.getLatencyMinMs())
-                .put("maxMilliseconds", cfg.getLatencyMaxMs());
+                .put("maxMilliseconds", cfg.getLatencyMaxMs())
+                .put("warning", toWarning(issues));
     }
 
     public JsonObject setExceptionConfig(String type, String message) {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         String prevType = cfg.getExceptionType();
-        cfg.setExceptionType(type);
+        List<String> issues = cfg.setExceptionType(type);
         cfg.setExceptionMessage(message);
-        LOG.warnf("Goblin exception changed: %s -> %s", prevType, type);
+        LOG.warnf("Goblin exception changed: %s -> %s", prevType, cfg.getExceptionType());
         return new JsonObject()
                 .put("ok", true)
                 .put("type", cfg.getExceptionType())
-                .put("message", cfg.getExceptionMessage());
+                .put("message", cfg.getExceptionMessage())
+                .put("warning", toWarning(issues));
     }
 
     public JsonObject setHttpStatusConfig(int code, String message) {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         int prevCode = cfg.getHttpStatusCode();
-        cfg.setHttpStatusCode(code);
+        List<String> issues = cfg.setHttpStatusCode(code);
         cfg.setHttpStatusMessage(message);
-        LOG.warnf("Goblin HTTP status changed: %d -> %d", prevCode, code);
+        LOG.warnf("Goblin HTTP status changed: %d -> %d", prevCode, cfg.getHttpStatusCode());
         return new JsonObject()
                 .put("ok", true)
                 .put("code", cfg.getHttpStatusCode())
-                .put("message", cfg.getHttpStatusMessage());
+                .put("message", cfg.getHttpStatusMessage())
+                .put("warning", toWarning(issues));
     }
 
     public JsonObject setTargetLevel(int level) {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         int previous = cfg.getTargetLevel();
-        cfg.setTargetLevel(level);
-        LOG.warnf("Goblin target level changed: %d%% -> %d%%", previous, level);
+        List<String> issues = cfg.setTargetLevel(level);
+        LOG.warnf("Goblin target level changed: %d%% -> %d%%", previous, cfg.getTargetLevel());
         return new JsonObject()
                 .put("ok", true)
-                .put("level", cfg.getTargetLevel());
+                .put("level", cfg.getTargetLevel())
+                .put("warning", toWarning(issues));
+    }
+
+    private static String toWarning(List<String> issues) {
+        return issues.stream().collect(Collectors.joining(" "));
     }
 
     public JsonArray getHistory() {
