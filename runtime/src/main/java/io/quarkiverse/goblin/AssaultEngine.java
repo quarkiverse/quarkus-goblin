@@ -36,6 +36,7 @@ public class AssaultEngine {
             this.mutableConfig = MutableAssaultConfig.fromConfig(staticConfig);
             this.active = staticConfig.enabled();
         }
+        this.mutableConfig.validateAndFix();
         this.mutableConfig.setOnChange(this::persistConfig);
         if (active) {
             LOG.warnf(

@@ -88,6 +88,8 @@ quarkus.goblin.assault.latency.max-milliseconds=5000
 
 The delay is applied via `Thread.sleep()` in the JAX-RS filter, before the request reaches your endpoint logic.
 
+If `min-milliseconds` is greater than `max-milliseconds`, the values are swapped (with a `WARN` log) both at startup and when saving the range in the Dev UI.
+
 === EXCEPTION
 
 Throws a configurable exception before the request reaches the endpoint. The exception class and message are fully configurable.
@@ -100,6 +102,8 @@ quarkus.goblin.assault.exception.message=Connection refused to downstream servic
 
 The exception must have a constructor that accepts a single `String` parameter (the message). `RuntimeException` is used as a fallback if the specified class cannot be instantiated.
 
+If the class cannot be found or lacks a `String` constructor, an `ERROR` is logged at startup (and when saving in the Dev UI), and the engine falls back to `RuntimeException`.
+
 === HTTP_STATUS
 
 Returns a specific HTTP status code without executing the endpoint method at all. The request is aborted at the filter level.
@@ -111,6 +115,8 @@ quarkus.goblin.assault.http-status.message=Service Unavailable (simulated outage
 ----
 
 Common use case: verify that your frontend handles 503 responses gracefully.
+
+The status code must be in the `100`-`599` range. Out-of-range values are detected at startup (and when saving in the Dev UI) and default to `503` with an `ERROR` log.
 
 === DEPENDENCY_DEGRADATION
 
@@ -131,6 +137,8 @@ quarkus.goblin.target.level=10
 ----
 
 Setting `level=0` effectively disables chaos without removing the extension. Setting `level=100` (default) affects every request.
+
+Values outside the `0`-`100` range are clamped (with a `WARN` log) both at startup and when saved in the Dev UI.
 
 === Package filtering
 
@@ -183,7 +191,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.latency.min-milliseconds`
 | `long`
 | `100`
-| Minimum latency in milliseconds
+| Minimum latency in milliseconds. Must be lower than or equal to max-milliseconds; inverted values are swapped with a `WARN` log
 
 | `quarkus.goblin.assault.latency.max-milliseconds`
 | `long`
@@ -193,7 +201,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.exception.type`
 | `String`
 | `java.lang.RuntimeException`
-| Fully qualified exception class name
+| Fully qualified exception class name. Must have a `String` constructor; otherwise the engine falls back to RuntimeException with an `ERROR` log
 
 | `quarkus.goblin.assault.exception.message`
 | `String`
@@ -203,7 +211,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.http-status.code`
 | `int`
 | `503`
-| HTTP status code to return
+| HTTP status code to return. Must be in the `100`-`599` range; out-of-range values default to `503` with an `ERROR` log
 
 | `quarkus.goblin.assault.http-status.message`
 | `String`
@@ -213,7 +221,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.target.level`
 | `int`
 | `100`
-| Percentage of requests to affect (0-100)
+| Percentage of requests to affect (0-100; values are clamped with a `WARN` log)
 
 | `quarkus.goblin.target.include-packages`
 | `Optional<String[]>`
@@ -230,6 +238,21 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | _empty_
 | Exclude methods/classes carrying these annotations
 |===
+
+== Configuration validation
+
+Goblin validates assault parameters at startup and whenever you save a change in the Dev UI. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback, so a misconfiguration cannot silently corrupt your chaos experiments.
+
+[cols="3,4,3"]
+|===
+| Parameter | Rule | What happens
+| `assault.latency.min-milliseconds` / `assault.latency.max-milliseconds` | `min` must be lower than or equal to `max` | Values are swapped and a `WARN` is logged
+| `assault.http-status.code` | Must be in the `100`-`599` range | Defaults to `503` and an `ERROR` is logged
+| `assault.exception.type` | Class must exist and expose a `String` constructor | Falls back to `RuntimeException` and an `ERROR` is logged
+| `target.level` | Must be in the `0`-`100` range | Clamped and a `WARN` is logged
+|===
+
+At startup the checks run in `AssaultEngine.onStart()` and cover both the `application.properties` configuration and the state loaded from `.goblin-state.json`. When you edit a parameter in the Dev UI, the same rules apply: the corrected value is persisted back to `.goblin-state.json`, and the dashboard shows a warning toast explaining what changed -- for example, entering `min=10000, max=500` swaps them to `min=500, max=10000`.
 
 == Dev UI panel
 
@@ -251,7 +274,7 @@ The Chaos Dashboard with latency enabled at 100% target level.
 * **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color.
 * **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button.
 * **Target level** -- Adjust the percentage of affected requests (0-100%) on the fly, saved with its own button.
-* **All changes apply instantly** -- no restart needed. A WARN log is emitted in the console for every change, and a toast confirms each action in the UI.
+* **All changes apply instantly** -- no restart needed. A WARN log is emitted in the console for every change, and a toast confirms each action in the UI. If a change violates a validation rule (see <<Configuration validation>>), the toast shows the applied correction, e.g. a swapped latency range.
 
 NOTE: When chaos is deactivated, the configuration sections remain visible but are dimmed and their inputs disabled -- you can prepare your assault configuration before turning chaos on.
 

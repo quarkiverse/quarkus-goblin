@@ -88,7 +88,7 @@ The Chaos Dashboard provides:
 - **History** -- Real-time log of every assault triggered (with the applied latency duration and the active config snapshot at the time of the assault)
 - **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history, handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
 
-All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts.
+All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback -- inverted latency ranges are swapped, out-of-range HTTP status codes (100-599) fall back to 503, unknown exception classes fall back to `RuntimeException`, and the target level is clamped to 0-100. In the dashboard, a warning toast explains the applied correction.
 
 ## Safety
 
@@ -98,9 +98,9 @@ All changes apply instantly with WARN logs in the console and are persisted to `
 
 ## Documentation
 
-The full AsciiDoc guide lives in [`docs/src/main/asciidoc/`](docs/src/main/asciidoc/) (`index.adoc`), covering assault types, targeting, the Dev UI (with screenshots), an end-to-end example, a JSON-RPC reference, and a FAQ.
+The full AsciiDoc guide lives in [`docs/modules/ROOT/pages/`](docs/modules/ROOT/pages/) (`index.adoc`), covering assault types, targeting, configuration validation, the Dev UI (with screenshots), an end-to-end example, a JSON-RPC reference, and a FAQ.
 
-Screenshots of the Dev UI are stored in [`docs/src/main/asciidoc/assets/`](docs/src/main/asciidoc/assets/). See the `README.md` there for how to (re)capture them.
+Screenshots of the Dev UI are stored in [`docs/modules/ROOT/assets/images/`](docs/modules/ROOT/assets/images/).
 
 ## Requirements
 
