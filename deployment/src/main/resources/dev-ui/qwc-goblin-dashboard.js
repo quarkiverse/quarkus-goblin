@@ -166,9 +166,10 @@ export class QwcGoblinDashboard extends LitElement {
         .config-group { margin-top: 16px; }
         .config-group h4 { margin-bottom: 8px; }
         .toast {
+            --goblin-toast-bg: var(--lumo-success-color);
             position: fixed; bottom: 20px; right: 20px;
             padding: 10px 18px;
-            background: var(--lumo-success-color);
+            background: var(--goblin-toast-bg);
             color: var(--lumo-primary-contrast-color);
             border-radius: 6px;
             font-size: 13px;
@@ -177,7 +178,7 @@ export class QwcGoblinDashboard extends LitElement {
             animation: fadeOut 5.5s forwards;
         }
         .toast.toast-warning {
-            background: var(--lumo-error-color);
+            --goblin-toast-bg: var(--lumo-error-color);
         }
         @keyframes fadeOut {
             0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; }

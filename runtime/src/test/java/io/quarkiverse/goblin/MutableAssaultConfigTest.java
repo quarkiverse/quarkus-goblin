@@ -196,6 +196,17 @@ class MutableAssaultConfigTest {
     }
 
     @Test
+    void setHttpStatusCodeAtBoundariesKept() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+
+        config.setHttpStatusCode(100);
+        assertEquals(100, config.getHttpStatusCode());
+
+        config.setHttpStatusCode(599);
+        assertEquals(599, config.getHttpStatusCode());
+    }
+
+    @Test
     void setExceptionTypeAcceptsNonexistentClassWithoutThrowing() {
         MutableAssaultConfig config = new MutableAssaultConfig();
         assertDoesNotThrow(() -> config.setExceptionType("com.example.DoesNotExist"));

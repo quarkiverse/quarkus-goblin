@@ -2,12 +2,15 @@ package io.quarkiverse.goblin;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.jboss.logging.Logger;
 
 public class MutableAssaultConfig {
 
     private static final Logger LOG = Logger.getLogger(MutableAssaultConfig.class);
+    private static final Map<String, String> EXCEPTION_CLASS_ERRORS = new ConcurrentHashMap<>();
 
     private Runnable onChange;
 
@@ -59,18 +62,10 @@ public class MutableAssaultConfig {
             issues.add(message);
             httpStatusCode = 503;
         }
-        try {
-            Class.forName(exceptionType).getConstructor(String.class);
-        } catch (ClassNotFoundException e) {
-            String message = "Configured exception class '" + exceptionType
-                    + "' could not be found. The engine will fall back to RuntimeException.";
-            LOG.errorf("%s", message);
-            issues.add(message);
-        } catch (NoSuchMethodException e) {
-            String message = "Configured exception class '" + exceptionType
-                    + "' has no String constructor. The engine will fall back to RuntimeException.";
-            LOG.errorf("%s", message);
-            issues.add(message);
+        String exceptionError = exceptionClassError(exceptionType);
+        if (exceptionError != null) {
+            LOG.errorf("%s", exceptionError);
+            issues.add(exceptionError);
         }
         int clamped = Math.max(0, Math.min(100, targetLevel));
         if (clamped != targetLevel) {
@@ -81,6 +76,23 @@ public class MutableAssaultConfig {
             targetLevel = clamped;
         }
         return issues;
+    }
+
+    private static String exceptionClassError(String className) {
+        return EXCEPTION_CLASS_ERRORS.computeIfAbsent(className, MutableAssaultConfig::checkExceptionClass);
+    }
+
+    private static String checkExceptionClass(String className) {
+        try {
+            Class.forName(className).getConstructor(String.class);
+            return null;
+        } catch (ClassNotFoundException e) {
+            return "Configured exception class '" + className
+                    + "' could not be found. The engine will fall back to RuntimeException.";
+        } catch (NoSuchMethodException e) {
+            return "Configured exception class '" + className
+                    + "' has no String constructor. The engine will fall back to RuntimeException.";
+        }
     }
 
     public void setOnChange(Runnable onChange) {
