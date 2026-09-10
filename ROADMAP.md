@@ -14,7 +14,7 @@ Current status: **experimental** (v0.0.2)
 - [x] **Thread-safe assault history**
   `AssaultEngine.history` uses a plain `ArrayList` which is not thread-safe. Concurrent HTTP requests can corrupt the list. Replace with `CopyOnWriteArrayList` or wrap access in synchronized blocks.
 
-- [ ] **Validate assault parameters at startup**
+- [x] **Validate assault parameters at startup**
   Reject invalid configurations early: ensure `minLatency <= maxLatency`, HTTP status code is in 100-599 range, and the configured exception class exists and has a `String` constructor. Log clear error messages on misconfiguration.
 
 - [ ] **Log reflection fallback on exception instantiation**
