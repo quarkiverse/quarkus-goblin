@@ -9,6 +9,7 @@ import jakarta.enterprise.event.Observes;
 
 import org.jboss.logging.Logger;
 
+import io.quarkus.runtime.LaunchMode;
 import io.quarkus.runtime.StartupEvent;
 
 @ApplicationScoped
@@ -37,7 +38,9 @@ public class AssaultEngine {
             this.active = staticConfig.enabled();
         }
         this.mutableConfig.validateAndFix();
-        this.mutableConfig.setOnChange(this::persistConfig);
+        if (LaunchMode.current() == LaunchMode.DEVELOPMENT) {
+            this.mutableConfig.setOnChange(this::persistConfig);
+        }
         if (active) {
             LOG.warnf(
                     "Chaos engineering active: %d%% of REST requests subject to assault (latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s)",
@@ -98,38 +101,6 @@ public class AssaultEngine {
         while (history.size() > MAX_HISTORY) {
             history.pollFirst();
         }
-    }
-
-    public long applyLatency() {
-        long min = mutableConfig.getLatencyMinMs();
-        long max = mutableConfig.getLatencyMaxMs();
-        long delay = ThreadLocalRandom.current().nextLong(min, max + 1);
-        try {
-            Thread.sleep(delay);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        return delay;
-    }
-
-    public RuntimeException createException() {
-        String type = mutableConfig.getExceptionType();
-        String message = mutableConfig.getExceptionMessage();
-        try {
-            Class<?> clazz = Class.forName(type);
-            var ctor = clazz.getConstructor(String.class);
-            return (RuntimeException) ctor.newInstance(message);
-        } catch (Exception e) {
-            return new RuntimeException(message);
-        }
-    }
-
-    public int getHttpStatus() {
-        return mutableConfig.getHttpStatusCode();
-    }
-
-    public String getHttpStatusMessage() {
-        return mutableConfig.getHttpStatusMessage();
     }
 
     public record AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot) {
