@@ -2,21 +2,29 @@ package io.quarkiverse.goblin;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.Comparator;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.*;
-import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
 import org.jboss.logging.Logger;
+
+import io.quarkiverse.goblin.assault.Assault;
+import io.quarkiverse.goblin.assault.AssaultContext;
+import io.quarkiverse.goblin.assault.AssaultOutcome;
 
 @Provider
 @ApplicationScoped
 public class GoblinChaosFilter implements ContainerRequestFilter, ContainerResponseFilter {
 
     private static final Logger LOG = Logger.getLogger(GoblinChaosFilter.class);
+
+    @Inject
+    Instance<Assault> assaults;
 
     @Inject
     AssaultEngine engine;
@@ -39,38 +47,17 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
 
         String methodName = describeMethod();
         MutableAssaultConfig cfg = engine.getMutableConfig();
+        AssaultContext context = new AssaultContext(requestContext, cfg, engine, methodName);
 
-        // Apply latency first (adds delay before processing)
-        if (cfg.isLatencyEnabled()) {
-            LOG.debugf("Goblin: injecting latency on %s", methodName);
-            long delay = engine.applyLatency();
-            engine.recordAssault(methodName, "latency", delay);
-        }
-
-        // Then exception (aborts the request)
-        if (cfg.isExceptionEnabled()) {
-            LOG.debugf("Goblin: injecting exception on %s", methodName);
-            engine.recordAssault(methodName, "exception");
-            throw engine.createException();
-        }
-
-        // Then HTTP status (aborts the request)
-        if (cfg.isHttpStatusEnabled()) {
-            LOG.debugf("Goblin: forcing HTTP %d on %s", engine.getHttpStatus(), methodName);
-            engine.recordAssault(methodName, "http-status");
-            requestContext.abortWith(Response.status(engine.getHttpStatus())
-                    .entity(engine.getHttpStatusMessage())
-                    .build());
-            return;
-        }
-
-        // Then dependency degradation (aborts the request)
-        if (cfg.isDependencyDegradationEnabled()) {
-            LOG.debugf("Goblin: simulating dependency degradation on %s", methodName);
-            engine.recordAssault(methodName, "dependency-degradation");
-            requestContext.abortWith(Response.status(503)
-                    .entity("Dependency unavailable (Goblin chaos)")
-                    .build());
+        for (Assault assault : assaults.stream()
+                .sorted(Comparator.comparingInt(Assault::order))
+                .toList()) {
+            if (!assault.isEnabled(cfg)) {
+                continue;
+            }
+            if (assault.apply(context) == AssaultOutcome.ABORTED) {
+                return;
+            }
         }
     }
 
