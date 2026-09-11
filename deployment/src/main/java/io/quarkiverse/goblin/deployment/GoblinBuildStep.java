@@ -30,10 +30,8 @@ public class GoblinBuildStep {
             BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         AdditionalBeanBuildItem.Builder builder = AdditionalBeanBuildItem.builder().setUnremovable();
         DotName assaultName = DotName.createSimple(Assault.class.getName());
-        for (ClassInfo ci : combinedIndex.getIndex().getAllKnownImplementors(assaultName)) {
-            if (!ci.isInterface()) {
-                builder.addBeanClass(ci.name().toString());
-            }
+        for (ClassInfo ci : combinedIndex.getIndex().getAllKnownImplementations(assaultName)) {
+            builder.addBeanClass(ci.name().toString());
         }
         additionalBeans.produce(builder.build());
     }
