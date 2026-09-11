@@ -2,6 +2,8 @@ package io.quarkiverse.goblin.assault;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.reflect.InvocationTargetException;
+
 import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultEngine;
@@ -49,13 +51,56 @@ class AssaultTest {
         assertEquals("exception", engine.getHistory().get(0).type());
     }
 
+    /**
+     * Verifies that the exception assault falls back to a {@link RuntimeException} carrying the configured message
+     * when the configured class cannot be loaded.
+     */
     @Test
     void exceptionFallsBackToRuntimeExceptionForUnknownClass() {
         config.setExceptionEnabled(true);
         config.setExceptionType("com.example.DoesNotExist");
         config.setExceptionMessage("boom");
 
-        assertThrows(RuntimeException.class, () -> new ExceptionAssault().apply(context("TestResource.hello")));
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> new ExceptionAssault().apply(context("TestResource.hello")));
+        assertEquals("boom", thrown.getMessage());
+    }
+
+    /**
+     * Verifies the failure reason reported for an unknown exception class.
+     */
+    @Test
+    void failureReasonForUnknownClass() {
+        String reason = ExceptionAssault.failureReason("com.example.DoesNotExist", new ClassNotFoundException());
+        assertEquals("class 'com.example.DoesNotExist' not found", reason);
+    }
+
+    /**
+     * Verifies the failure reason reported when the class has no public {@code String} constructor.
+     */
+    @Test
+    void failureReasonForMissingStringConstructor() {
+        String reason = ExceptionAssault.failureReason("java.lang.Class", new NoSuchMethodException());
+        assertEquals("class 'java.lang.Class' has no String constructor", reason);
+    }
+
+    /**
+     * Verifies the failure reason reported when the class does not extend {@link RuntimeException}.
+     */
+    @Test
+    void failureReasonForNonRuntimeExceptionType() {
+        String reason = ExceptionAssault.failureReason("java.lang.Error", new ClassCastException());
+        assertEquals("class 'java.lang.Error' does not extend RuntimeException", reason);
+    }
+
+    /**
+     * Verifies the failure reason reported when the {@code String} constructor throws during instantiation.
+     */
+    @Test
+    void failureReasonForConstructorFailure() {
+        Exception cause = new InvocationTargetException(new IllegalStateException("ctor boom"));
+        String reason = ExceptionAssault.failureReason("some.Type", cause);
+        assertEquals("constructor threw java.lang.IllegalStateException", reason);
     }
 
     @Test

@@ -58,6 +58,21 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>net.revelc.code</groupId>
+                <artifactId>impsort-maven-plugin</artifactId>
+                <configuration>
+                    <compliance>25</compliance>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>sort-imports</id>
+                        <configuration>
+                            <compliance>25</compliance>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <executions>
