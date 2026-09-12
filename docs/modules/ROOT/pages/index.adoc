@@ -170,6 +170,8 @@ quarkus.goblin.target.exclude-annotations=org.eclipse.microprofile.faulttoleranc
 
 This prevents double-interception: you can chaos-test your unprotected endpoints while leaving fault-tolerant ones to their own mechanisms.
 
+NOTE: Exclusion by annotation never requires you to *add* an annotation to your application. Goblin only reacts to annotations that are already present on your endpoints (such as MicroProfile Fault Tolerance types). There is deliberately no Goblin-owned annotation to scatter across your code -- consistent with the *zero code modification* principle.
+
 == Full configuration reference
 
 All configuration keys are under the `quarkus.goblin` prefix.

@@ -23,8 +23,7 @@ Current status: **experimental** (v0.0.2)
 - [ ] **Integration tests for package-based targeting**
   The `include-packages` and `exclude-packages` targeting logic has no dedicated integration tests. Add test cases that verify requests to endpoints in included/excluded packages are correctly affected or spared.
 
-- [ ] **Integration tests for annotation-based exclusion**
-  The `exclude-annotations` targeting logic is untested at the integration level. Add a sample resource annotated with a custom annotation, configure exclusion, and verify the endpoint is not intercepted.
+> Dropped: integration tests for annotation-based exclusion. Adding a custom `@ChaosExcluded` annotation to the application under test would violate the project's zero-code-modification principle. The `exclude-annotations` feature stays, but only in its non-intrusive form (reusing annotations already present, e.g. MicroProfile Fault Tolerance types). See issue #21.
 
 ---
 
