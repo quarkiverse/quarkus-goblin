@@ -57,3 +57,56 @@ jobs:
 
       - name: Build with Maven
         run: mvn -B clean install -Dno-format
+
+      - name: Upload JaCoCo report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-csv
+          path: integration-tests/target/site/jacoco-aggregate/jacoco.csv
+          if-no-files-found: error
+
+  coverage:
+    name: Publish coverage badge
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download JaCoCo report
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-csv
+          path: coverage-input
+
+      - name: Publish coverage badge data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          csv=coverage-input/jacoco.csv
+          coverage=$(awk -F, 'NR>1 {im+=$4; ic+=$5} END {printf "%.1f", 100*ic/(ic+im)}' "$csv")
+          color=$(awk -v c="$coverage" 'BEGIN {
+            if (c >= 90) print "brightgreen";
+            else if (c >= 80) print "green";
+            else if (c >= 70) print "yellowgreen";
+            else if (c >= 60) print "yellow";
+            else print "red";
+          }')
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git clone -q --depth 1 --branch badges "$remote" badges 2>/dev/null; then
+            rm -rf badges
+            mkdir -p badges
+            git -C badges init -q
+            git -C badges checkout -q -b badges
+            git -C badges remote add origin "$remote"
+          fi
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$coverage" "$color" > badges/coverage.json
+          git -C badges add coverage.json
+          if git -C badges diff --cached --quiet; then
+            echo "Coverage unchanged (${coverage}%)"
+          else
+            git -C badges -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "coverage: ${coverage}%"
+            git -C badges push -q origin badges
+            echo "Published coverage: ${coverage}%"
+          fi

@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/status-experimental-orange)]()
 [![Build](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml/badge.svg)](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml)
-[![Coverage](https://img.shields.io/badge/Coverage-89.7%25-97ca00)](#coverage)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fquarkiverse%2Fquarkus-goblin%2Fbadges%2Fcoverage.json)](https://github.com/quarkiverse/quarkus-goblin/tree/badges)
 
 Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application without touching a single line of source code.
 
@@ -105,14 +105,16 @@ Screenshots of the Dev UI are stored in [`docs/modules/ROOT/assets/images/`](doc
 
 ## Coverage
 
-Test coverage is aggregated by JaCoCo (`report-aggregate` on `integration-tests`). To refresh the static badge, generate the report and read the instruction coverage:
+Test coverage is aggregated by JaCoCo (`report-aggregate` on `integration-tests`). On every push to `main`, the `coverage` CI job recomputes the instruction coverage and publishes `coverage.json` to the [`badges`](https://github.com/quarkiverse/quarkus-goblin/tree/badges) branch, which feeds the badge above through a [shields.io endpoint](https://shields.io/badges/endpoint-badge).
+
+To inspect the full HTML report locally:
 
 ```bash
 ./mvnw clean install -Dno-format
-awk -F, 'NR>1 {im+=$4; ic+=$5} END {printf "%.1f%%\n", 100*ic/(ic+im)}' integration-tests/target/site/jacoco-aggregate/jacoco.csv
+open integration-tests/target/site/jacoco-aggregate/index.html
 ```
 
-Update the number in the badge at the top of this README and pick a color: `brightgreen` >= 90%, `green` >= 80%, `yellowgreen` >= 70%, `yellow` >= 60%, `red` < 60%.
+The badge color follows the coverage: `brightgreen` >= 90%, `green` >= 80%, `yellowgreen` >= 70%, `yellow` >= 60%, `red` < 60%.
 
 ## Requirements
 
