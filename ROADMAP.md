@@ -20,7 +20,7 @@ Current status: **experimental** (v0.0.2)
 - [x] **Log reflection fallback on exception instantiation**
   When `ExceptionAssault.createException()` fails to instantiate the configured exception class, it silently falls back to `RuntimeException`. Add a `WARN` log with the original error to help users diagnose misconfigured exception types.
 
-- [ ] **Integration tests for package-based targeting**
+- [x] **Integration tests for package-based targeting**
   The `include-packages` and `exclude-packages` targeting logic has no dedicated integration tests. Add test cases that verify requests to endpoints in included/excluded packages are correctly affected or spared.
 
 > Dropped: integration tests for annotation-based exclusion. Adding a custom `@ChaosExcluded` annotation to the application under test would violate the project's zero-code-modification principle. The `exclude-annotations` feature stays, but only in its non-intrusive form (reusing annotations already present, e.g. MicroProfile Fault Tolerance types). See issue #21.
