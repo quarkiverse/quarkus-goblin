@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status](https://img.shields.io/badge/status-experimental-orange)]()
 [![Build](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml/badge.svg)](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml)
-[![Coverage](https://codecov.io/gh/quarkiverse/quarkus-goblin/branch/main/graph/badge.svg)](https://app.codecov.io/gh/quarkiverse/quarkus-goblin)
+[![Coverage](https://img.shields.io/badge/Coverage-89.7%25-97ca00)](#coverage)
 
 Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application without touching a single line of source code.
 
@@ -102,6 +102,17 @@ All changes apply instantly with WARN logs in the console and are persisted to `
 The full AsciiDoc guide lives in [`docs/modules/ROOT/pages/`](docs/modules/ROOT/pages/) (`index.adoc`), covering assault types, targeting, configuration validation, the Dev UI (with screenshots), an end-to-end example, a JSON-RPC reference, and a FAQ.
 
 Screenshots of the Dev UI are stored in [`docs/modules/ROOT/assets/images/`](docs/modules/ROOT/assets/images/).
+
+## Coverage
+
+Test coverage is aggregated by JaCoCo (`report-aggregate` on `integration-tests`). To refresh the static badge, generate the report and read the instruction coverage:
+
+```bash
+./mvnw clean install -Dno-format
+awk -F, 'NR>1 {im+=$4; ic+=$5} END {printf "%.1f%%\n", 100*ic/(ic+im)}' integration-tests/target/site/jacoco-aggregate/jacoco.csv
+```
+
+Update the number in the badge at the top of this README and pick a color: `brightgreen` >= 90%, `green` >= 80%, `yellowgreen` >= 70%, `yellow` >= 60%, `red` < 60%.
 
 ## Requirements
 

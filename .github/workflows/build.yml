@@ -57,10 +57,3 @@ jobs:
 
       - name: Build with Maven
         run: mvn -B clean install -Dno-format
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: integration-tests/target/site/jacoco-aggregate/jacoco.xml
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
