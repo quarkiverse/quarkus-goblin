@@ -26,6 +26,7 @@
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.version>3.38.3</quarkus.version>
@@ -60,15 +61,9 @@
             <plugin>
                 <groupId>net.revelc.code</groupId>
                 <artifactId>impsort-maven-plugin</artifactId>
-                <configuration>
-                    <compliance>25</compliance>
-                </configuration>
                 <executions>
                     <execution>
                         <id>sort-imports</id>
-                        <configuration>
-                            <compliance>25</compliance>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
