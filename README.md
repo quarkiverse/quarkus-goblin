@@ -3,7 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-25+-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.38+-4695EB?logo=quarkus&logoColor=white)](https://quarkus.io/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status](https://img.shields.io/badge/status-experimental-orange)]()
+[![Status](https://img.shields.io/badge/status-preview-blue)]()
 [![Build](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml/badge.svg)](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fquarkiverse%2Fquarkus-goblin%2Fbadges%2Fcoverage.json)](https://github.com/quarkiverse/quarkus-goblin/tree/badges)
 
