@@ -97,6 +97,16 @@ All changes apply instantly with WARN logs in the console and are persisted to `
 - **Zero code modification** -- No annotations needed. Fully automatic instrumentation.
 - **Explicit logging** -- WARN log emitted when chaos is active.
 
+## Repository layout
+
+Each module carries its own README for contributors:
+
+- [runtime](runtime/README.md) -- the assault abstraction and how to add a new assault (the extension SPI)
+- [runtime-dev](runtime-dev/README.md) -- the Dev UI JSON-RPC backend (dev mode only)
+- [deployment](deployment/README.md) -- build steps, bean registration, and Dev UI wiring
+- [integration-tests](integration-tests/README.md) -- the `@QuarkusTest` suite and how to extend it
+- [docs](docs/README.md) -- the Antora documentation sources
+
 ## Documentation
 
 The full AsciiDoc guide lives in [`docs/modules/ROOT/pages/`](docs/modules/ROOT/pages/) (`index.adoc`), covering assault types, targeting, configuration validation, the Dev UI (with screenshots), an end-to-end example, a JSON-RPC reference, and a FAQ.
