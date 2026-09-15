@@ -151,6 +151,8 @@ Available profiles:
 
 TIP: Profiles are a **starting point, not a lock-in**. Once a profile is active, each assault toggle stays independently overridable through the Dev UI or JSON-RPC, and those overrides survive restarts like any other Dev UI change.
 
+TIP: At startup, a non-`NONE` profile takes **precedence over the static configuration**: `fromConfig` first copies the static `assault.type` and per-assault parameters, then the profile defaults are applied on top -- so a configured profile overrides the static toggles and parameters at boot. Tune the values afterwards through the Dev UI if needed.
+
 image::dev-ui-profile.png[Profile selector in the Dev UI,width=720,align=center]
 [.text-center]
 The Profile section of the Chaos Dashboard: pick a predefined assault mode in one click -- the active profile also appears in the status bar.

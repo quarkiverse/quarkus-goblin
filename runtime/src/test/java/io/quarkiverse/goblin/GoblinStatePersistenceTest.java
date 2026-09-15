@@ -179,4 +179,14 @@ class GoblinStatePersistenceTest {
 
         assertEquals(AssaultProfile.NONE, config.getProfile());
     }
+
+    @Test
+    void fromJsonHandlesProfileCaseAndWhitespace() {
+        String json = "{\"profile\": \" slow_failure \", \"latencyEnabled\": \" false \", \"exceptionEnabled\": \"true \"}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+
+        assertEquals(AssaultProfile.SLOW_FAILURE, config.getProfile());
+        assertFalse(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+    }
 }

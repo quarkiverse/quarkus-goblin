@@ -300,12 +300,26 @@ export class QwcGoblinDashboard extends LitElement {
     _setProfile(e) {
         const profile = e.target.value;
         this.jsonRpc.setProfile({profile}).then(r => {
-            if (r.result.ok) {
-                this._config = {...this._config, ...r.result};
-                this._status = {...this._status, profile: r.result.profile};
-                this._showToast(`Profile ${this._profileLabel(r.result.profile)} applied`);
+            if (r && r.result && r.result.ok) {
+                const c = r.result;
+                this._config = {
+                    ...this._config,
+                    profile: c.profile,
+                    latencyEnabled: c.latencyEnabled,
+                    exceptionEnabled: c.exceptionEnabled,
+                    httpStatusEnabled: c.httpStatusEnabled,
+                    dependencyDegradationEnabled: c.dependencyDegradationEnabled,
+                    latency: c.latency,
+                    exception: c.exception,
+                    httpStatus: c.httpStatus,
+                    level: c.level,
+                };
+                this._status = {...this._status, profile: c.profile};
+                this._showToast(`Profile ${this._profileLabel(c.profile)} applied`);
+            } else {
+                this._showToast((r && r.result && r.result.error) || 'Profile update failed', true);
             }
-        });
+        }).catch(() => this._showToast('Profile update failed', true));
     }
 
     render() {

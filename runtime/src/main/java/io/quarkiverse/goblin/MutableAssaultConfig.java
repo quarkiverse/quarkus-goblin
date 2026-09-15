@@ -14,6 +14,7 @@ public class MutableAssaultConfig {
 
     private Runnable onChange;
 
+    private final Object profileLock = new Object();
     private volatile AssaultProfile profile = AssaultProfile.NONE;
     private volatile boolean latencyEnabled = true;
     private volatile boolean exceptionEnabled = false;
@@ -163,14 +164,19 @@ public class MutableAssaultConfig {
      * <p>
      * Selecting a non-{@code NONE} profile resets the individual assault toggles to the profile's defaults; each toggle
      * can then be overridden manually on top of the profile. Selecting {@code NONE} leaves the toggles untouched.
+     * <p>
+     * The mutation is serialized on a dedicated lock so two concurrent profile switches cannot interleave. Individual
+     * toggle reads are not locked: a concurrent reader may briefly observe a partially applied profile update.
      *
      * @param profile the profile to activate, or {@code null} to keep {@link AssaultProfile#NONE}
      * @return the effective active profile
      */
     public AssaultProfile setProfile(AssaultProfile profile) {
-        this.profile = profile != null ? profile : AssaultProfile.NONE;
-        if (this.profile != AssaultProfile.NONE) {
-            applyProfileDefaults();
+        synchronized (profileLock) {
+            this.profile = profile != null ? profile : AssaultProfile.NONE;
+            if (this.profile != AssaultProfile.NONE) {
+                applyProfileDefaults();
+            }
         }
         notifyChange();
         return this.profile;
@@ -183,11 +189,15 @@ public class MutableAssaultConfig {
      * @param profile the profile to restore, or {@code null} to keep {@link AssaultProfile#NONE}
      */
     void restoreProfile(AssaultProfile profile) {
-        this.profile = profile != null ? profile : AssaultProfile.NONE;
+        synchronized (profileLock) {
+            this.profile = profile != null ? profile : AssaultProfile.NONE;
+        }
     }
 
     /**
      * Resets all individual assault toggles and parameters to the defaults defined by the active profile.
+     * Must be invoked while holding {@link #profileLock} so the reset happens atomically relative to other profile
+     * switches.
      */
     private void applyProfileDefaults() {
         latencyEnabled = false;

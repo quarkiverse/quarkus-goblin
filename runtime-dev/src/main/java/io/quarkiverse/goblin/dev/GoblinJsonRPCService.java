@@ -55,17 +55,30 @@ public class GoblinJsonRPCService {
 
     /**
      * Switches the active assault profile at runtime via the Dev UI.
+     * <p>
+     * The profile name is matched case-insensitively; a blank or {@code null} value resets to
+     * {@link AssaultProfile#NONE}. Unknown names and an uninitialised engine are reported as a stable error object
+     * ({@code ok=false}) instead of throwing.
      *
      * @param profile the profile name (case-insensitive), {@code null} or blank to reset to {@link AssaultProfile#NONE}
-     * @return the full configuration JSON with an {@code ok} flag
+     * @return the full configuration JSON with an {@code ok} flag, or {@code ok=false} with an {@code error} message
      */
     public JsonObject setProfile(String profile) {
         MutableAssaultConfig cfg = engine.getMutableConfig();
-        AssaultProfile previous = cfg.getProfile();
-        AssaultProfile next = parseProfile(profile);
-        cfg.setProfile(next);
-        LOG.warnf("Goblin profile changed: %s -> %s", previous, cfg.getProfile());
-        return configJson(cfg).put("ok", true);
+        if (cfg == null) {
+            LOG.warnf("Goblin: cannot switch profile '%s', engine is not initialised", profile);
+            return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
+        }
+        try {
+            AssaultProfile previous = cfg.getProfile();
+            AssaultProfile next = parseProfile(profile);
+            cfg.setProfile(next);
+            LOG.warnf("Goblin profile changed: %s -> %s", previous, cfg.getProfile());
+            return configJson(cfg).put("ok", true);
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Goblin: cannot switch profile '%s': %s", profile, e.getMessage());
+            return new JsonObject().put("ok", false).put("error", e.getMessage());
+        }
     }
 
     /**
@@ -101,20 +114,26 @@ public class GoblinJsonRPCService {
 
     /**
      * Converts a raw profile string to its {@link AssaultProfile} constant.
+     * <p>
+     * Matching is case-insensitive and ignores surrounding whitespace; a {@code null} or blank value maps to
+     * {@link AssaultProfile#NONE}.
      *
-     * @param profile the raw string (may be {@code null}, blank, or a typo)
-     * @return the matching {@link AssaultProfile}, or {@link AssaultProfile#NONE} if unrecognised
+     * @param profile the raw string (may be {@code null} or blank)
+     * @return the matching {@link AssaultProfile}, or {@link AssaultProfile#NONE} when blank
+     * @throws IllegalArgumentException if the value does not match any {@link AssaultProfile}
      */
     private static AssaultProfile parseProfile(String profile) {
         if (profile == null || profile.isBlank()) {
             return AssaultProfile.NONE;
         }
-        try {
-            return AssaultProfile.valueOf(profile.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            LOG.warnf("Goblin: unknown assault profile '%s', defaulting to NONE", profile);
-            return AssaultProfile.NONE;
+        String normalized = profile.trim().toUpperCase();
+        for (AssaultProfile candidate : AssaultProfile.values()) {
+            if (candidate.name().equals(normalized)) {
+                return candidate;
+            }
         }
+        throw new IllegalArgumentException(
+                "Unknown assault profile '" + profile + "'. Valid values: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT");
     }
 
     public JsonObject toggleActive() {

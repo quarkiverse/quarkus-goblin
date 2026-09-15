@@ -36,6 +36,10 @@ and `describeAssaults()` mentions the active profile; individual assaults remain
 `GoblinStatePersistence.restoreProfile(...)` restores only the label when loading persisted state, so per-assault
 overrides survive restarts.
 
+At startup a non-`NONE` profile takes precedence: `MutableAssaultConfig.fromConfig(...)` first copies the static
+`assault.type`/parameter values, then applies the profile defaults over them -- so static toggles and parameters are
+overridden by the profile's defaults.
+
 ## The `Assault` SPI
 
 ```java

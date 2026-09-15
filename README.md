@@ -57,6 +57,7 @@ quarkus.goblin.assault.type=LATENCY
 
 # Predefined composite assault mode: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT
 # Overrides assault.type when not NONE. Individual assaults stay user-overridable.
+# At startup, a non-NONE profile takes precedence over the static assault toggles/params above.
 quarkus.goblin.assault.profile=NONE
 
 # Latency settings
