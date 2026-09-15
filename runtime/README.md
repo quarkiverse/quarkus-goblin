@@ -28,6 +28,18 @@ Assaults are discovered automatically: no manual registration is required, addin
 All classes live in `io.quarkiverse.goblin.assault`. The chain order convention is: latency first (10), then
 request-aborting assaults by increasing severity (20, 30, 40).
 
+### Profiles
+
+`quarkus.goblin.assault.profile` (`NONE|SLOW_FAILURE|INTERMITTENT|TIMEOUT`, default `NONE`) bundles common
+combinations into one config line. `MutableAssaultConfig.setProfile(...)` resets the toggles to the profile's defaults
+and `describeAssaults()` mentions the active profile; individual assaults remain user-overridable afterwards.
+`GoblinStatePersistence.restoreProfile(...)` restores only the label when loading persisted state, so per-assault
+overrides survive restarts.
+
+At startup a non-`NONE` profile takes precedence: `MutableAssaultConfig.fromConfig(...)` first copies the static
+`assault.type`/parameter values, then applies the profile defaults over them -- so static toggles and parameters are
+overridden by the profile's defaults.
+
 ## The `Assault` SPI
 
 ```java

@@ -39,9 +39,18 @@ public interface GoblinConfig {
 
         /**
          * The type of assault to apply. Valid values: LATENCY, EXCEPTION, HTTP_STATUS, DEPENDENCY_DEGRADATION.
+         * Ignored when a non-{@code NONE} profile is selected.
          */
         @WithDefault("LATENCY")
         AssaultType type();
+
+        /**
+         * Predefined composite assault mode. Valid values: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT.
+         * A non-{@code NONE} profile enables a set of assaults with sensible defaults; individual assaults stay
+         * user-overridable afterwards.
+         */
+        @WithDefault("NONE")
+        AssaultProfile profile();
 
         /**
          * Latency configuration (only used when type=LATENCY).

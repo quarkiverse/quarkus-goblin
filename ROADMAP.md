@@ -41,7 +41,7 @@ Current status: **preview** (v0.1.0)
 - [ ] **HTTP header injection**
   Inject, modify, or remove HTTP response headers. Simulate rate-limiting (`Retry-After`, `X-RateLimit-Remaining`), cache headers, or custom error headers returned by upstream proxies.
 
-- [ ] **Predefined composite assault modes**
+- [x] **Predefined composite assault modes**
   Bundle common assault combinations into named profiles: `SLOW_FAILURE` (latency + exception), `INTERMITTENT` (percentage-based random HTTP 500), `TIMEOUT` (very high latency). Configurable via `quarkus.goblin.assault.profile`.
 
 ---

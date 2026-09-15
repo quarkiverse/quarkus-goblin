@@ -131,6 +131,14 @@ export class QwcGoblinDashboard extends LitElement {
             background: var(--lumo-base-color);
             color: var(--lumo-contrast-color);
         }
+        .form-row select {
+            padding: 6px 10px;
+            border: 1px solid var(--lumo-contrast-30pct);
+            border-radius: 4px;
+            font-size: 13px;
+            background: var(--lumo-base-color);
+            color: var(--lumo-contrast-color);
+        }
         .form-row input:focus {
             outline: none;
             border-color: var(--lumo-primary-color);
@@ -184,6 +192,13 @@ export class QwcGoblinDashboard extends LitElement {
             0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; }
         }
     `;
+
+    static profiles = [
+        {value: 'NONE', label: 'None (manual)'},
+        {value: 'SLOW_FAILURE', label: 'Slow failure'},
+        {value: 'INTERMITTENT', label: 'Intermittent'},
+        {value: 'TIMEOUT', label: 'Timeout'},
+    ];
 
     static properties = {
         _config: {state: true},
@@ -277,6 +292,36 @@ export class QwcGoblinDashboard extends LitElement {
         });
     }
 
+    _profileLabel(profile) {
+        const match = QwcGoblinDashboard.profiles.find(p => p.value === profile);
+        return match ? match.label : profile;
+    }
+
+    _setProfile(e) {
+        const profile = e.target.value;
+        this.jsonRpc.setProfile({profile}).then(r => {
+            if (r && r.result && r.result.ok) {
+                const c = r.result;
+                this._config = {
+                    ...this._config,
+                    profile: c.profile,
+                    latencyEnabled: c.latencyEnabled,
+                    exceptionEnabled: c.exceptionEnabled,
+                    httpStatusEnabled: c.httpStatusEnabled,
+                    dependencyDegradationEnabled: c.dependencyDegradationEnabled,
+                    latency: c.latency,
+                    exception: c.exception,
+                    httpStatus: c.httpStatus,
+                    level: c.level,
+                };
+                this._status = {...this._status, profile: c.profile};
+                this._showToast(`Profile ${this._profileLabel(c.profile)} applied`);
+            } else {
+                this._showToast((r && r.result && r.result.error) || 'Profile update failed', true);
+            }
+        }).catch(() => this._showToast('Profile update failed', true));
+    }
+
     render() {
         const c = this._config;
         return html`
@@ -289,6 +334,8 @@ export class QwcGoblinDashboard extends LitElement {
                     <span class="status-text">${this._status.active ? 'Active' : 'Inactive'}</span>
                     <span class="status-sep">|</span>
                     <span class="status-text">Level: ${this._status.level}%</span>
+                    <span class="status-sep">|</span>
+                    <span class="status-text">Profile: ${this._profileLabel(this._status.profile)}</span>
                     <button class="toggle-btn" @click="${this._toggleActive}">
                         ${this._status.active ? 'Deactivate' : 'Activate'}
                     </button>
@@ -296,6 +343,19 @@ export class QwcGoblinDashboard extends LitElement {
             ` : ''}
 
             ${c ? html`
+
+                <div class="section">
+                    <h4>Profile</h4>
+                    <div class="form-row">
+                        <label>Profile</label>
+                        <select id="goblin-profile" @change="${this._setProfile}">
+                            ${QwcGoblinDashboard.profiles.map(p => html`
+                            <option value="${p.value}" ?selected="${c.profile === p.value}">${p.label}</option>
+                            `)}
+                        </select>
+                    </div>
+                    <div class="helper">Switch the whole setup with one choice. Individual assaults stay overridable.</div>
+                </div>
 
                 <div class="section">
                     <div class="assault-toggle ${c.latencyEnabled ? 'enabled' : ''}"

@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.vertx.core.json.JsonArray;
@@ -22,10 +23,16 @@ public class GoblinJsonRPCService {
     @Inject
     AssaultEngine engine;
 
+    /**
+     * Returns the current assault engine status for the Dev UI.
+     *
+     * @return a JSON object with the active flag, profile, assault toggles, and target level
+     */
     public JsonObject getStatus() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         return new JsonObject()
                 .put("active", engine.isActive())
+                .put("profile", cfg != null ? cfg.getProfile().name() : "NONE")
                 .put("latencyEnabled", cfg != null && cfg.isLatencyEnabled())
                 .put("exceptionEnabled", cfg != null && cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg != null && cfg.isHttpStatusEnabled())
@@ -33,12 +40,54 @@ public class GoblinJsonRPCService {
                 .put("level", cfg != null ? cfg.getTargetLevel() : 100);
     }
 
+    /**
+     * Returns the full current assault configuration for the Dev UI.
+     *
+     * @return a JSON object with profile, toggles, and per-assault parameters, or an empty object if not initialised
+     */
     public JsonObject getConfig() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         if (cfg == null) {
             return new JsonObject();
         }
+        return configJson(cfg);
+    }
 
+    /**
+     * Switches the active assault profile at runtime via the Dev UI.
+     * <p>
+     * The profile name is matched case-insensitively; a blank or {@code null} value resets to
+     * {@link AssaultProfile#NONE}. Unknown names and an uninitialised engine are reported as a stable error object
+     * ({@code ok=false}) instead of throwing.
+     *
+     * @param profile the profile name (case-insensitive), {@code null} or blank to reset to {@link AssaultProfile#NONE}
+     * @return the full configuration JSON with an {@code ok} flag, or {@code ok=false} with an {@code error} message
+     */
+    public JsonObject setProfile(String profile) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null) {
+            LOG.warnf("Goblin: cannot switch profile '%s', engine is not initialised", profile);
+            return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
+        }
+        try {
+            AssaultProfile previous = cfg.getProfile();
+            AssaultProfile next = parseProfile(profile);
+            cfg.setProfile(next);
+            LOG.warnf("Goblin profile changed: %s -> %s", previous, cfg.getProfile());
+            return configJson(cfg).put("ok", true);
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Goblin: cannot switch profile '%s': %s", profile, e.getMessage());
+            return new JsonObject().put("ok", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * Serialises the full mutable configuration into a {@link JsonObject} for the Dev UI.
+     *
+     * @param cfg the current mutable assault configuration
+     * @return a JSON representation including profile, toggles, and per-assault parameters
+     */
+    private static JsonObject configJson(MutableAssaultConfig cfg) {
         JsonObject latency = new JsonObject()
                 .put("minMilliseconds", cfg.getLatencyMinMs())
                 .put("maxMilliseconds", cfg.getLatencyMaxMs());
@@ -52,6 +101,7 @@ public class GoblinJsonRPCService {
                 .put("message", cfg.getHttpStatusMessage());
 
         return new JsonObject()
+                .put("profile", cfg.getProfile().name())
                 .put("latencyEnabled", cfg.isLatencyEnabled())
                 .put("exceptionEnabled", cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg.isHttpStatusEnabled())
@@ -60,6 +110,30 @@ public class GoblinJsonRPCService {
                 .put("exception", exception)
                 .put("httpStatus", httpStatus)
                 .put("level", cfg.getTargetLevel());
+    }
+
+    /**
+     * Converts a raw profile string to its {@link AssaultProfile} constant.
+     * <p>
+     * Matching is case-insensitive and ignores surrounding whitespace; a {@code null} or blank value maps to
+     * {@link AssaultProfile#NONE}.
+     *
+     * @param profile the raw string (may be {@code null} or blank)
+     * @return the matching {@link AssaultProfile}, or {@link AssaultProfile#NONE} when blank
+     * @throws IllegalArgumentException if the value does not match any {@link AssaultProfile}
+     */
+    private static AssaultProfile parseProfile(String profile) {
+        if (profile == null || profile.isBlank()) {
+            return AssaultProfile.NONE;
+        }
+        String normalized = profile.trim().toUpperCase();
+        for (AssaultProfile candidate : AssaultProfile.values()) {
+            if (candidate.name().equals(normalized)) {
+                return candidate;
+            }
+        }
+        throw new IllegalArgumentException(
+                "Unknown assault profile '" + profile + "'. Valid values: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT");
     }
 
     public JsonObject toggleActive() {
