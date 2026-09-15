@@ -14,35 +14,48 @@ import org.jboss.logging.Logger;
  * Handles persistence of {@link MutableAssaultConfig} to disk.
  * Serializes to a flat JSON file so Dev UI changes survive restarts.
  * <p>
- * Note: {@link #save(MutableAssaultConfig)} and {@link #load()} use a fixed {@code .goblin-state.json} file in the
- * process working directory. Callers (and tests) that write state must clean up afterwards.
+ * By default {@link #save(MutableAssaultConfig)} and {@link #load()} use a fixed {@code .goblin-state.json} file in the
+ * process working directory. Tests may point persistence at a temporary file via
+ * {@link #overrideStateFile(String)}.
  */
 public final class GoblinStatePersistence {
 
     private static final Logger LOG = Logger.getLogger(GoblinStatePersistence.class);
     private static final String STATE_FILE = ".goblin-state.json";
 
+    private static volatile String stateFile = STATE_FILE;
+
     private GoblinStatePersistence() {
+    }
+
+    /**
+     * Redefines the state file location. Intended for tests so the fixed working-directory file is never written; pass
+     * {@code null} to restore the default.
+     *
+     * @param path the new state file path, or {@code null} to restore the default {@value #STATE_FILE}
+     */
+    static void overrideStateFile(String path) {
+        stateFile = path != null ? path : STATE_FILE;
     }
 
     public static void save(MutableAssaultConfig config) {
         try {
-            Files.writeString(Path.of(STATE_FILE), toJson(config));
+            Files.writeString(Path.of(stateFile), toJson(config));
         } catch (IOException e) {
-            LOG.warnf("Failed to persist .goblin-state.json: %s", e.getMessage());
+            LOG.warnf("Failed to persist %s: %s", stateFile, e.getMessage());
         }
     }
 
     public static MutableAssaultConfig load() {
-        Path path = Path.of(STATE_FILE);
+        Path path = Path.of(stateFile);
         if (!Files.exists(path)) {
             return null;
         }
         try {
             return fromJson(Files.readString(path));
         } catch (IOException e) {
-            LOG.warnf("Failed to load .goblin-state.json, falling back to application.properties: %s",
-                    e.getMessage());
+            LOG.warnf("Failed to load %s, falling back to application.properties: %s",
+                    stateFile, e.getMessage());
             return null;
         }
     }

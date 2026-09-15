@@ -7,15 +7,26 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class GoblinStatePersistenceTest {
 
-    private static final String STATE_FILE = ".goblin-state.json";
+    private Path tempDir;
+    private Path stateFile;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        tempDir = Files.createTempDirectory("goblin-state-test");
+        stateFile = tempDir.resolve("goblin-state.json");
+        GoblinStatePersistence.overrideStateFile(stateFile.toString());
+    }
 
     @AfterEach
     void cleanup() throws IOException {
-        Files.deleteIfExists(Path.of(STATE_FILE));
+        GoblinStatePersistence.overrideStateFile(null);
+        Files.deleteIfExists(stateFile);
+        Files.deleteIfExists(tempDir);
     }
 
     @Test
@@ -33,7 +44,7 @@ class GoblinStatePersistenceTest {
 
         GoblinStatePersistence.save(config);
 
-        assertTrue(Files.exists(Path.of(STATE_FILE)));
+        assertTrue(Files.exists(stateFile));
 
         MutableAssaultConfig loaded = GoblinStatePersistence.load();
         assertNotNull(loaded);
@@ -57,7 +68,7 @@ class GoblinStatePersistenceTest {
 
     @Test
     void loadReturnsDefaultsWhenFileIsCorrupted() throws IOException {
-        Files.write(Path.of(STATE_FILE), "this is not json at all".getBytes());
+        Files.write(stateFile, "this is not json at all".getBytes());
 
         MutableAssaultConfig loaded = GoblinStatePersistence.load();
         assertNotNull(loaded);
@@ -67,12 +78,10 @@ class GoblinStatePersistenceTest {
 
     @Test
     void saveHandlesDirectoryAsFile() throws IOException {
-        Files.createDirectories(Path.of(STATE_FILE));
+        Files.createDirectories(stateFile);
 
         MutableAssaultConfig config = new MutableAssaultConfig();
         assertDoesNotThrow(() -> GoblinStatePersistence.save(config));
-
-        Files.deleteIfExists(Path.of(STATE_FILE));
     }
 
     @Test
