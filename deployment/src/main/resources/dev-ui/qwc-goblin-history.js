@@ -24,6 +24,10 @@ export class QwcGoblinHistory extends LitElement {
             color: var(--lumo-contrast-60pct);
             font-weight: normal;
         }
+        .toolbar-buttons {
+            display: flex;
+            gap: 8px;
+        }
         .clear-btn {
             padding: 6px 14px;
             border: 1px solid var(--lumo-error-color-50pct);
@@ -33,8 +37,16 @@ export class QwcGoblinHistory extends LitElement {
             cursor: pointer;
             font-size: 13px;
         }
+        .clear-btn.confirm {
+            background: var(--lumo-error-color);
+            color: var(--lumo-primary-contrast-color);
+            border-color: var(--lumo-error-color);
+        }
         .clear-btn:hover {
             background: var(--lumo-error-color-10pct);
+        }
+        .clear-btn.confirm:hover {
+            background: var(--lumo-error-color);
         }
         .export-btn {
             padding: 6px 14px;
@@ -44,10 +56,61 @@ export class QwcGoblinHistory extends LitElement {
             color: var(--lumo-primary-color);
             cursor: pointer;
             font-size: 13px;
-            margin-right: 8px;
         }
         .export-btn:hover {
             background: var(--lumo-primary-color-10pct);
+        }
+        .status-hint {
+            font-size: 11px;
+            color: var(--lumo-contrast-50pct);
+            font-style: italic;
+        }
+        .summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            border: 1px solid var(--lumo-contrast-10pct);
+            border-radius: 6px;
+            background: var(--lumo-contrast-5pct);
+            font-size: 13px;
+        }
+        .sum-item {
+            white-space: nowrap;
+        }
+        .sum-item b {
+            color: var(--lumo-primary-color);
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        .filters label {
+            font-size: 12px;
+            color: var(--lumo-contrast-60pct);
+        }
+        .filters select,
+        .filters input {
+            padding: 6px 10px;
+            border: 1px solid var(--lumo-contrast-30pct);
+            border-radius: 4px;
+            font-size: 13px;
+            background: var(--lumo-base-color);
+            color: var(--lumo-contrast-color);
+        }
+        .filters input {
+            flex: 1;
+            min-width: 180px;
+        }
+        .filter-result {
+            margin-left: auto;
+            font-size: 12px;
+            color: var(--lumo-contrast-60pct);
+            white-space: nowrap;
         }
         .report {
             margin-top: 16px;
@@ -74,6 +137,7 @@ export class QwcGoblinHistory extends LitElement {
             color: var(--lumo-primary-color);
             cursor: pointer;
             font-size: 12px;
+            margin-left: 8px;
         }
         .copy-btn:hover {
             background: var(--lumo-primary-color-10pct);
@@ -95,11 +159,13 @@ export class QwcGoblinHistory extends LitElement {
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            table-layout: fixed;
         }
         th, td {
             text-align: left;
             padding: 8px 12px;
             border-bottom: 1px solid var(--lumo-contrast-10pct);
+            overflow: hidden;
         }
         th {
             font-weight: 600;
@@ -111,6 +177,46 @@ export class QwcGoblinHistory extends LitElement {
         td {
             color: var(--lumo-contrast-color);
         }
+        th.time-col { width: 15%; }
+        th.method-col { width: 22%; }
+        th.type-col { width: 14%; }
+        th.duration-col { width: 10%; }
+        th.config-col { width: 39%; }
+        .type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .type-badge.latency { background: var(--lumo-primary-color-10pct); color: var(--lumo-primary-color); }
+        .type-badge.exception { background: var(--lumo-error-color-10pct); color: var(--lumo-error-color); }
+        .type-badge.http-status { background: var(--lumo-warning-color-10pct); color: var(--lumo-warning-color); }
+        .type-badge.dependency-degradation { background: var(--lumo-success-color-10pct); color: var(--lumo-success-color); }
+        .method-cell {
+            font-family: var(--lumo-font-family-mono);
+            font-size: 12px;
+            word-break: break-all;
+        }
+        .cfg-cell {
+            cursor: pointer;
+            font-family: var(--lumo-font-family-mono);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .cfg-cell.collapsed {
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .cfg-cell:hover {
+            color: var(--lumo-primary-color);
+        }
+        .cfg-cell .expand-hint {
+            color: var(--lumo-contrast-50pct);
+            font-style: italic;
+            font-family: var(--lumo-font-family-sans);
+        }
         .empty-state {
             text-align: center;
             padding: 40px;
@@ -118,21 +224,54 @@ export class QwcGoblinHistory extends LitElement {
         }
     `;
 
+    static TYPE_LABELS = {
+        latency: 'Latency',
+        exception: 'Exception',
+        'http-status': 'HTTP Status',
+        'dependency-degradation': 'Dependency',
+    };
+
     static properties = {
         _history: {state: true},
         _markdown: {state: true},
+        _typeFilter: {state: true},
+        _methodFilter: {state: true},
+        _rangeFilter: {state: true},
+        _expanded: {state: true},
+        _confirmClear: {state: true},
     };
 
     constructor() {
         super();
         this._history = [];
         this._markdown = null;
+        this._typeFilter = 'all';
+        this._methodFilter = '';
+        this._rangeFilter = 'all';
+        this._expanded = new Set();
+        this._confirmClear = false;
         this.jsonRpc = new JsonRpc(this);
     }
 
     connectedCallback() {
         super.connectedCallback();
         this._loadHistory();
+        this._refreshTimer = setInterval(() => this._refreshTick(), 2000);
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        clearInterval(this._refreshTimer);
+        clearTimeout(this._clearTimer);
+    }
+
+    _refreshTick() {
+        const visible = (typeof this.checkVisibility === 'function')
+            ? this.checkVisibility()
+            : (this.offsetParent !== null);
+        if (visible) {
+            this._loadHistory();
+        }
     }
 
     _loadHistory() {
@@ -140,7 +279,16 @@ export class QwcGoblinHistory extends LitElement {
     }
 
     _clearHistory() {
-        this.jsonRpc.clearHistory().then(() => { this._history = []; });
+        if (!this._confirmClear) {
+            this._confirmClear = true;
+            this._clearTimer = setTimeout(() => { this._confirmClear = false; }, 3000);
+            return;
+        }
+        this.jsonRpc.clearHistory().then(() => {
+            this._history = [];
+            this._confirmClear = false;
+            clearTimeout(this._clearTimer);
+        });
     }
 
     _exportMarkdown() {
@@ -157,41 +305,201 @@ export class QwcGoblinHistory extends LitElement {
         }
     }
 
+    _downloadMarkdown() {
+        if (!this._markdown) {
+            return;
+        }
+        const blob = new Blob([this._markdown], {type: 'text/markdown'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'goblin-report.md';
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    _onTypeChange(e) {
+        this._typeFilter = e.target.value;
+    }
+
+    _onMethodInput(e) {
+        this._methodFilter = e.target.value;
+    }
+
+    _onRangeChange(e) {
+        this._rangeFilter = e.target.value;
+    }
+
+    _filtered() {
+        const type = this._typeFilter;
+        const method = (this._methodFilter || '').trim().toLowerCase();
+        const rangeMs = {
+            all: 0,
+            '5m': 5 * 60 * 1000,
+            '30m': 30 * 60 * 1000,
+            '1h': 60 * 60 * 1000,
+            '24h': 24 * 60 * 60 * 1000,
+        }[this._rangeFilter] || 0;
+        const now = Date.now();
+        return this._history.filter(r => {
+            if (type !== 'all' && r.type !== type) {
+                return false;
+            }
+            if (method && !(r.method || '').toLowerCase().includes(method)) {
+                return false;
+            }
+            if (rangeMs > 0 && now - r.timestamp > rangeMs) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    _getRows() {
+        return this._filtered().slice().sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    _summary() {
+        const counts = {latency: 0, exception: 0, 'http-status': 0, 'dependency-degradation': 0};
+        let latencySum = 0;
+        let latencyCount = 0;
+        for (const r of this._history) {
+            if (counts[r.type] !== undefined) {
+                counts[r.type]++;
+            }
+            if (r.latencyMs) {
+                latencySum += r.latencyMs;
+                latencyCount++;
+            }
+        }
+        return {
+            total: this._history.length,
+            latency: counts.latency,
+            exception: counts.exception,
+            httpStatus: counts['http-status'],
+            dependency: counts['dependency-degradation'],
+            avgLatency: latencyCount > 0 ? Math.round(latencySum / latencyCount) : 0,
+        };
+    }
+
     _formatTimestamp(ts) {
-        return new Date(ts).toLocaleTimeString();
+        return new Date(ts).toLocaleString(undefined, {
+            year: '2-digit',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            fractionalSecondDigits: 3,
+        });
+    }
+
+    _isoTimestamp(ts) {
+        return new Date(ts).toISOString();
+    }
+
+    _cellKey(record) {
+        return `${record.type}::${record.method}::${record.timestamp}`;
+    }
+
+    _isExpanded(record) {
+        return this._expanded.has(this._cellKey(record));
+    }
+
+    _toggleConfig(record) {
+        const key = this._cellKey(record);
+        const next = new Set(this._expanded);
+        if (next.has(key)) {
+            next.delete(key);
+        } else {
+            next.add(key);
+        }
+        this._expanded = next;
+    }
+
+    _shortConfig(config) {
+        if (!config) {
+            return '';
+        }
+        const max = 48;
+        return config.length > max ? config.slice(0, max).trimEnd() + '…' : config;
     }
 
     render() {
+        const rows = this._getRows();
+        const filteredCount = this._filtered().length;
+        const s = this._summary();
         return html`
             <div class="toolbar">
                 <h3>Assault History <span class="count">(${this._history.length})</span></h3>
-                <div>
+                <div class="toolbar-buttons">
                     <button class="export-btn" @click="${this._exportMarkdown}">Export Markdown</button>
-                    <button class="clear-btn" @click="${this._clearHistory}">Clear History</button>
+                    <button class="clear-btn ${this._confirmClear ? 'confirm' : ''}" @click="${this._clearHistory}">
+                        ${this._confirmClear ? 'Confirm clear?' : 'Clear History'}
+                    </button>
                 </div>
             </div>
+            <div class="status-hint">Auto-refreshes every 2 seconds while this section is visible.</div>
 
-            ${this._history.length === 0
-                ? html`<div class="empty-state">No assaults recorded yet.</div>`
+            <div class="summary">
+                <span class="sum-item">Total: <b>${s.total}</b></span>
+                <span class="sum-item">Latency: <b>${s.latency}</b></span>
+                <span class="sum-item">Exception: <b>${s.exception}</b></span>
+                <span class="sum-item">HTTP Status: <b>${s.httpStatus}</b></span>
+                <span class="sum-item">Dependency: <b>${s.dependency}</b></span>
+                <span class="sum-item">Avg latency: <b>${s.avgLatency} ms</b></span>
+            </div>
+
+            <div class="filters">
+                <label>Type</label>
+                <select @change="${this._onTypeChange}" .value="${this._typeFilter}">
+                    <option value="all">All</option>
+                    <option value="latency">Latency</option>
+                    <option value="exception">Exception</option>
+                    <option value="http-status">HTTP Status</option>
+                    <option value="dependency-degradation">Dependency</option>
+                </select>
+                <label>Method</label>
+                <input type="text" placeholder="Search method…" .value="${this._methodFilter}"
+                       @input="${this._onMethodInput}">
+                <label>Period</label>
+                <select @change="${this._onRangeChange}" .value="${this._rangeFilter}">
+                    <option value="all">All time</option>
+                    <option value="5m">Last 5 min</option>
+                    <option value="30m">Last 30 min</option>
+                    <option value="1h">Last 1 hour</option>
+                    <option value="24h">Last 24 hours</option>
+                </select>
+                <span class="filter-result">${filteredCount}/${this._history.length} shown</span>
+            </div>
+
+            ${rows.length === 0
+                ? html`<div class="empty-state">No assaults matching the current filters.</div>`
                 : html`
                     <table>
                         <thead>
                             <tr>
-                                <th>Time</th>
-                                <th>Method</th>
-                                <th>Type</th>
-                                <th>Duration</th>
-                                <th>Active Config</th>
+                                <th class="time-col">Time</th>
+                                <th class="method-col">Method</th>
+                                <th class="type-col">Type</th>
+                                <th class="duration-col">Duration</th>
+                                <th class="config-col">Active Config</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${this._history.map(record => html`
+                            ${rows.map(record => html`
                                 <tr>
-                                    <td>${this._formatTimestamp(record.timestamp)}</td>
-                                    <td>${record.method}</td>
-                                    <td>${record.type}</td>
+                                    <td title="${this._isoTimestamp(record.timestamp)}">${this._formatTimestamp(record.timestamp)}</td>
+                                    <td class="method-cell">${record.method}</td>
+                                    <td><span class="type-badge ${record.type}">${QwcGoblinHistory.TYPE_LABELS[record.type] || record.type}</span></td>
                                     <td>${record.latencyMs ? record.latencyMs + ' ms' : '-'}</td>
-                                    <td>${record.config || ''}</td>
+                                    <td class="cfg-cell ${this._isExpanded(record) ? 'expanded' : 'collapsed'}"
+                                        title="${this._isExpanded(record) ? '' : 'Click to expand'}"
+                                        @click="${() => this._toggleConfig(record)}">
+                                        ${record.config ? html`
+                                            ${this._isExpanded(record) ? record.config : html`${this._shortConfig(record.config)} <span class="expand-hint">…click</span>`}
+                                        ` : '-'}
+                                    </td>
                                 </tr>
                             `)}
                         </tbody>
@@ -204,6 +512,7 @@ export class QwcGoblinHistory extends LitElement {
                         <span>Markdown Report</span>
                         <div>
                             <button class="copy-btn" @click="${this._copyMarkdown}">Copy</button>
+                            <button class="copy-btn" @click="${this._downloadMarkdown}">Download</button>
                             <button class="copy-btn" @click="${this._closeReport}">Close</button>
                         </div>
                     </div>
