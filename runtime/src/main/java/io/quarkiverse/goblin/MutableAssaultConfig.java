@@ -14,6 +14,7 @@ public class MutableAssaultConfig {
 
     private Runnable onChange;
 
+    private volatile AssaultProfile profile = AssaultProfile.NONE;
     private volatile boolean latencyEnabled = true;
     private volatile boolean exceptionEnabled = false;
     private volatile boolean httpStatusEnabled = false;
@@ -27,6 +28,13 @@ public class MutableAssaultConfig {
     private volatile String httpStatusMessage = "Service Unavailable (Goblin chaos)";
     private volatile int targetLevel = 100;
 
+    /**
+     * Builds a mutable copy of the configuration from the static {@link GoblinConfig}, applying profile defaults when a
+     * non-{@code NONE} profile is selected.
+     *
+     * @param config the static configuration
+     * @return a new mutable configuration reflecting the static values and profile defaults
+     */
     public static MutableAssaultConfig fromConfig(GoblinConfig config) {
         MutableAssaultConfig mutable = new MutableAssaultConfig();
         AssaultType type = config.assault().type();
@@ -41,6 +49,10 @@ public class MutableAssaultConfig {
         mutable.httpStatusCode = config.assault().httpStatus().code();
         mutable.httpStatusMessage = config.assault().httpStatus().message();
         mutable.targetLevel = config.target().level();
+        mutable.profile = config.assault().profile();
+        if (mutable.profile != AssaultProfile.NONE) {
+            mutable.applyProfileDefaults();
+        }
         return mutable;
     }
 
@@ -139,6 +151,76 @@ public class MutableAssaultConfig {
         return latencyEnabled || exceptionEnabled || httpStatusEnabled || dependencyDegradationEnabled;
     }
 
+    /**
+     * @return the active predefined composite assault profile, never {@code null}
+     */
+    public AssaultProfile getProfile() {
+        return profile != null ? profile : AssaultProfile.NONE;
+    }
+
+    /**
+     * Switches the active profile and applies its assault defaults.
+     * <p>
+     * Selecting a non-{@code NONE} profile resets the individual assault toggles to the profile's defaults; each toggle
+     * can then be overridden manually on top of the profile. Selecting {@code NONE} leaves the toggles untouched.
+     *
+     * @param profile the profile to activate, or {@code null} to keep {@link AssaultProfile#NONE}
+     * @return the effective active profile
+     */
+    public AssaultProfile setProfile(AssaultProfile profile) {
+        this.profile = profile != null ? profile : AssaultProfile.NONE;
+        if (this.profile != AssaultProfile.NONE) {
+            applyProfileDefaults();
+        }
+        notifyChange();
+        return this.profile;
+    }
+
+    /**
+     * Restores the profile label without applying its defaults, used when loading persisted state where the individual
+     * toggles already reflect the effective (possibly user-overridden) configuration.
+     *
+     * @param profile the profile to restore, or {@code null} to keep {@link AssaultProfile#NONE}
+     */
+    void restoreProfile(AssaultProfile profile) {
+        this.profile = profile != null ? profile : AssaultProfile.NONE;
+    }
+
+    /**
+     * Resets all individual assault toggles and parameters to the defaults defined by the active profile.
+     */
+    private void applyProfileDefaults() {
+        latencyEnabled = false;
+        exceptionEnabled = false;
+        httpStatusEnabled = false;
+        dependencyDegradationEnabled = false;
+        switch (profile) {
+            case SLOW_FAILURE -> {
+                latencyEnabled = true;
+                exceptionEnabled = true;
+                latencyMinMs = 100;
+                latencyMaxMs = 5000;
+                exceptionType = "java.lang.RuntimeException";
+            }
+            case INTERMITTENT -> {
+                httpStatusEnabled = true;
+                httpStatusCode = 500;
+            }
+            case TIMEOUT -> {
+                latencyEnabled = true;
+                latencyMinMs = 30000;
+                latencyMaxMs = 30000;
+            }
+            case NONE -> {
+            }
+        }
+    }
+
+    /**
+     * Produces a human-readable summary of the currently enabled assaults, including the active profile if any.
+     *
+     * @return a comma-separated description, or {@code "no assault enabled"} when every toggle is off
+     */
     public String describeAssaults() {
         List<String> parts = new ArrayList<>();
         if (latencyEnabled) {
@@ -153,7 +235,13 @@ public class MutableAssaultConfig {
         if (dependencyDegradationEnabled) {
             parts.add("dependencyDegradation enabled (HTTP 503)");
         }
-        return parts.isEmpty() ? "no assault enabled" : String.join(", ", parts);
+        if (parts.isEmpty()) {
+            return "no assault enabled";
+        }
+        if (profile != AssaultProfile.NONE) {
+            parts.add(0, "profile " + profile);
+        }
+        return String.join(", ", parts);
     }
 
     public long getLatencyMinMs() {

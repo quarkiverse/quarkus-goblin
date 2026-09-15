@@ -6,6 +6,7 @@ import java.util.List;
 public final class MarkdownReportGenerator {
 
     private static final String CONFIG_TEMPLATE = """
+            - Profile: %s
             - Latency (enabled: %s): %d - %d ms
             - Exception (enabled: %s): %s - "%s"
             - HTTP Status (enabled: %s): %d - "%s"
@@ -45,11 +46,18 @@ public final class MarkdownReportGenerator {
                 historySection);
     }
 
+    /**
+     * Renders the current configuration section of the markdown report, including the active profile.
+     *
+     * @param cfg the current mutable assault configuration
+     * @return a bullet list describing the configuration, or a placeholder when no configuration is available
+     */
     private static String formatConfig(MutableAssaultConfig cfg) {
         if (cfg == null) {
             return "- No configuration available.\n";
         }
         return String.format(CONFIG_TEMPLATE,
+                cfg.getProfile(),
                 cfg.isLatencyEnabled(), cfg.getLatencyMinMs(), cfg.getLatencyMaxMs(),
                 cfg.isExceptionEnabled(), cfg.getExceptionType(), cfg.getExceptionMessage(),
                 cfg.isHttpStatusEnabled(), cfg.getHttpStatusCode(), cfg.getHttpStatusMessage(),

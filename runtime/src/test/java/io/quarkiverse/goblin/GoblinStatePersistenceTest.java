@@ -139,4 +139,44 @@ class GoblinStatePersistenceTest {
 
         assertEquals("a, b, c, d", map.get("key"));
     }
+
+    @Test
+    void saveAndLoadPreservesProfileAndOverrides() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        config.setExceptionEnabled(false);
+
+        GoblinStatePersistence.save(config);
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertEquals(AssaultProfile.SLOW_FAILURE, loaded.getProfile());
+        assertTrue(loaded.isLatencyEnabled());
+        assertFalse(loaded.isExceptionEnabled());
+    }
+
+    @Test
+    void fromJsonRestoresProfileLabelWithoutApplyingDefaults() {
+        String json = "{\"profile\": \"SLOW_FAILURE\", \"latencyEnabled\": false, \"exceptionEnabled\": true}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+
+        assertEquals(AssaultProfile.SLOW_FAILURE, config.getProfile());
+        assertFalse(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+    }
+
+    @Test
+    void fromJsonDefaultsProfileToNoneWhenMissing() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"latencyEnabled\": true}");
+
+        assertEquals(AssaultProfile.NONE, config.getProfile());
+    }
+
+    @Test
+    void fromJsonHandlesUnknownProfileByDefaultingToNone() {
+        String json = "{\"profile\": \"NOT_A_PROFILE\"}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+
+        assertEquals(AssaultProfile.NONE, config.getProfile());
+    }
 }

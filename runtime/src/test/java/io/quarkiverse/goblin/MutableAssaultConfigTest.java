@@ -213,8 +213,123 @@ class MutableAssaultConfigTest {
         assertEquals("com.example.DoesNotExist", config.getExceptionType());
     }
 
+    @Test
+    void fromConfigAppliesSlowFailureProfile() {
+        MutableAssaultConfig config = MutableAssaultConfig
+                .fromConfig(configWithProfile(100, 5000, 503, "java.lang.RuntimeException", 100, AssaultProfile.SLOW_FAILURE));
+
+        assertEquals(AssaultProfile.SLOW_FAILURE, config.getProfile());
+        assertTrue(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+        assertFalse(config.isHttpStatusEnabled());
+        assertFalse(config.isDependencyDegradationEnabled());
+        assertTrue(config.describeAssaults().contains("profile SLOW_FAILURE"));
+    }
+
+    @Test
+    void fromConfigAppliesIntermittentProfile() {
+        MutableAssaultConfig config = MutableAssaultConfig
+                .fromConfig(configWithProfile(100, 5000, 503, "java.lang.RuntimeException", 30, AssaultProfile.INTERMITTENT));
+
+        assertEquals(AssaultProfile.INTERMITTENT, config.getProfile());
+        assertTrue(config.isHttpStatusEnabled());
+        assertEquals(500, config.getHttpStatusCode());
+        assertFalse(config.isLatencyEnabled());
+        assertEquals(30, config.getTargetLevel());
+    }
+
+    @Test
+    void fromConfigAppliesTimeoutProfile() {
+        MutableAssaultConfig config = MutableAssaultConfig
+                .fromConfig(configWithProfile(100, 5000, 503, "java.lang.RuntimeException", 100, AssaultProfile.TIMEOUT));
+
+        assertEquals(AssaultProfile.TIMEOUT, config.getProfile());
+        assertTrue(config.isLatencyEnabled());
+        assertEquals(30000, config.getLatencyMinMs());
+        assertEquals(30000, config.getLatencyMaxMs());
+        assertFalse(config.isExceptionEnabled());
+    }
+
+    @Test
+    void setProfileAppliesDefaultsAndRemainsOverridable() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        assertTrue(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+
+        config.setLatencyEnabled(false);
+        assertFalse(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+        assertEquals(AssaultProfile.SLOW_FAILURE, config.getProfile());
+    }
+
+    @Test
+    void setProfileToNoneLeavesTogglesUntouched() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(true);
+
+        config.setProfile(AssaultProfile.NONE);
+        assertFalse(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+    }
+
+    @Test
+    void restoreProfileOnlyLabelsWithoutApplyingDefaults() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(true);
+
+        config.restoreProfile(AssaultProfile.SLOW_FAILURE);
+        assertEquals(AssaultProfile.SLOW_FAILURE, config.getProfile());
+        assertFalse(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+    }
+
+    @Test
+    void setProfileAppliesTimeoutDefaults() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setProfile(AssaultProfile.TIMEOUT);
+
+        assertEquals(AssaultProfile.TIMEOUT, config.getProfile());
+        assertTrue(config.isLatencyEnabled());
+        assertEquals(30000, config.getLatencyMinMs());
+        assertEquals(30000, config.getLatencyMaxMs());
+    }
+
+    @Test
+    void applyingSlowFailureAfterManualOverrideRestoresDefaults() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setProfile(AssaultProfile.TIMEOUT);
+        config.setLatencyMaxMs(200);
+        config.setLatencyMinMs(100);
+
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        assertEquals(100, config.getLatencyMinMs());
+        assertEquals(5000, config.getLatencyMaxMs());
+        assertTrue(config.isLatencyEnabled());
+        assertTrue(config.isExceptionEnabled());
+    }
+
+    @Test
+    void describeAssaultsSaysNoAssaultEnabledEvenWithProfileWhenAllTogglesOff() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(false);
+        config.setDependencyDegradationEnabled(false);
+
+        assertEquals("no assault enabled", config.describeAssaults());
+    }
+
     private static GoblinConfig configWith(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
             int targetLevel) {
+        return configWithProfile(latencyMin, latencyMax, httpStatus, exceptionType, targetLevel, AssaultProfile.NONE);
+    }
+
+    private static GoblinConfig configWithProfile(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
+            int targetLevel, AssaultProfile profile) {
         return new GoblinConfig() {
             @Override
             public boolean enabled() {
@@ -227,6 +342,11 @@ class MutableAssaultConfigTest {
                     @Override
                     public AssaultType type() {
                         return AssaultType.LATENCY;
+                    }
+
+                    @Override
+                    public AssaultProfile profile() {
+                        return profile;
                     }
 
                     @Override

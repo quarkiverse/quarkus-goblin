@@ -44,8 +44,15 @@ public final class GoblinStatePersistence {
         }
     }
 
+    /**
+     * Serialises the given configuration to a flat JSON string for persistence.
+     *
+     * @param config the configuration to persist
+     * @return the JSON representation of the configuration
+     */
     private static String toJson(MutableAssaultConfig config) {
         Map<String, Object> map = new LinkedHashMap<>();
+        map.put("profile", config.getProfile().name());
         map.put("latencyEnabled", config.isLatencyEnabled());
         map.put("exceptionEnabled", config.isExceptionEnabled());
         map.put("httpStatusEnabled", config.isHttpStatusEnabled());
@@ -60,10 +67,17 @@ public final class GoblinStatePersistence {
         return mapToJson(map);
     }
 
+    /**
+     * Rebuilds a configuration from its JSON representation, restoring the profile label without applying its defaults.
+     *
+     * @param json the persisted JSON
+     * @return the reconstructed configuration with missing fields defaulted
+     */
     static MutableAssaultConfig fromJson(String json) {
         Map<String, String> map = parseJson(json);
         List<String> defaulted = new ArrayList<>();
         MutableAssaultConfig config = new MutableAssaultConfig();
+        config.restoreProfile(parseProfile(resolve(map, "profile", "NONE", defaulted)));
         config.setLatencyEnabled(Boolean.parseBoolean(resolve(map, "latencyEnabled", "true", defaulted)));
         config.setExceptionEnabled(Boolean.parseBoolean(resolve(map, "exceptionEnabled", "false", defaulted)));
         config.setHttpStatusEnabled(Boolean.parseBoolean(resolve(map, "httpStatusEnabled", "false", defaulted)));
@@ -89,6 +103,21 @@ public final class GoblinStatePersistence {
             return defaultValue;
         }
         return val;
+    }
+
+    /**
+     * Converts a persisted profile label back to its enum constant.
+     *
+     * @param name the stored profile name
+     * @return the matching {@link AssaultProfile}, or {@link AssaultProfile#NONE} if the name is invalid
+     */
+    private static AssaultProfile parseProfile(String name) {
+        try {
+            return AssaultProfile.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid profile '%s' in state file, defaulting to NONE", name);
+            return AssaultProfile.NONE;
+        }
     }
 
     private static String mapToJson(Map<String, Object> map) {

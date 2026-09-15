@@ -55,6 +55,10 @@ quarkus.goblin.enabled=true
 # Assault type enabled at startup (can be changed at runtime via Dev UI)
 quarkus.goblin.assault.type=LATENCY
 
+# Predefined composite assault mode: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT
+# Overrides assault.type when not NONE. Individual assaults stay user-overridable.
+quarkus.goblin.assault.profile=NONE
+
 # Latency settings
 quarkus.goblin.assault.latency.min-milliseconds=100
 quarkus.goblin.assault.latency.max-milliseconds=5000
@@ -83,6 +87,7 @@ quarkus.goblin.target.level=100
 The Chaos Dashboard provides:
 
 - **Master toggle** -- Activate/deactivate all chaos
+- **Profile selector** -- Switch a whole assault setup (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) in one click; individual toggles stay overridable
 - **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation
 - **Config sections** -- Edit parameters per type (disabled with placeholders when type is off)
 - **Target level** -- Adjust percentage of affected requests

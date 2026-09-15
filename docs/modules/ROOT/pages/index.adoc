@@ -122,6 +122,41 @@ The status code must be in the `100`-`599` range. Out-of-range values are detect
 
 Returns 503 with a "Dependency unavailable" message. Designed for testing `@Fallback` and `@Retry` on outbound service calls. No additional configuration needed -- it uses a fixed 503 response.
 
+== Profiles
+
+Realistic failure scenarios usually combine several effects, and tuning every parameter by hand for each scenario is repetitive. A **profile** bundles a common assault combination into a single config line.
+
+[source,properties]
+----
+quarkus.goblin.assault.profile=SLOW_FAILURE
+----
+
+Available profiles:
+
+|===
+| Profile | Assaults enabled | Sensible defaults
+| `NONE`
+| none (manual mode, `assault.type` is used instead)
+|
+| `SLOW_FAILURE`
+| latency + exception
+| Latency `100`-`5000` ms, `RuntimeException("Goblin chaos: simulated exception")`
+| `INTERMITTENT`
+| HTTP status
+| HTTP 500 -- combine with `quarkus.goblin.target.level` to control frequency
+| `TIMEOUT`
+| latency
+| Fixed `30000` ms (30 s) -- ideal for exercising client-side `@Timeout`
+|===
+
+TIP: Profiles are a **starting point, not a lock-in**. Once a profile is active, each assault toggle stays independently overridable through the Dev UI or JSON-RPC, and those overrides survive restarts like any other Dev UI change.
+
+image::dev-ui-profile.png[Profile selector in the Dev UI,width=720,align=center]
+[.text-center]
+The Profile section of the Chaos Dashboard: pick a predefined assault mode in one click -- the active profile also appears in the status bar.
+
+The active profile is displayed in the Dev UI status bar and included in the Markdown report and the `describeAssaults()` snapshot recorded in the assault history.
+
 == Targeting
 
 By default, Goblin affects **all REST endpoints** in your application. You can narrow or expand this scope with targeting configuration.
@@ -188,7 +223,12 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.type`
 | `AssaultType`
 | `LATENCY`
-| Initial assault type enabled at startup. Values: `LATENCY`, `EXCEPTION`, `HTTP_STATUS`, `DEPENDENCY_DEGRADATION`. Can be changed at runtime via the Dev UI.
+| Initial assault type enabled at startup. Values: `LATENCY`, `EXCEPTION`, `HTTP_STATUS`, `DEPENDENCY_DEGRADATION`. Can be changed at runtime via the Dev UI. Ignored when a non-`NONE` profile is selected.
+
+| `quarkus.goblin.assault.profile`
+| `AssaultProfile`
+| `NONE`
+| Predefined composite assault mode. Values: `NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`. A non-`NONE` profile enables a set of assaults with sensible defaults; individual assaults stay user-overridable afterwards. Can be changed at runtime via the Dev UI.
 
 | `quarkus.goblin.assault.latency.min-milliseconds`
 | `long`
@@ -273,6 +313,7 @@ image::dev-ui-dashboard.png[Goblin Chaos Dashboard,width=720,align=center]
 The Chaos Dashboard with latency enabled at 100% target level.
 
 * **Master toggle** -- Activate/deactivate all chaos with a single click. When inactive, the status dot turns red and the `Deactivate` button becomes `Activate`.
+* **Profile selector** -- Pick a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) with one click. The active profile is also shown in the status bar. Individual toggles stay overridable on top of the profile.
 * **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color.
 * **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button.
 * **Target level** -- Adjust the percentage of affected requests (0-100%) on the fly, saved with its own button.
@@ -295,7 +336,7 @@ The history is an in-memory buffer capped at the latest 1000 assaults. Use it to
 The History panel also offers an **Export Markdown** button. Clicking it generates a factual Markdown report of the current Goblin session and displays it in a copyable panel:
 
 * the current status (active/inactive) and target level
-* the current assault configuration (latency, exception, HTTP status, dependency degradation toggles and values)
+* the current assault configuration (active profile, latency, exception, HTTP status, dependency degradation toggles and values)
 * the full assault history, including the actual latency duration applied for each latency assault and a snapshot of the active configuration at the time of each assault -- so a config change between two calls is clearly visible (e.g. `latency enabled (100 - 500 ms)` vs `latency enabled (1000 - 5000 ms)`)
 
 image::dev-ui-history-report.png[Goblin Markdown report export,width=720,align=center]
@@ -447,13 +488,16 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Method | Effect
 
 | `getStatus`
-| Returns `active`, the four assault toggles, and the target `level`.
+| Returns `active`, the active `profile`, the four assault toggles, and the target `level`.
 
 | `getConfig`
-| Returns the full mutable config (toggles, latency range, exception config, HTTP status config, level).
+| Returns the full mutable config (profile, toggles, latency range, exception config, HTTP status config, level).
 
 | `toggleActive` / `setActive(boolean)`
 | Enable/disable chaos entirely. Emits a WARN log.
+
+| `setProfile(profile)`
+| Activate a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`). Applies the profile defaults to the assault toggles; each toggle stays overridable afterwards.
 
 | `toggleLatency` / `toggleException` / `toggleHttpStatus` / `toggleDependencyDegradation`
 | Flip the corresponding assault toggle on/off.

@@ -27,6 +27,12 @@ public class AssaultEngine {
         staticConfig = config;
     }
 
+    /**
+     * Initialises the engine on startup: restores persisted state when present, otherwise builds the mutable config from
+     * the static configuration, then logs the active assaults.
+     *
+     * @param event the Quarkus startup event
+     */
     void onStart(@Observes StartupEvent event) {
         MutableAssaultConfig persisted = GoblinStatePersistence.load();
         if (persisted != null) {
@@ -43,8 +49,9 @@ public class AssaultEngine {
         }
         if (active) {
             LOG.warnf(
-                    "Chaos engineering active: %d%% of REST requests subject to assault (latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s)",
+                    "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s)",
                     mutableConfig.getTargetLevel(),
+                    mutableConfig.getProfile(),
                     mutableConfig.isLatencyEnabled(),
                     mutableConfig.isExceptionEnabled(),
                     mutableConfig.isHttpStatusEnabled(),
