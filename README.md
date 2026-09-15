@@ -92,8 +92,8 @@ The Chaos Dashboard provides:
 - **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation
 - **Config sections** -- Edit parameters per type (disabled with placeholders when type is off)
 - **Target level** -- Adjust percentage of affected requests
-- **History** -- Real-time log of every assault triggered (with the applied latency duration and the active config snapshot at the time of the assault)
-- **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history, handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
+- **History** -- Live chaos-testing console: 2-second auto-refresh, newest-first ordering, filters (assault type, method, time period), a summary band with totals and average injected latency, and expandable Active Config cells
+- **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history (copy or download it), handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
 
 All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback -- inverted latency ranges are swapped, out-of-range HTTP status codes (100-599) fall back to 503, unknown exception classes fall back to `RuntimeException`, and the target level is clamped to 0-100. In the dashboard, a warning toast explains the applied correction.
 

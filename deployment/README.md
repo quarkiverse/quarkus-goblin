@@ -30,7 +30,7 @@ user application.
 The Lit web components and logos live in `src/main/resources/dev-ui/`:
 
 - `qwc-goblin-dashboard.js` -- master toggle, assault toggles, per-type parameter editors, target level;
-- `qwc-goblin-history.js` -- real-time assault history with the exported Markdown report panel;
+- `qwc-goblin-history.js` -- live assault history console (auto-refresh, filters, summary band, expandable Active Config cells) with the exported Markdown report panel;
 - `goblin-dark.svg` / `goblin-light.svg` -- extension card logos.
 
 `META-INF/quarkus-build-steps.list` is generated during the build and lists the build-step classes.
