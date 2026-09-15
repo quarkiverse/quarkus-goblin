@@ -44,15 +44,15 @@ Current status: **preview** (v0.1.0)
 - [x] **Predefined composite assault modes**
   Bundle common assault combinations into named profiles: `SLOW_FAILURE` (latency + exception), `INTERMITTENT` (percentage-based random HTTP 500), `TIMEOUT` (very high latency). Configurable via `quarkus.goblin.assault.profile`.
 
+- [ ] **History panel refactor**
+  Turn the Assault History screen from a "debug table" into a "chaos testing console". Today it loads once on mount (no live refresh), renders in insertion order (oldest first), has no filters, a long `Active Config` column that hurts readability, and a bare `toLocaleTimeString()` timestamp. Add: periodic auto-refresh while the tab is open, newest-first ordering, filtering by type and method text (+ date range), a compact config cell expandable on click, and a summary band (totals per assault type, average injected latency). Follow-ups: confirmation on Clear History, richer timestamp (date/ms/timezone), Markdown export in a dedicated panel instead of an inline block.
+
 ---
 
 ## v0.3.0 -- Dev UI & Observability
 
 - [ ] **Micrometer/Prometheus metrics**
   Expose assault counters and latency histograms via Micrometer so they appear in existing Prometheus/Grafana dashboards. Metrics: `goblin_assaults_total` (tagged by type), `goblin_latency_injected_seconds` (histogram), `goblin_active` (gauge).
-
-- [ ] **History filtering in Dev UI**
-  Add filter controls to the History panel: filter by assault type (checkboxes), by endpoint method (text input), and by date range (time pickers). Useful when the history buffer is large.
 
 - [ ] **OpenTelemetry tracing integration**
   Create an OTel span for each injected assault, with attributes for assault type, target method, and injected value. Link the assault span to the parent request span for end-to-end trace correlation.
