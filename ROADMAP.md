@@ -44,7 +44,7 @@ Current status: **preview** (v0.1.0)
 - [x] **Predefined composite assault modes**
   Bundle common assault combinations into named profiles: `SLOW_FAILURE` (latency + exception), `INTERMITTENT` (percentage-based random HTTP 500), `TIMEOUT` (very high latency). Configurable via `quarkus.goblin.assault.profile`.
 
-- [ ] **History panel refactor**
+- [x] **History panel refactor**
   Turn the Assault History screen from a "debug table" into a "chaos testing console". Today it loads once on mount (no live refresh), renders in insertion order (oldest first), has no filters, a long `Active Config` column that hurts readability, and a bare `toLocaleTimeString()` timestamp. Add: periodic auto-refresh while the tab is open, newest-first ordering, filtering by type and method text (+ date range), a compact config cell expandable on click, and a summary band (totals per assault type, average injected latency). Follow-ups: confirmation on Clear History, richer timestamp (date/ms/timezone), Markdown export in a dedicated panel instead of an inline block.
 
 ---
