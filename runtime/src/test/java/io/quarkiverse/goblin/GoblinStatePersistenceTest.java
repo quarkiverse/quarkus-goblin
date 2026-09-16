@@ -204,4 +204,20 @@ class GoblinStatePersistenceTest {
         assertFalse(config.isLatencyEnabled());
         assertTrue(config.isExceptionEnabled());
     }
+
+    @Test
+    void savedJsonDoesNotContainActiveFlag() throws IOException {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(true);
+        GoblinStatePersistence.save(config);
+        String content = Files.readString(stateFile);
+        assertFalse(content.contains("\"active\""), "active flag must not be persisted");
+    }
+
+    @Test
+    void fromJsonIgnoresLegacyActiveField() {
+        String json = "{\"active\": true, \"latencyEnabled\": false}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+        assertFalse(config.isLatencyEnabled());
+    }
 }

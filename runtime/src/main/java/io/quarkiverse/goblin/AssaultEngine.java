@@ -28,8 +28,9 @@ public class AssaultEngine {
     }
 
     /**
-     * Initialises the engine on startup: restores persisted state when present, otherwise builds the mutable config from
-     * the static configuration, then logs the active assaults.
+     * Initialises the engine on startup: restores persisted state when present (assault toggles and parameters only --
+     * the enabled/active flag is never persisted and always comes from {@code quarkus.goblin.enabled}), otherwise builds
+     * the mutable config from the static configuration, then logs the active assaults.
      *
      * @param event the Quarkus startup event
      */
@@ -37,12 +38,11 @@ public class AssaultEngine {
         MutableAssaultConfig persisted = GoblinStatePersistence.load();
         if (persisted != null) {
             this.mutableConfig = persisted;
-            this.active = true;
             LOG.info("Loaded previous Goblin state from .goblin-state.json");
         } else if (staticConfig != null) {
             this.mutableConfig = MutableAssaultConfig.fromConfig(staticConfig);
-            this.active = staticConfig.enabled();
         }
+        this.active = staticConfig == null || staticConfig.enabled();
         this.mutableConfig.validateAndFix();
         if (LaunchMode.current() == LaunchMode.DEVELOPMENT) {
             this.mutableConfig.setOnChange(this::persistConfig);
