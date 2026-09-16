@@ -41,6 +41,8 @@ class GoblinStatePersistenceTest {
         config.setHttpStatusCode(429);
         config.setHttpStatusMessage("Too Many Requests");
         config.setTargetLevel(42);
+        config.setClientLatencyEnabled(true);
+        config.setClientExceptionEnabled(true);
 
         GoblinStatePersistence.save(config);
 
@@ -52,6 +54,8 @@ class GoblinStatePersistenceTest {
         assertTrue(loaded.isExceptionEnabled());
         assertFalse(loaded.isHttpStatusEnabled());
         assertFalse(loaded.isDependencyDegradationEnabled());
+        assertTrue(loaded.isClientLatencyEnabled());
+        assertTrue(loaded.isClientExceptionEnabled());
         assertEquals(200, loaded.getLatencyMinMs());
         assertEquals(800, loaded.getLatencyMaxMs());
         assertEquals("java.io.IOException", loaded.getExceptionType());
@@ -91,6 +95,8 @@ class GoblinStatePersistenceTest {
 
         assertNotNull(config);
         assertFalse(config.isLatencyEnabled());
+        assertFalse(config.isClientLatencyEnabled());
+        assertFalse(config.isClientExceptionEnabled());
         assertEquals(100, config.getLatencyMinMs());
         assertEquals(5000, config.getLatencyMaxMs());
         assertEquals("java.lang.RuntimeException", config.getExceptionType());

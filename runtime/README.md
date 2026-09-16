@@ -16,6 +16,14 @@ is eligible (`quarkus.goblin.*` targeting rules, percentage based on `quarkus.go
 
 Assaults are discovered automatically: no manual registration is required, adding a bean implements the SPI is enough.
 
+Outgoing MicroProfile / Quarkus REST Client calls are handled by `GoblinChaosClientFilter` (a JAX-RS
+`ClientRequestFilter`, registered globally as an unremovable bean by the deployment build step). It reuses the
+`engine.shouldAssaultClient()` level gate (same `quarkus.goblin.target.level` percentage as the server side, no package
+targeting) and the client-side toggles from `MutableAssaultConfig` (`clientLatencyEnabled` / `clientExceptionEnabled`).
+When enabled it applies latency before the request is dispatched and/or throws the configured exception before the call
+leaves the application -- the remote service is never reached for exception assaults. History records use the
+`REST-Client <METHOD> <URI>` method format.
+
 ## Existing assaults
 
 | Assault | Class | `order()` | Enabled via | Behavior | Config keys (`quarkus.goblin.*`) |
@@ -27,6 +35,13 @@ Assaults are discovered automatically: no manual registration is required, addin
 
 All classes live in `io.quarkiverse.goblin.assault`. The chain order convention is: latency first (10), then
 request-aborting assaults by increasing severity (20, 30, 40).
+
+### Client-side assaults
+
+Client-facing latency and exception assaults are not part of the `Assault` chain above; they run in
+`GoblinChaosClientFilter`. They are driven by the runtime-only toggles `clientLatencyEnabled` and
+`clientExceptionEnabled` on `MutableAssaultConfig` (default `false`, persisted by `GoblinStatePersistence`,
+no static `GoblinConfig` key), reusing the latency range and exception class/message configured for the server side.
 
 ### Profiles
 

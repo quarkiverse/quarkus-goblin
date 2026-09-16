@@ -29,7 +29,7 @@ Current status: **preview** (v0.1.0)
 
 ## v0.2.0 -- New Injection Capabilities
 
-- [ ] **Client-side assault via REST Client**
+- [x] **Client-side assault via REST Client**
   Intercept outgoing calls made with MicroProfile REST Client or Quarkus REST Client Reactive. Inject latency and exceptions on the client side to simulate downstream failures without touching the remote service.
 
 - [ ] **Client-side assault via Vert.x Web Client**

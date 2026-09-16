@@ -86,7 +86,7 @@ public class ExceptionAssault implements Assault {
      * @param config the configuration holding the exception type and message
      * @return the reflective exception instance, or the fallback {@link RuntimeException}
      */
-    private RuntimeException createException(MutableAssaultConfig config) {
+    public static RuntimeException createException(MutableAssaultConfig config) {
         String type = config.getExceptionType();
         String message = config.getExceptionMessage();
         try {

@@ -122,4 +122,57 @@ class AssaultEngineTest {
     void historyIsEmptyWhenNoAssaultRecorded() {
         assertEquals(0, new AssaultEngine().getHistory().size());
     }
+
+    @Test
+    void shouldAssaultClientRequiresActiveEngineAndClientToggle() {
+        AssaultEngine engine = new AssaultEngine();
+        assertFalse(engine.shouldAssaultClient());
+    }
+
+    @Test
+    void shouldAssaultClientFalseWhenOnlyServerTogglesEnabled() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(true);
+        engine.setMutableConfigForTests(config);
+
+        assertFalse(engine.shouldAssaultClient(), "server-side toggles must not trigger client-side assaults");
+    }
+
+    @Test
+    void shouldAssaultClientTrueWhenClientToggleAndLevel100() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setClientLatencyEnabled(true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertTrue(engine.shouldAssaultClient());
+    }
+
+    @Test
+    void shouldAssaultClientFalseAtLevelZero() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setClientExceptionEnabled(true);
+        config.setTargetLevel(0);
+        engine.setMutableConfigForTests(config);
+
+        assertFalse(engine.shouldAssaultClient());
+    }
+
+    @Test
+    void shouldAssaultClientFalseWhenServerToggleOnlyAndLevel100() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setHttpStatusEnabled(true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertFalse(engine.shouldAssaultClient());
+    }
 }

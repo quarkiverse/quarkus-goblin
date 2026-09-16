@@ -32,6 +32,8 @@ public class GoblinJsonRPCServiceTest {
         cfg.setExceptionEnabled(false);
         cfg.setHttpStatusEnabled(false);
         cfg.setDependencyDegradationEnabled(false);
+        cfg.setClientLatencyEnabled(false);
+        cfg.setClientExceptionEnabled(false);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);

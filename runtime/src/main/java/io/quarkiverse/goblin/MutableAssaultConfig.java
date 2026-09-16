@@ -20,6 +20,8 @@ public class MutableAssaultConfig {
     private volatile boolean exceptionEnabled = false;
     private volatile boolean httpStatusEnabled = false;
     private volatile boolean dependencyDegradationEnabled = false;
+    private volatile boolean clientLatencyEnabled = false;
+    private volatile boolean clientExceptionEnabled = false;
 
     private volatile long latencyMinMs = 100;
     private volatile long latencyMaxMs = 5000;
@@ -148,8 +150,49 @@ public class MutableAssaultConfig {
         notifyChange();
     }
 
+    /**
+     * @return whether the client-side latency assault is enabled for outgoing REST Client calls
+     */
+    public boolean isClientLatencyEnabled() {
+        return clientLatencyEnabled;
+    }
+
+    /**
+     * Toggles the client-side latency assault, which sleeps on outbound REST Client calls.
+     *
+     * @param clientLatencyEnabled {@code true} to inject latency on outgoing calls, {@code false} to disable
+     */
+    public void setClientLatencyEnabled(boolean clientLatencyEnabled) {
+        this.clientLatencyEnabled = clientLatencyEnabled;
+        notifyChange();
+    }
+
+    /**
+     * @return whether the client-side exception assault is enabled for outgoing REST Client calls
+     */
+    public boolean isClientExceptionEnabled() {
+        return clientExceptionEnabled;
+    }
+
+    /**
+     * Toggles the client-side exception assault, which throws before outbound REST Client requests are dispatched.
+     *
+     * @param clientExceptionEnabled {@code true} to throw on outgoing calls, {@code false} to disable
+     */
+    public void setClientExceptionEnabled(boolean clientExceptionEnabled) {
+        this.clientExceptionEnabled = clientExceptionEnabled;
+        notifyChange();
+    }
+
     public boolean hasAnyAssaultEnabled() {
         return latencyEnabled || exceptionEnabled || httpStatusEnabled || dependencyDegradationEnabled;
+    }
+
+    /**
+     * @return whether at least one client-side assault is enabled for outbound REST Client calls
+     */
+    public boolean hasAnyClientAssaultEnabled() {
+        return clientLatencyEnabled || clientExceptionEnabled;
     }
 
     /**
@@ -228,6 +271,9 @@ public class MutableAssaultConfig {
 
     /**
      * Produces a human-readable summary of the currently enabled assaults, including the active profile if any.
+     * <p>
+     * Client-side assaults are reported separately with a {@code client} prefix, e.g.
+     * {@code "client latency enabled (100 - 500 ms)"}.
      *
      * @return a comma-separated description, or {@code "no assault enabled"} when every toggle is off
      */
@@ -244,6 +290,12 @@ public class MutableAssaultConfig {
         }
         if (dependencyDegradationEnabled) {
             parts.add("dependencyDegradation enabled (HTTP 503)");
+        }
+        if (clientLatencyEnabled) {
+            parts.add("client latency enabled (" + latencyMinMs + " - " + latencyMaxMs + " ms)");
+        }
+        if (clientExceptionEnabled) {
+            parts.add("client exception enabled (" + exceptionType + ": \"" + exceptionMessage + "\")");
         }
         if (parts.isEmpty()) {
             return "no assault enabled";
