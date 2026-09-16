@@ -237,7 +237,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.enabled`
 | `boolean`
 | `true`
-| Enable/disable the Goblin extension. Only takes effect in dev mode.
+| Enable/disable the Goblin extension. Only takes effect in dev mode. Never overridden by the persisted state file; disabling this property keeps chaos off even if a previous session left assault toggles enabled.
 
 | `quarkus.goblin.assault.type`
 | `AssaultType`
@@ -412,6 +412,8 @@ Changes take effect on the **next request** -- no restart, no redeployment. A WA
 Runtime config changes made through the Dev UI are automatically persisted to a `.goblin-state.json` file in the project working directory. On the next startup, Goblin checks for this file and restores the previous configuration instead of starting fresh from `application.properties`.
 
 This means your chaos scenario survives restarts -- no need to reconfigure the dashboard every time you restart in dev mode.
+
+The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
 
 The persistence listener is only registered in dev mode, so integration or system tests never overwrite the chaos configuration you saved from the Dev UI.
 
