@@ -49,13 +49,15 @@ public class AssaultEngine {
         }
         if (active) {
             LOG.warnf(
-                    "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s)",
+                    "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s)",
                     mutableConfig.getTargetLevel(),
                     mutableConfig.getProfile(),
                     mutableConfig.isLatencyEnabled(),
                     mutableConfig.isExceptionEnabled(),
                     mutableConfig.isHttpStatusEnabled(),
-                    mutableConfig.isDependencyDegradationEnabled());
+                    mutableConfig.isDependencyDegradationEnabled(),
+                    mutableConfig.isClientLatencyEnabled(),
+                    mutableConfig.isClientExceptionEnabled());
         }
     }
 
@@ -75,6 +77,27 @@ public class AssaultEngine {
         if (!active || mutableConfig == null || !mutableConfig.hasAnyAssaultEnabled()) {
             return false;
         }
+        return levelGate();
+    }
+
+    /**
+     * Decides whether an outbound REST Client call should be assaulted, mirroring {@link #shouldAssault()} for the
+     * client side.
+     * <p>
+     * Client-side assaults only fire when at least one client assault toggle is enabled and the target level gate
+     * passes; the server-side toggles are deliberately ignored so a call is never delayed or failed unless the
+     * client-side assaults were explicitly enabled.
+     *
+     * @return {@code true} when the outbound call is eligible for a client-side assault
+     */
+    public boolean shouldAssaultClient() {
+        if (!active || mutableConfig == null || !mutableConfig.hasAnyClientAssaultEnabled()) {
+            return false;
+        }
+        return levelGate();
+    }
+
+    private boolean levelGate() {
         int level = mutableConfig.getTargetLevel();
         if (level <= 0) {
             return false;
@@ -87,6 +110,17 @@ public class AssaultEngine {
 
     public MutableAssaultConfig getMutableConfig() {
         return mutableConfig;
+    }
+
+    /**
+     * Installs the mutable configuration used by {@link #shouldAssault()}/{@link #shouldAssaultClient()} and history
+     * snapshots. Package-private for unit tests; the production lifecycle assigns the configuration at startup via the
+     * recorder and the state loader.
+     *
+     * @param config the configuration to install
+     */
+    void setMutableConfigForTests(MutableAssaultConfig config) {
+        this.mutableConfig = config;
     }
 
     public List<AssaultRecord> getHistory() {

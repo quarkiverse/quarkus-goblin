@@ -73,6 +73,8 @@ public final class GoblinStatePersistence {
         map.put("exceptionEnabled", config.isExceptionEnabled());
         map.put("httpStatusEnabled", config.isHttpStatusEnabled());
         map.put("dependencyDegradationEnabled", config.isDependencyDegradationEnabled());
+        map.put("clientLatencyEnabled", config.isClientLatencyEnabled());
+        map.put("clientExceptionEnabled", config.isClientExceptionEnabled());
         map.put("latencyMinMs", config.getLatencyMinMs());
         map.put("latencyMaxMs", config.getLatencyMaxMs());
         map.put("exceptionType", config.getExceptionType());
@@ -99,6 +101,8 @@ public final class GoblinStatePersistence {
         config.setHttpStatusEnabled(resolveBoolean(map, "httpStatusEnabled", "false", defaulted));
         config.setDependencyDegradationEnabled(
                 resolveBoolean(map, "dependencyDegradationEnabled", "false", defaulted));
+        config.setClientLatencyEnabled(resolveBoolean(map, "clientLatencyEnabled", "false", defaulted));
+        config.setClientExceptionEnabled(resolveBoolean(map, "clientExceptionEnabled", "false", defaulted));
         config.setLatencyMinMs(resolveLong(map, "latencyMinMs", "100", defaulted));
         config.setLatencyMaxMs(resolveLong(map, "latencyMaxMs", "5000", defaulted));
         config.setExceptionType(resolve(map, "exceptionType", "java.lang.RuntimeException", defaulted));

@@ -108,4 +108,19 @@ class AssaultTest {
         config.setExceptionEnabled(false);
         assertFalse(new ExceptionAssault().isEnabled(config));
     }
+
+    /**
+     * Verifies {@link ExceptionAssault#createException} is reusable by client-side and other callers and honours the
+     * configured type and message.
+     */
+    @Test
+    void createExceptionIsReusableAndHonorsConfig() {
+        config.setExceptionType("java.lang.IllegalStateException");
+        config.setExceptionMessage("shared boom");
+
+        RuntimeException thrown = ExceptionAssault.createException(config);
+
+        assertInstanceOf(IllegalStateException.class, thrown);
+        assertEquals("shared boom", thrown.getMessage());
+    }
 }

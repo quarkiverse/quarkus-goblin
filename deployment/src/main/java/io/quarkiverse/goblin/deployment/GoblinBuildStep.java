@@ -3,6 +3,7 @@ package io.quarkiverse.goblin.deployment;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
 
+import io.quarkiverse.goblin.GoblinChaosClientFilter;
 import io.quarkiverse.goblin.GoblinConfig;
 import io.quarkiverse.goblin.GoblinRecorder;
 import io.quarkiverse.goblin.assault.Assault;
@@ -34,6 +35,20 @@ public class GoblinBuildStep {
             builder.addBeanClass(ci.name().toString());
         }
         additionalBeans.produce(builder.build());
+    }
+
+    /**
+     * Registers the client-side chaos filter as an unremovable bean so the REST Client extension picks it up as a
+     * global {@code ClientRequestFilter} provider and applies it to every outbound MicroProfile REST Client call.
+     *
+     * @param additionalBeans producer for additional bean registrations
+     */
+    @BuildStep
+    void registerClientFilterBean(BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
+        additionalBeans.produce(AdditionalBeanBuildItem.builder()
+                .setUnremovable()
+                .addBeanClass(GoblinChaosClientFilter.class)
+                .build());
     }
 
     @BuildStep

@@ -37,6 +37,8 @@ public class GoblinJsonRPCService {
                 .put("exceptionEnabled", cfg != null && cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg != null && cfg.isHttpStatusEnabled())
                 .put("dependencyDegradationEnabled", cfg != null && cfg.isDependencyDegradationEnabled())
+                .put("clientLatencyEnabled", cfg != null && cfg.isClientLatencyEnabled())
+                .put("clientExceptionEnabled", cfg != null && cfg.isClientExceptionEnabled())
                 .put("level", cfg != null ? cfg.getTargetLevel() : 100);
     }
 
@@ -106,6 +108,8 @@ public class GoblinJsonRPCService {
                 .put("exceptionEnabled", cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg.isHttpStatusEnabled())
                 .put("dependencyDegradationEnabled", cfg.isDependencyDegradationEnabled())
+                .put("clientLatencyEnabled", cfg.isClientLatencyEnabled())
+                .put("clientExceptionEnabled", cfg.isClientExceptionEnabled())
                 .put("latency", latency)
                 .put("exception", exception)
                 .put("httpStatus", httpStatus)
@@ -184,6 +188,34 @@ public class GoblinJsonRPCService {
         return new JsonObject()
                 .put("ok", true)
                 .put("dependencyDegradationEnabled", cfg.isDependencyDegradationEnabled());
+    }
+
+    /**
+     * Toggles the client-side latency assault, which sleeps on outgoing REST Client calls before they are dispatched.
+     *
+     * @return a JSON object with the {@code ok} flag and the new {@code clientLatencyEnabled} toggle value
+     */
+    public JsonObject toggleClientLatency() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setClientLatencyEnabled(!cfg.isClientLatencyEnabled());
+        LOG.warnf("Goblin client latency %s via Dev UI", cfg.isClientLatencyEnabled() ? "ENABLED" : "DISABLED");
+        return new JsonObject()
+                .put("ok", true)
+                .put("clientLatencyEnabled", cfg.isClientLatencyEnabled());
+    }
+
+    /**
+     * Toggles the client-side exception assault, which throws before outbound REST Client requests are dispatched.
+     *
+     * @return a JSON object with the {@code ok} flag and the new {@code clientExceptionEnabled} toggle value
+     */
+    public JsonObject toggleClientException() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setClientExceptionEnabled(!cfg.isClientExceptionEnabled());
+        LOG.warnf("Goblin client exception %s via Dev UI", cfg.isClientExceptionEnabled() ? "ENABLED" : "DISABLED");
+        return new JsonObject()
+                .put("ok", true)
+                .put("clientExceptionEnabled", cfg.isClientExceptionEnabled());
     }
 
     public JsonObject setLatencyRange(long minMs, long maxMs) {

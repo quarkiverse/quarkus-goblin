@@ -309,6 +309,8 @@ export class QwcGoblinDashboard extends LitElement {
                     exceptionEnabled: c.exceptionEnabled,
                     httpStatusEnabled: c.httpStatusEnabled,
                     dependencyDegradationEnabled: c.dependencyDegradationEnabled,
+                    clientLatencyEnabled: c.clientLatencyEnabled,
+                    clientExceptionEnabled: c.clientExceptionEnabled,
                     latency: c.latency,
                     exception: c.exception,
                     httpStatus: c.httpStatus,
@@ -449,6 +451,36 @@ export class QwcGoblinDashboard extends LitElement {
                     ${c.dependencyDegradationEnabled ? html`
                     <div class="helper">Returns HTTP 503 with a fixed "Dependency unavailable (Goblin chaos)" body.</div>` : html`
                     <div class="helper">Enable dependency degradation assault.</div>`}
+                </div>
+
+                <div class="section">
+                    <h4>Client-side assaults</h4>
+                    <div class="assault-toggle ${c.clientLatencyEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('clientLatencyEnabled', 'toggleClientLatency')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.clientLatencyEnabled}"
+                                   @change="${() => this._toggleAssault('clientLatencyEnabled', 'toggleClientLatency')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">Client Latency</div>
+                            <div class="desc">Delay outgoing REST Client calls before dispatch</div>
+                        </div>
+                    </div>
+                    <div class="helper">Uses the latency range configured above. The remote service is never modified.</div>
+                    <div class="assault-toggle ${c.clientExceptionEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('clientExceptionEnabled', 'toggleClientException')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.clientExceptionEnabled}"
+                                   @change="${() => this._toggleAssault('clientExceptionEnabled', 'toggleClientException')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">Client Exception</div>
+                            <div class="desc">Throw before outbound REST Client calls are dispatched</div>
+                        </div>
+                    </div>
+                    <div class="helper">Uses the exception class/message configured above. The remote service is never reached.</div>
                 </div>
 
                 <div class="section">

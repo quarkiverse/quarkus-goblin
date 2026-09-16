@@ -19,6 +19,8 @@ class MutableAssaultConfigTest {
         config.setExceptionEnabled(true);
         config.setHttpStatusEnabled(true);
         config.setDependencyDegradationEnabled(true);
+        config.setClientLatencyEnabled(true);
+        config.setClientExceptionEnabled(true);
         config.setLatencyMinMs(200);
         config.setLatencyMaxMs(800);
         config.setExceptionType("java.io.IOException");
@@ -27,7 +29,7 @@ class MutableAssaultConfigTest {
         config.setHttpStatusMessage("I'm a teapot");
         config.setTargetLevel(50);
 
-        assertEquals(11, callCount.get());
+        assertEquals(13, callCount.get());
     }
 
     @Test
@@ -272,6 +274,66 @@ class MutableAssaultConfigTest {
         config.setProfile(AssaultProfile.NONE);
         assertFalse(config.isLatencyEnabled());
         assertTrue(config.isExceptionEnabled());
+    }
+
+    @Test
+    void clientTogglesDefaultOff() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        assertFalse(config.isClientLatencyEnabled());
+        assertFalse(config.isClientExceptionEnabled());
+        assertFalse(config.hasAnyClientAssaultEnabled());
+    }
+
+    @Test
+    void clientTogglesAffectHasAnyClientAssaultEnabled() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setClientLatencyEnabled(true);
+        assertTrue(config.hasAnyClientAssaultEnabled());
+
+        config.setClientLatencyEnabled(false);
+        config.setClientExceptionEnabled(true);
+        assertTrue(config.hasAnyClientAssaultEnabled());
+
+        config.setClientExceptionEnabled(false);
+        assertFalse(config.hasAnyClientAssaultEnabled());
+    }
+
+    @Test
+    void clientTogglesDoNotAffectServerHasAnyAssaultEnabled() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(false);
+        config.setDependencyDegradationEnabled(false);
+        config.setClientLatencyEnabled(true);
+
+        assertFalse(config.hasAnyAssaultEnabled(), "client toggles must not count towards server assault check");
+    }
+
+    @Test
+    void describeAssaultsIncludesClientWhenEnabled() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(false);
+        config.setDependencyDegradationEnabled(false);
+
+        config.setClientLatencyEnabled(true);
+        config.setClientExceptionEnabled(true);
+        String desc = config.describeAssaults();
+        assertTrue(desc.contains("client latency"), "expected 'client latency' in: " + desc);
+        assertTrue(desc.contains("client exception"), "expected 'client exception' in: " + desc);
+    }
+
+    @Test
+    void clientTogglesIgnoredByApplyProfileDefaults() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setClientLatencyEnabled(true);
+        config.setClientExceptionEnabled(true);
+
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        assertTrue(config.isClientLatencyEnabled(), "client toggles must survive profile application");
+        assertTrue(config.isClientExceptionEnabled());
     }
 
     @Test

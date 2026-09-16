@@ -85,6 +85,54 @@ class GoblinJsonRPCServiceTest {
     }
 
     /**
+     * The config and status payloads must expose the client-side assault toggles.
+     */
+    @Test
+    void clientTogglesExposedInConfigAndStatus() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject config = service.getConfig();
+        assertTrue(config.containsKey("clientLatencyEnabled"));
+        assertTrue(config.containsKey("clientExceptionEnabled"));
+
+        JsonObject status = service.getStatus();
+        assertTrue(status.containsKey("clientLatencyEnabled"));
+        assertTrue(status.containsKey("clientExceptionEnabled"));
+    }
+
+    /**
+     * {@code toggleClientLatency} flips the client latency toggle and reports the new value.
+     */
+    @Test
+    void toggleClientLatencyFlipsValue() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.toggleClientLatency();
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("clientLatencyEnabled"));
+
+        JsonObject again = service.toggleClientLatency();
+        assertFalse(again.getBoolean("clientLatencyEnabled"));
+    }
+
+    /**
+     * {@code toggleClientException} flips the client exception toggle and reports the new value.
+     */
+    @Test
+    void toggleClientExceptionFlipsValue() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.toggleClientException();
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("clientExceptionEnabled"));
+
+        JsonObject again = service.toggleClientException();
+        assertFalse(again.getBoolean("clientExceptionEnabled"));
+    }
+
+    /**
      * Injects a {@link MutableAssaultConfig} into the engine's private field so the service can be exercised without a
      * full CDI/Quarkus runtime.
      *

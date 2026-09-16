@@ -1,16 +1,25 @@
 # Goblin Integration Tests
 
 End-to-end `@QuarkusTest` suite exercising the extension through a real JAX-RS application
-(`io.quarkiverse.goblin.it.SampleResource`) with the endpoints `/api/hello`, `/api/slow` and `/api/unstable`.
+(`io.quarkiverse.goblin.it.SampleResource`) with the endpoints `/api/hello`, `/api/slow`, `/api/unstable` and
+`/api/proxy` (a proxy that calls `SampleClient` internally, handy to exercise client-side assaults in dev mode).
 `src/main/resources/application.properties` enables Goblin with latency defaults so the engine is active at boot.
+
+The suite also exercises **client-side assaults**: `SampleClient` (`@RegisterRestClient(configKey = "sample-client")`,
+targeting `http://localhost:8081`) verifies that the globally-registered `GoblinChaosClientFilter` attacks outbound
+REST Client calls with latency and exceptions.
 
 ## Test classes
 
 | Test | Coverage |
 |---|---|
 | `GoblinIntegrationTest` | Endpoint basics, each assault type (latency, exception, HTTP status, dependency degradation), target-level percentage behavior |
+| `GoblinClientAssaultIntegrationTest` | Client-side latency and exception on outgoing REST Client calls (incl. interplay with the target level and isolation from incoming-request assaults) |
 | `GoblinJsonRPCServiceTest` | The Dev UI JSON-RPC contract (status, toggles, editors, history, Markdown report) |
 | `AbstractPackageTargetingTest` + `ExcludePackageTargetingTest`, `IncludeNonMatchingPackageTargetingTest`, `IncludeMatchingPackageTargetingTest`, `ExcludeOverridesIncludeTargetingTest` | Package-based targeting via `include-packages` / `exclude-packages` |
+
+`GoblinClientAssaultIntegrationTest` needs `quarkus-rest-client` (declared in this module's `pom.xml`) and the
+`sample-client` URL pointing at the same app that the `@QuarkusTest` boots (`http://localhost:8081`).
 
 ## The targeting-test pattern
 

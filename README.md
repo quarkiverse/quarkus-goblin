@@ -19,6 +19,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Exception injection** -- Throw configurable exceptions before method execution
 - **HTTP status forcing** -- Return specific HTTP status codes (503, 500, etc.)
 - **Dependency degradation** -- Simulate downstream service failures
+- **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`)
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
