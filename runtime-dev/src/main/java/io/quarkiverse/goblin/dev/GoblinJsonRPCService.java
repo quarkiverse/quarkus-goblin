@@ -1,5 +1,6 @@
 package io.quarkiverse.goblin.dev;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -121,7 +122,8 @@ public class GoblinJsonRPCService {
                 .put("exception", exception)
                 .put("httpStatus", httpStatus)
                 .put("body", body)
-                .put("level", cfg.getTargetLevel());
+                .put("level", cfg.getTargetLevel())
+                .put("exceptionPresets", MutableAssaultConfig.EXCEPTION_PRESETS);
     }
 
     /**
@@ -151,51 +153,55 @@ public class GoblinJsonRPCService {
     public JsonObject toggleActive() {
         engine.setActive(!engine.isActive());
         LOG.warnf("Goblin chaos %s via Dev UI", engine.isActive() ? "ACTIVATED" : "DEACTIVATED");
-        return new JsonObject()
-                .put("active", engine.isActive());
+        return activeResult(engine.getMutableConfig(), engine.isActive());
     }
 
     public JsonObject setActive(boolean active) {
         engine.setActive(active);
         LOG.warnf("Goblin chaos %s via Dev UI", active ? "ACTIVATED" : "DEACTIVATED");
-        return new JsonObject()
-                .put("active", engine.isActive());
+        return activeResult(engine.getMutableConfig(), engine.isActive());
+    }
+
+    /**
+     * Builds the full-config mutation result for an active-state change, mirroring the single-source-of-truth contract of
+     * every other mutation.
+     *
+     * @param cfg the current mutable configuration, possibly {@code null} while the engine is not yet initialised
+     * @param active the effective chaos active flag after the change
+     * @return the full configuration plus {@code ok} and {@code active} flags
+     */
+    private static JsonObject activeResult(MutableAssaultConfig cfg, boolean active) {
+        return (cfg != null ? configJson(cfg) : new JsonObject())
+                .put("ok", true)
+                .put("active", active);
     }
 
     public JsonObject toggleLatency() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setLatencyEnabled(!cfg.isLatencyEnabled());
         LOG.warnf("Goblin latency %s via Dev UI", cfg.isLatencyEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("latencyEnabled", cfg.isLatencyEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     public JsonObject toggleException() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setExceptionEnabled(!cfg.isExceptionEnabled());
         LOG.warnf("Goblin exception %s via Dev UI", cfg.isExceptionEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("exceptionEnabled", cfg.isExceptionEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     public JsonObject toggleHttpStatus() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setHttpStatusEnabled(!cfg.isHttpStatusEnabled());
         LOG.warnf("Goblin HTTP status %s via Dev UI", cfg.isHttpStatusEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("httpStatusEnabled", cfg.isHttpStatusEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     public JsonObject toggleDependencyDegradation() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setDependencyDegradationEnabled(!cfg.isDependencyDegradationEnabled());
         LOG.warnf("Goblin dependency degradation %s via Dev UI", cfg.isDependencyDegradationEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("dependencyDegradationEnabled", cfg.isDependencyDegradationEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     /**
@@ -207,9 +213,7 @@ public class GoblinJsonRPCService {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setClientLatencyEnabled(!cfg.isClientLatencyEnabled());
         LOG.warnf("Goblin client latency %s via Dev UI", cfg.isClientLatencyEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("clientLatencyEnabled", cfg.isClientLatencyEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     /**
@@ -221,9 +225,7 @@ public class GoblinJsonRPCService {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setClientExceptionEnabled(!cfg.isClientExceptionEnabled());
         LOG.warnf("Goblin client exception %s via Dev UI", cfg.isClientExceptionEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("clientExceptionEnabled", cfg.isClientExceptionEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     /**
@@ -235,9 +237,7 @@ public class GoblinJsonRPCService {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         cfg.setResponseBodyEnabled(!cfg.isResponseBodyEnabled());
         LOG.warnf("Goblin response body %s via Dev UI", cfg.isResponseBodyEnabled() ? "ENABLED" : "DISABLED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("responseBodyEnabled", cfg.isResponseBodyEnabled());
+        return configJson(cfg).put("ok", true);
     }
 
     /**
@@ -265,7 +265,7 @@ public class GoblinJsonRPCService {
         List<String> issues = cfg.setResponseBodyPercentage(percentage);
         LOG.warnf("Goblin response body changed: %s %d%% -> %s %d%%", previous, previousPercentage,
                 cfg.getResponseBodyMode(), cfg.getResponseBodyPercentage());
-        return new JsonObject()
+        return configJson(cfg)
                 .put("ok", true)
                 .put("mode", cfg.getResponseBodyMode().name())
                 .put("percentage", cfg.getResponseBodyPercentage())
@@ -299,7 +299,7 @@ public class GoblinJsonRPCService {
         List<String> issues = cfg.setLatencyRange(minMs, maxMs);
         LOG.warnf("Goblin latency changed: %d-%d ms -> %d-%d ms", prevMin, prevMax,
                 cfg.getLatencyMinMs(), cfg.getLatencyMaxMs());
-        return new JsonObject()
+        return configJson(cfg)
                 .put("ok", true)
                 .put("minMilliseconds", cfg.getLatencyMinMs())
                 .put("maxMilliseconds", cfg.getLatencyMaxMs())
@@ -310,9 +310,11 @@ public class GoblinJsonRPCService {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         String prevType = cfg.getExceptionType();
         List<String> issues = cfg.setExceptionType(type);
+        if (!prevType.equals(cfg.getExceptionType())) {
+            LOG.warnf("Goblin exception changed: %s -> %s", prevType, cfg.getExceptionType());
+        }
         cfg.setExceptionMessage(message);
-        LOG.warnf("Goblin exception changed: %s -> %s", prevType, cfg.getExceptionType());
-        return new JsonObject()
+        return configJson(cfg)
                 .put("ok", true)
                 .put("type", cfg.getExceptionType())
                 .put("message", cfg.getExceptionMessage())
@@ -325,7 +327,7 @@ public class GoblinJsonRPCService {
         List<String> issues = cfg.setHttpStatusCode(code);
         cfg.setHttpStatusMessage(message);
         LOG.warnf("Goblin HTTP status changed: %d -> %d", prevCode, cfg.getHttpStatusCode());
-        return new JsonObject()
+        return configJson(cfg)
                 .put("ok", true)
                 .put("code", cfg.getHttpStatusCode())
                 .put("message", cfg.getHttpStatusMessage())
@@ -337,7 +339,7 @@ public class GoblinJsonRPCService {
         int previous = cfg.getTargetLevel();
         List<String> issues = cfg.setTargetLevel(level);
         LOG.warnf("Goblin target level changed: %d%% -> %d%%", previous, cfg.getTargetLevel());
-        return new JsonObject()
+        return configJson(cfg)
                 .put("ok", true)
                 .put("level", cfg.getTargetLevel())
                 .put("warning", toWarning(issues));
@@ -358,6 +360,155 @@ public class GoblinJsonRPCService {
                     .put("config", record.configSnapshot()));
         }
         return history;
+    }
+
+    /**
+     * Disables chaos immediately: stops the engine and switches every assault toggle off via the Dev UI kill switch.
+     *
+     * @return a JSON object with the {@code ok} flag, {@code active=false}, and the full configuration
+     */
+    public JsonObject disableAll() {
+        engine.setActive(false);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg != null) {
+            cfg.setLatencyEnabled(false);
+            cfg.setExceptionEnabled(false);
+            cfg.setHttpStatusEnabled(false);
+            cfg.setDependencyDegradationEnabled(false);
+            cfg.setClientLatencyEnabled(false);
+            cfg.setClientExceptionEnabled(false);
+            cfg.setResponseBodyEnabled(false);
+            cfg.setProfile(AssaultProfile.NONE);
+        }
+        LOG.warnf("Goblin: all assaults disabled via Dev UI kill switch");
+        JsonObject result = cfg != null ? configJson(cfg) : new JsonObject();
+        return result.put("ok", true).put("active", false);
+    }
+
+    /**
+     * Restores every assault parameter to its application.properties default, keeping the engine's active flag unchanged.
+     *
+     * @return a JSON object with the {@code ok} flag, any clamping {@code warning}, and the full reset configuration
+     */
+    public JsonObject resetDefaults() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null) {
+            return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
+        }
+        List<String> issues = cfg.resetToDefaults();
+        LOG.warnf("Goblin: configuration reset to defaults via Dev UI");
+        return configJson(cfg).put("ok", true).put("warning", toWarning(issues));
+    }
+
+    /**
+     * Applies a (possibly partial) configuration object, used by the Dev UI import and saved custom profiles.
+     * <p>
+     * Every field present in {@code config} is applied; missing fields keep their current value. The profile, when
+     * present, is applied first so its defaults can then be explicitly overridden by the remaining fields.
+     *
+     * @param config the configuration fields to apply, never {@code null}
+     * @return a JSON object with the {@code ok} flag, any clamping {@code warning}, and the full effective configuration
+     */
+    public JsonObject applyConfig(JsonObject config) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null) {
+            return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
+        }
+        List<String> issues = applyConfigTo(cfg, config);
+        LOG.warnf("Goblin: configuration applied via Dev UI");
+        return configJson(cfg).put("ok", true).put("warning", toWarning(issues));
+    }
+
+    private static List<String> applyConfigTo(MutableAssaultConfig cfg, JsonObject config) {
+        List<String> issues = new ArrayList<>();
+        String profile = config.getString("profile");
+        if (profile != null) {
+            cfg.setProfile(parseProfile(profile));
+        }
+        if (config.containsKey("latencyEnabled")) {
+            cfg.setLatencyEnabled(config.getBoolean("latencyEnabled"));
+        }
+        if (config.containsKey("exceptionEnabled")) {
+            cfg.setExceptionEnabled(config.getBoolean("exceptionEnabled"));
+        }
+        if (config.containsKey("httpStatusEnabled")) {
+            cfg.setHttpStatusEnabled(config.getBoolean("httpStatusEnabled"));
+        }
+        if (config.containsKey("dependencyDegradationEnabled")) {
+            cfg.setDependencyDegradationEnabled(config.getBoolean("dependencyDegradationEnabled"));
+        }
+        if (config.containsKey("clientLatencyEnabled")) {
+            cfg.setClientLatencyEnabled(config.getBoolean("clientLatencyEnabled"));
+        }
+        if (config.containsKey("clientExceptionEnabled")) {
+            cfg.setClientExceptionEnabled(config.getBoolean("clientExceptionEnabled"));
+        }
+        if (config.containsKey("responseBodyEnabled")) {
+            cfg.setResponseBodyEnabled(config.getBoolean("responseBodyEnabled"));
+        }
+        JsonObject latency = config.getJsonObject("latency");
+        if (latency != null && latency.containsKey("minMilliseconds") && latency.containsKey("maxMilliseconds")) {
+            issues.addAll(cfg.setLatencyRange(latency.getLong("minMilliseconds"), latency.getLong("maxMilliseconds")));
+        }
+        JsonObject exception = config.getJsonObject("exception");
+        if (exception != null) {
+            if (exception.containsKey("type")) {
+                issues.addAll(cfg.setExceptionType(exception.getString("type")));
+            }
+            if (exception.containsKey("message")) {
+                cfg.setExceptionMessage(exception.getString("message"));
+            }
+        }
+        JsonObject httpStatus = config.getJsonObject("httpStatus");
+        if (httpStatus != null) {
+            if (httpStatus.containsKey("code")) {
+                issues.addAll(cfg.setHttpStatusCode(httpStatus.getInteger("code")));
+            }
+            if (httpStatus.containsKey("message")) {
+                cfg.setHttpStatusMessage(httpStatus.getString("message"));
+            }
+        }
+        JsonObject body = config.getJsonObject("body");
+        if (body != null) {
+            if (body.containsKey("mode")) {
+                ResponseBodyMode mode = parseBodyMode(body.getString("mode"));
+                if (mode != null) {
+                    cfg.setResponseBodyMode(mode);
+                }
+            }
+            if (body.containsKey("percentage")) {
+                issues.addAll(cfg.setResponseBodyPercentage(body.getInteger("percentage")));
+            }
+        }
+        if (config.containsKey("level")) {
+            issues.addAll(cfg.setTargetLevel(config.getInteger("level")));
+        }
+        return issues;
+    }
+
+    /**
+     * Returns the live assault counters since the engine started or counters were last reset.
+     *
+     * @return a JSON object with the {@code total} count, the {@code since} epoch timestamp, and the {@code byType} map
+     */
+    public JsonObject getCounters() {
+        JsonObject byType = new JsonObject();
+        engine.getAssaultCounts().forEach(byType::put);
+        return new JsonObject()
+                .put("total", engine.getTotalAssaultCount())
+                .put("since", engine.getCountersSinceEpoch())
+                .put("byType", byType);
+    }
+
+    /**
+     * Resets all assault counters to zero via the Dev UI.
+     *
+     * @return a JSON object with the {@code ok} flag
+     */
+    public JsonObject resetCounters() {
+        engine.resetCounters();
+        LOG.info("Goblin assault counters reset via Dev UI");
+        return new JsonObject().put("ok", true);
     }
 
     public JsonObject clearHistory() {

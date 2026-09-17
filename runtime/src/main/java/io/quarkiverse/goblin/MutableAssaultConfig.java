@@ -12,6 +12,20 @@ public class MutableAssaultConfig {
     private static final Logger LOG = Logger.getLogger(MutableAssaultConfig.class);
     private static final Map<String, String> EXCEPTION_CLASS_ERRORS = new ConcurrentHashMap<>();
 
+    /**
+     * Exception classes offered as quick picks in the Dev UI. Every entry must satisfy the same rules enforced by
+     * {@link #checkExceptionClass(String)}: it must be loadable, extend {@link RuntimeException} (the filter layer can only
+     * throw unchecked exceptions), and expose a single-{@code String} constructor. This guarantees that picking one never
+     * triggers the engine's fallback to {@code RuntimeException}.
+     */
+    public static final List<String> EXCEPTION_PRESETS = List.of(
+            "java.lang.RuntimeException",
+            "java.lang.IllegalStateException",
+            "java.lang.IllegalArgumentException",
+            "java.lang.UnsupportedOperationException",
+            "jakarta.ws.rs.WebApplicationException",
+            "jakarta.ws.rs.InternalServerErrorException");
+
     private Runnable onChange;
 
     private final Object profileLock = new Object();
@@ -122,7 +136,12 @@ public class MutableAssaultConfig {
 
     private static String checkExceptionClass(String className) {
         try {
-            Class.forName(className).getConstructor(String.class);
+            Class<?> clazz = Class.forName(className);
+            clazz.getConstructor(String.class);
+            if (!RuntimeException.class.isAssignableFrom(clazz)) {
+                return "Configured exception class '" + className
+                        + "' does not extend RuntimeException. The engine will fall back to RuntimeException.";
+            }
             return null;
         } catch (ClassNotFoundException e) {
             return "Configured exception class '" + className
@@ -473,5 +492,37 @@ public class MutableAssaultConfig {
         if (onChange != null) {
             onChange.run();
         }
+    }
+
+    /**
+     * Restores every field to its application.properties default (profile {@code NONE}, latency 100-5000 ms, 503, truncate
+     * 50 %, level 100 %, all client-side assaults off). Persists the restored defaults when a change listener is installed.
+     *
+     * @return a list of human-readable warnings for any values that were clamped during validation, empty when the defaults
+     *         were clean
+     */
+    public List<String> resetToDefaults() {
+        synchronized (profileLock) {
+            profile = AssaultProfile.NONE;
+            latencyEnabled = true;
+            exceptionEnabled = false;
+            httpStatusEnabled = false;
+            dependencyDegradationEnabled = false;
+            clientLatencyEnabled = false;
+            clientExceptionEnabled = false;
+            responseBodyEnabled = false;
+            latencyMinMs = 100;
+            latencyMaxMs = 5000;
+            exceptionType = "java.lang.RuntimeException";
+            exceptionMessage = "Goblin chaos: simulated exception";
+            httpStatusCode = 503;
+            httpStatusMessage = "Service Unavailable (Goblin chaos)";
+            responseBodyMode = ResponseBodyMode.TRUNCATE;
+            responseBodyPercentage = 50;
+            targetLevel = 100;
+        }
+        List<String> issues = validateAndFix();
+        notifyChange();
+        return issues;
     }
 }
