@@ -124,6 +124,30 @@ class AssaultEngineTest {
     }
 
     @Test
+    void countersTrackTotalAndPerType() {
+        AssaultEngine engine = new AssaultEngine();
+        engine.recordAssault("a", "latency");
+        engine.recordAssault("b", "exception");
+        engine.recordAssault("c", "latency");
+
+        assertEquals(3, engine.getTotalAssaultCount());
+        assertEquals(2L, engine.getAssaultCounts().get("latency"));
+        assertEquals(1L, engine.getAssaultCounts().get("exception"));
+        assertTrue(engine.getCountersSinceEpoch() <= System.currentTimeMillis());
+    }
+
+    @Test
+    void resetCountersClearsTotalsAndPerType() {
+        AssaultEngine engine = new AssaultEngine();
+        engine.recordAssault("a", "latency");
+
+        engine.resetCounters();
+
+        assertEquals(0, engine.getTotalAssaultCount());
+        assertTrue(engine.getAssaultCounts().isEmpty());
+    }
+
+    @Test
     void shouldAssaultClientRequiresActiveEngineAndClientToggle() {
         AssaultEngine engine = new AssaultEngine();
         assertFalse(engine.shouldAssaultClient());

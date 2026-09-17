@@ -1,8 +1,11 @@
 package io.quarkiverse.goblin;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -22,6 +25,9 @@ public class AssaultEngine {
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
     private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
+    private final AtomicLong totalAssaultCount = new AtomicLong();
+    private final ConcurrentHashMap<String, AtomicLong> assaultCounts = new ConcurrentHashMap<>();
+    private volatile long countersSinceEpoch = System.currentTimeMillis();
 
     public static void setStaticConfig(GoblinConfig config) {
         staticConfig = config;
@@ -143,6 +149,46 @@ public class AssaultEngine {
         while (history.size() > MAX_HISTORY) {
             history.pollFirst();
         }
+        totalAssaultCount.incrementAndGet();
+        assaultCounts.computeIfAbsent(type, k -> new AtomicLong()).incrementAndGet();
+    }
+
+    /**
+     * Returns the total number of assaults recorded since the engine started or counters were last reset.
+     *
+     * @return the cumulative assault count
+     */
+    public long getTotalAssaultCount() {
+        return totalAssaultCount.get();
+    }
+
+    /**
+     * Returns the per-type assault counts, keyed by assault type (e.g. {@code "latency"}, {@code "response-body-truncate"}).
+     *
+     * @return an unmodifiable snapshot of the per-type counts
+     */
+    public Map<String, Long> getAssaultCounts() {
+        var result = new java.util.HashMap<String, Long>();
+        assaultCounts.forEach((k, v) -> result.put(k, v.get()));
+        return java.util.Map.copyOf(result);
+    }
+
+    /**
+     * Returns the epoch timestamp (ms) when counters were last reset, or when the engine started.
+     *
+     * @return the counters start time in epoch milliseconds
+     */
+    public long getCountersSinceEpoch() {
+        return countersSinceEpoch;
+    }
+
+    /**
+     * Resets all assault counters to zero and restarts the counters clock.
+     */
+    public void resetCounters() {
+        totalAssaultCount.set(0);
+        assaultCounts.clear();
+        countersSinceEpoch = System.currentTimeMillis();
     }
 
     public record AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot) {

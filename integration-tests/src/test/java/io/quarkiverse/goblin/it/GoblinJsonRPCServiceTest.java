@@ -225,6 +225,8 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(config.containsKey("httpStatus"));
         assertTrue(config.containsKey("body"));
         assertTrue(config.containsKey("level"));
+        assertTrue(config.containsKey("exceptionPresets"), "the full config must expose the server-side exception presets");
+        assertFalse(config.getJsonArray("exceptionPresets").isEmpty());
 
         JsonObject latency = config.getJsonObject("latency");
         assertNotNull(latency);
@@ -321,6 +323,53 @@ public class GoblinJsonRPCServiceTest {
         JsonObject result = jsonRpc.clearHistory();
         assertTrue(result.getBoolean("cleared"));
         assertTrue(engine.getHistory().isEmpty());
+    }
+
+    // ==================== kill switch, reset, import/export, counters ====================
+
+    @Test
+    public void testDisableAllDeactivatesAndTurnsEverythingOff() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLatencyEnabled(true);
+        cfg.setHttpStatusEnabled(true);
+        engine.setActive(true);
+
+        JsonObject result = jsonRpc.disableAll();
+
+        assertTrue(result.getBoolean("ok"));
+        assertFalse(result.getBoolean("active"));
+        assertFalse(engine.isActive());
+        assertFalse(result.getBoolean("latencyEnabled"));
+        assertFalse(result.getBoolean("httpStatusEnabled"));
+        assertEquals("NONE", result.getString("profile"));
+    }
+
+    @Test
+    public void testApplyConfigAppliesProvidedFieldsOnly() {
+        JsonObject result = jsonRpc.applyConfig(new JsonObject()
+                .put("profile", "SLOW_FAILURE")
+                .put("level", 30));
+
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("SLOW_FAILURE", result.getString("profile"));
+        assertEquals(30, result.getInteger("level"));
+        assertTrue(result.getBoolean("exceptionEnabled"), "SLOW_FAILURE enables exception");
+    }
+
+    @Test
+    public void testGetCountersAndReset() {
+        engine.resetCounters();
+        engine.recordAssault("SampleResource.hello", "latency", 12);
+        engine.recordAssault("SampleResource.hello", "response-body-truncate");
+
+        JsonObject counters = jsonRpc.getCounters();
+        assertEquals(2, counters.getInteger("total"));
+        assertEquals(1L, counters.getJsonObject("byType").getLong("latency"));
+        assertTrue(counters.containsKey("since"));
+
+        JsonObject reset = jsonRpc.resetCounters();
+        assertTrue(reset.getBoolean("ok"));
+        assertEquals(0, jsonRpc.getCounters().getInteger("total"));
     }
 
     // ==================== markdown report ====================

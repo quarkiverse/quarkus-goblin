@@ -103,9 +103,11 @@ quarkus.goblin.assault.exception.type=java.io.IOException
 quarkus.goblin.assault.exception.message=Connection refused to downstream service
 ----
 
-The exception must have a constructor that accepts a single `String` parameter (the message). `RuntimeException` is used as a fallback if the specified class cannot be instantiated.
+The exception must extend `RuntimeException` and have a constructor that accepts a single `String` parameter (the message). `RuntimeException` is used as a fallback if the specified class cannot be instantiated.
 
-If the class cannot be found or lacks a `String` constructor, an `ERROR` is logged at startup (and when saving in the Dev UI), and the engine falls back to `RuntimeException`.
+If the class cannot be found, does not extend `RuntimeException`, or lacks a `String` constructor, an `ERROR` is logged at startup (and when saving in the Dev UI), and the engine falls back to `RuntimeException`.
+
+The Dev UI quick-picks are served by the engine (`exceptionPresets` in the config) and only offer classes validated against those constraints (e.g. `RuntimeException`, `IllegalStateException`, `WebApplicationException`, `InternalServerErrorException`) -- a preset can never trigger the runtime fallback, so each proposed choice is guaranteed to be throwable. Checked exceptions such as `java.io.IOException` or `java.util.concurrent.TimeoutException` are rejected because the filter layer can only throw unchecked exceptions.
 
 === HTTP_STATUS
 
@@ -357,18 +359,27 @@ The Goblin card in the Dev UI extension grid.
 
 === Chaos Dashboard
 
-The dashboard is the main control surface. It exposes the master toggle, per-type toggles, per-type configuration forms, and the target level.
+The dashboard is the main control surface. It exposes the master toggle, per-type toggles, per-type configuration forms, the target level, blast radius controls, quick-pick presets, and live assault counters.
 
 image::dev-ui-dashboard.png[Goblin Chaos Dashboard,width=720,align=center]
 [.text-center]
 The Chaos Dashboard with latency enabled at 100% target level.
 
 * **Master toggle** -- Activate/deactivate all chaos with a single click. When inactive, the status dot turns red and the `Deactivate` button becomes `Activate`.
+* **Kill switch** -- Turn every assault off at once: deactivates the engine, disables each assault type and client-side assault, and resets the profile to `NONE`.
+* **Auto-off** -- Optionally arm the dashboard to automatically deactivate chaos after a countdown (between 15 and 600 seconds). The remaining time ticks down and a banner appears, and chaos is turned off when the deadline arrives.
+* **Blast radius** -- Set a chaos blast radius (0-100%) next to the master toggle: it maps to the target level with its own inline save input.
+* **Live counters** -- A status-bar widget shows the total number of assaults recorded for the session, how many attackers are live, and the per-type breakdown, refreshed every 2 seconds together with the config.
 * **Profile selector** -- Pick a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) with one click. The active profile is also shown in the status bar. Individual toggles stay overridable on top of the profile.
-* **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation, Response Body). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color.
+* **Custom profiles** -- Save the current configuration under a custom name, and re-apply it later from the profile selector. Custom profiles are stored in the browser and marked with a badge when one is active (a manual override).
+* **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation, Response Body). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color, and each row shows its priority.
+* **Priority ordering** -- Assault types are grouped by execution priority: the server-side assaults and client-side assaults that preempt normal request processing form the *preemptive* group; the terminal response damaging transformations (truncate/inflate body, HTTP status substitution) form the *final* group.
 * **Client-side assault toggles** -- A dedicated section controls `client latency` and `client exception`, applied to outgoing MicroProfile REST Client calls. They default to off and reuse the latency range and exception class/message configured above.
-* **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message, response body mode/percentage). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button.
+* **Quick picks** -- One-click presets pinned to the top of each assault type section (e.g. latency `100-500` ms, HTTP status `503`, response body `TRUNCATE 50%`, and several verified exception classes), applied immediately with a single action. The exception quick picks are served by the engine and are guaranteed to be throwable -- no fallback.
+* **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message, response body mode/percentage). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button; the button is only enabled when the form is dirty and valid.
+* **Inline validation** -- Entering an out-of-range value disables the `Save` button and shows a warning -- nothing invalid is ever persisted. Validation rules match the startup rules (see <<Configuration validation>>).
 * **Target level** -- Adjust the percentage of affected requests (0-100%) on the fly, saved with its own button.
+* **Danger zone** -- Export the current configuration as a JSON file, import a previously exported one (or any partial config), or reset the whole configuration to its defaults.
 * **All changes apply instantly** -- no restart needed. A WARN log is emitted in the console for every change, and a toast confirms each action in the UI. If a change violates a validation rule (see <<Configuration validation>>), the toast shows the applied correction, e.g. a swapped latency range.
 
 NOTE: When chaos is deactivated, the configuration sections remain visible but are dimmed and their inputs disabled -- you can prepare your assault configuration before turning chaos on.
@@ -562,10 +573,10 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` toggle, and the target `level`.
 
 | `getConfig`
-| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, level).
+| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
 
 | `toggleActive` / `setActive(boolean)`
-| Enable/disable chaos entirely. Emits a WARN log.
+| Enable/disable chaos entirely. Emits a WARN log. Returns `{ ok, active }`.
 
 | `setProfile(profile)`
 | Activate a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`). Applies the profile defaults to the assault toggles; each toggle stays overridable afterwards.
@@ -583,13 +594,28 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Set the min/max latency range.
 
 | `setExceptionConfig(type, message)`
-| Set the exception class name and message.
+| Set the exception class name and message. The class must extend `RuntimeException` and have a single-`String` constructor; a non-RuntimeException or unknown class is kept in the config but flagged in `warning` (the engine falls back to `RuntimeException`).
 
 | `setHttpStatusConfig(code, message)`
 | Set the HTTP status code and response body.
 
 | `setTargetLevel(level)`
 | Set the percentage of affected requests (clamped to 0-100).
+
+| `disableAll()`
+| Kill switch: deactivates the engine, disables every assault type and client-side assault, and resets the profile to `NONE`. Returns `{ ok, active: false }` plus the full config.
+
+| `resetDefaults()`
+| Restore every toggle and parameter to its default value (profile `NONE`, latency `100-5000` ms, HTTP status `503`, body `TRUNCATE 50%`, level `100`). Returns `{ ok }` plus the full config.
+
+| `applyConfig(config)`
+| Apply a (partial) config object: `profile` is applied first, then any provided field overrides -- omitted fields keep their current value. Returns `{ ok, warning }` plus the full config. Used by the dashboard's import and custom-profile features.
+
+| `getCounters`
+| Return `{ total, since, byType }` with the session assault counters: the total number of assaults since the engine started (or the counters were last reset), the epoch timestamp of that window start (`since`), and a per-type breakdown (`byType`).
+
+| `resetCounters()`
+| Reset the assault counters to zero. Returns `{ ok }`.
 
 | `getHistory`
 | Return the assault history buffer. Each entry exposes the method, type, timestamp, the applied latency duration (`latencyMs`, 0 for non-latency assaults), and the active assault config snapshot at the time of the assault (`config`).
@@ -600,6 +626,8 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | `getMarkdownReport`
 | Return `{ markdown, generatedAt }` with a factual Markdown report of the current configuration and assault history.
 |===
+
+NOTE: Every mutating method returns the full configuration as `JsonObject` (the same shape as `getConfig`), so the Dev UI treats the response as a single source of truth. The legacy top-level keys (`mode`, `percentage`, `minMilliseconds`, `maxMilliseconds`, `type`, `message`, `code`, `level`) remain present for backward compatibility.
 
 == FAQ
 

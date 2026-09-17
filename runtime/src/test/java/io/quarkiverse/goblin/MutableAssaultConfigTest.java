@@ -176,6 +176,26 @@ class MutableAssaultConfigTest {
     }
 
     @Test
+    void validateAndFixFlagsExceptionClassThatDoesNotExtendRuntimeException() {
+        MutableAssaultConfig config = MutableAssaultConfig
+                .fromConfig(configWith(100, 5000, 503, "java.util.concurrent.TimeoutException", 100));
+        assertDoesNotThrow(config::validateAndFix);
+        assertTrue(config.validateAndFix().stream().anyMatch(message -> message.contains("does not extend RuntimeException")));
+    }
+
+    @Test
+    void exceptionPresetsAreAllThrowableWithoutFallback() {
+        assertFalse(MutableAssaultConfig.EXCEPTION_PRESETS.isEmpty());
+        for (String preset : MutableAssaultConfig.EXCEPTION_PRESETS) {
+            MutableAssaultConfig config = new MutableAssaultConfig();
+            assertDoesNotThrow(() -> config.setExceptionType(preset), "preset must not throw: " + preset);
+            assertTrue(config.validateAndFix().stream().noneMatch(
+                    message -> message.contains("fall back to RuntimeException")),
+                    "preset must not trigger the RuntimeException fallback: " + preset);
+        }
+    }
+
+    @Test
     void setLatencyRangeSwapsInvertedPair() {
         MutableAssaultConfig config = new MutableAssaultConfig();
         config.setLatencyRange(10000, 500);
