@@ -138,8 +138,8 @@ quarkus.goblin.assault.body.percentage=50
 
 Two transformation modes are available:
 
-* **`TRUNCATE`** -- keeps only the first `percentage`% of the body. For example, truncating a JSON payload to `50`% yields a prefix that is no longer valid JSON, so a strict JSON client fails to parse it.
-* **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). The declared Content-Length no longer matches the bytes actually delivered, exercising length-validating proxies and parsers.
+* **`TRUNCATE`** -- keeps only the first `percentage`% of the body. For example, truncating a JSON payload to `50`% yields a prefix that is no longer valid JSON, so a strict JSON client fails to parse it. The `Content-Length` header is updated to the truncated size, so the response stays well-framed and the corruption is purely at the payload level.
+* **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). The `Content-Length` header keeps advertising the original, smaller length while more bytes are emitted, exercising length-validating proxies and parsers. The transformed bytes are written verbatim: truncation never re-encodes a split multibyte character, so the delivered size always matches the configured percentage.
 
 The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log both at startup and when saving in the Dev UI (e.g. `INFLATE` with `50` becomes `101`).
 

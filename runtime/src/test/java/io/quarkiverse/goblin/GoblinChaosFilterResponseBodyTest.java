@@ -10,6 +10,8 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,28 +49,49 @@ class GoblinChaosFilterResponseBodyTest {
         FakeResponse response = new FakeResponse("hello from Goblin test app", MediaType.TEXT_PLAIN_TYPE);
         filter.filter(requestContext(), response.proxy());
 
-        String result = (String) response.entity();
-        assertEquals(13, result.length());
-        assertTrue(result.startsWith("hello from"), "truncated body must be a prefix of the original: " + result);
+        byte[] result = (byte[]) response.entity();
+        assertEquals(13, result.length);
+        assertArrayEquals("hello from Go".getBytes(java.nio.charset.StandardCharsets.UTF_8), result);
+        assertEquals("13", response.header("Content-Length"),
+                "TRUNCATE keeps the response well-framed: the declared length matches the truncated payload");
         assertEquals(1, engine.getHistory().size());
         assertEquals("response-body-truncate", engine.getHistory().get(0).type());
         assertEquals(TestResource.class.getSimpleName() + ".hello", engine.getHistory().get(0).method());
     }
 
     @Test
-    void inflatePadsEntityAndRecords() throws Exception {
+    void inflatePadsEntityAndAdvertisesTheOriginalLength() throws Exception {
         config.setResponseBodyEnabled(true);
         config.setResponseBodyMode(ResponseBodyMode.INFLATE);
         config.setResponseBodyPercentage(200);
 
-        FakeResponse response = new FakeResponse("hello from Goblin test app", MediaType.TEXT_PLAIN_TYPE);
+        FakeResponse response = new FakeResponse("hello from Goblin test app", MediaType.TEXT_PLAIN_TYPE)
+                .withContentLength(26);
         filter.filter(requestContext(), response.proxy());
 
-        String result = (String) response.entity();
-        assertEquals(26 * 2, result.length());
-        assertTrue(result.startsWith("hello from Goblin test app"));
+        byte[] result = (byte[]) response.entity();
+        assertEquals(26 * 2, result.length);
+        assertArrayEquals("hello from Goblin test app".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                java.util.Arrays.copyOf(result, 26));
+        assertEquals("26", response.header("Content-Length"),
+                "INFLATE advertises the original, smaller length so the header and the emitted payload diverge");
         assertEquals(1, engine.getHistory().size());
         assertEquals("response-body-inflate", engine.getHistory().get(0).type());
+    }
+
+    @Test
+    void truncateKeepsExactBytesWhenCutSplitsAMultibyteCharacter() throws Exception {
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyMode(ResponseBodyMode.TRUNCATE);
+        config.setResponseBodyPercentage(50);
+
+        FakeResponse response = new FakeResponse("aé", MediaType.TEXT_PLAIN_TYPE);
+        filter.filter(requestContext(), response.proxy());
+
+        byte[] result = (byte[]) response.entity();
+        assertArrayEquals(new byte[] { 0x61, (byte) 0xC3 }, result,
+                "the payload must be the exact byte prefix, not a UTF-8 round-trip with replacement characters");
+        assertEquals("2", response.header("Content-Length"));
     }
 
     @Test
@@ -205,14 +228,25 @@ class GoblinChaosFilterResponseBodyTest {
 
         private Object entity;
         private final MediaType mediaType;
+        private final MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
 
         FakeResponse(Object entity, MediaType mediaType) {
             this.entity = entity;
             this.mediaType = mediaType;
         }
 
+        FakeResponse withContentLength(int length) {
+            headers.putSingle("Content-Length", Integer.toString(length));
+            return this;
+        }
+
         Object entity() {
             return entity;
+        }
+
+        String header(String name) {
+            Object value = headers.getFirst(name);
+            return value != null ? value.toString() : null;
         }
 
         ContainerResponseContext proxy() {
@@ -226,6 +260,13 @@ class GoblinChaosFilterResponseBodyTest {
                 }
                 if (m.getName().equals("getMediaType")) {
                     return mediaType;
+                }
+                if (m.getName().equals("getHeaders")) {
+                    return headers;
+                }
+                if (m.getName().equals("getHeaderString")) {
+                    Object value = headers.getFirst((String) args[0]);
+                    return value != null ? value.toString() : null;
                 }
                 if (m.getName().equals("toString")) {
                     return "fake ContainerResponseContext";
