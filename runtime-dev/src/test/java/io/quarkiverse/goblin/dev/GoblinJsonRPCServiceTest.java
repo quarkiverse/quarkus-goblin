@@ -266,6 +266,38 @@ class GoblinJsonRPCServiceTest {
     }
 
     /**
+     * {@code toggleActive} flips the engine state and returns the full configuration plus the effective {@code active}
+     * flag, mirroring the single-source-of-truth contract of every mutation.
+     */
+    @Test
+    void toggleActiveReturnsFullConfigAndEffectiveActiveFlag() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.toggleActive();
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("active"));
+        assertTrue(engine.isActive());
+        assertTrue(result.containsKey("profile"));
+        assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
+    }
+
+    /**
+     * {@code setActive} returns the full configuration with the requested {@code active} flag.
+     */
+    @Test
+    void setActiveReturnsFullConfigAndActiveFlag() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setActive(false);
+
+        assertTrue(result.getBoolean("ok"));
+        assertFalse(result.getBoolean("active"));
+        assertFalse(engine.isActive());
+        assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
+    }
+
+    /**
      * The kill switch deactivates the engine, disables every assault and resets the profile.
      */
     @Test

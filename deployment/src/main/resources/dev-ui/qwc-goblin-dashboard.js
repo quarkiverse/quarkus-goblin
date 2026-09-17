@@ -434,7 +434,7 @@ export class QwcGoblinDashboard extends LitElement {
     _toggleActive() {
         this.jsonRpc.toggleActive().then(r => {
             if (r.result.ok) {
-                this._status = {...this._status, active: r.result.active};
+                this._applyConfigResult(r.result);
             }
         });
     }
@@ -523,7 +523,7 @@ export class QwcGoblinDashboard extends LitElement {
             if (this._status && this._status.active) {
                 this.jsonRpc.setActive(false).then(r => {
                     if (r.result && r.result.ok) {
-                        this._status = {...this._status, active: false};
+                        this._applyConfigResult(r.result);
                         this._showToast('Chaos auto-disabled', 'info');
                     }
                 });
@@ -699,7 +699,7 @@ export class QwcGoblinDashboard extends LitElement {
             if (!saved) {
                 return;
             }
-            this.jsonRpc.applyConfig({config: saved.config}).then(r => {
+            this.jsonRpc.applyConfig(saved.config).then(r => {
                 if (r.result && r.result.ok) {
                     this._activeCustom = name;
                     this._applyConfigResult(r.result);
@@ -800,7 +800,7 @@ export class QwcGoblinDashboard extends LitElement {
         reader.onload = () => {
             try {
                 const config = JSON.parse(reader.result);
-                this.jsonRpc.applyConfig({config}).then(r => {
+                this.jsonRpc.applyConfig(config).then(r => {
                     if (r.result && r.result.ok) {
                         this._applyConfigResult(r.result);
                         this._showToast(r.result.warning || 'Configuration imported', r.result.warning ? 'warning' : '');

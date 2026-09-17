@@ -66,6 +66,8 @@ public class GoblinJsonRPCServiceTest {
         JsonObject result = jsonRpc.toggleActive();
         assertTrue(result.getBoolean("active"));
         assertTrue(engine.isActive());
+        assertTrue(result.containsKey("profile"), "toggleActive must return the full config");
+        assertTrue(result.containsKey("exceptionPresets"), "toggleActive must return the full config");
 
         result = jsonRpc.toggleActive();
         assertFalse(result.getBoolean("active"));
@@ -76,6 +78,7 @@ public class GoblinJsonRPCServiceTest {
     public void testSetActive() {
         JsonObject result = jsonRpc.setActive(true);
         assertTrue(result.getBoolean("active"));
+        assertTrue(result.containsKey("profile"), "setActive must return the full config");
 
         result = jsonRpc.setActive(false);
         assertFalse(result.getBoolean("active"));

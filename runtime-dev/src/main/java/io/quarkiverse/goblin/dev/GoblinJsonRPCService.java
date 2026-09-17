@@ -153,17 +153,27 @@ public class GoblinJsonRPCService {
     public JsonObject toggleActive() {
         engine.setActive(!engine.isActive());
         LOG.warnf("Goblin chaos %s via Dev UI", engine.isActive() ? "ACTIVATED" : "DEACTIVATED");
-        return new JsonObject()
-                .put("ok", true)
-                .put("active", engine.isActive());
+        return activeResult(engine.getMutableConfig(), engine.isActive());
     }
 
     public JsonObject setActive(boolean active) {
         engine.setActive(active);
         LOG.warnf("Goblin chaos %s via Dev UI", active ? "ACTIVATED" : "DEACTIVATED");
-        return new JsonObject()
+        return activeResult(engine.getMutableConfig(), engine.isActive());
+    }
+
+    /**
+     * Builds the full-config mutation result for an active-state change, mirroring the single-source-of-truth contract of
+     * every other mutation.
+     *
+     * @param cfg the current mutable configuration, possibly {@code null} while the engine is not yet initialised
+     * @param active the effective chaos active flag after the change
+     * @return the full configuration plus {@code ok} and {@code active} flags
+     */
+    private static JsonObject activeResult(MutableAssaultConfig cfg, boolean active) {
+        return (cfg != null ? configJson(cfg) : new JsonObject())
                 .put("ok", true)
-                .put("active", engine.isActive());
+                .put("active", active);
     }
 
     public JsonObject toggleLatency() {
