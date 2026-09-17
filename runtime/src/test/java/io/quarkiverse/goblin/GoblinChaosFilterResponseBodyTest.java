@@ -85,7 +85,7 @@ class GoblinChaosFilterResponseBodyTest {
         config.setResponseBodyMode(ResponseBodyMode.TRUNCATE);
         config.setResponseBodyPercentage(50);
 
-        FakeResponse response = new FakeResponse("aé", MediaType.TEXT_PLAIN_TYPE);
+        FakeResponse response = new FakeResponse("aéb", MediaType.TEXT_PLAIN_TYPE);
         filter.filter(requestContext(), response.proxy());
 
         byte[] result = (byte[]) response.entity();
@@ -114,8 +114,8 @@ class GoblinChaosFilterResponseBodyTest {
 
         assertTrue(response.entity() instanceof byte[]);
         byte[] result = (byte[]) response.entity();
-        assertEquals(6, result.length);
-        assertArrayEquals("hello ".getBytes(java.nio.charset.StandardCharsets.UTF_8), result);
+        assertEquals(5, result.length);
+        assertArrayEquals("hello".getBytes(java.nio.charset.StandardCharsets.UTF_8), result);
         assertEquals(1, engine.getHistory().size());
     }
 

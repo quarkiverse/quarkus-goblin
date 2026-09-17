@@ -44,8 +44,28 @@ class ResponseBodyTransformerTest {
     @Test
     void inflateOver150KeepsOriginalPrefixThenPadding() {
         byte[] result = ResponseBodyTransformer.transform(BODY, ResponseBodyMode.INFLATE, 150);
-        assertEquals(Math.round(BODY.length * 1.5), result.length);
+        assertEquals((long) Math.floor(BODY.length * 1.5), result.length);
         assertArrayEquals(BODY, java.util.Arrays.copyOf(result, BODY.length));
+    }
+
+    @Test
+    void targetLengthIsRoundedDownForBothModes() {
+        byte[] body = "hello world".getBytes(StandardCharsets.UTF_8);
+
+        byte[] truncated = ResponseBodyTransformer.transform(body, ResponseBodyMode.TRUNCATE, 50);
+        assertEquals(5, truncated.length, "floor(11 * 0.5) = 5");
+        assertArrayEquals("hello".getBytes(StandardCharsets.UTF_8), truncated);
+
+        byte[] inflated = ResponseBodyTransformer.transform(body, ResponseBodyMode.INFLATE, 150);
+        assertEquals(16, inflated.length, "floor(11 * 1.5) = 16");
+        assertArrayEquals(body, java.util.Arrays.copyOf(inflated, body.length));
+    }
+
+    @Test
+    void nonZeroPercentageKeepsAtLeastOneByte() {
+        byte[] body = "abc".getBytes(StandardCharsets.UTF_8);
+        assertEquals(1, ResponseBodyTransformer.transform(body, ResponseBodyMode.TRUNCATE, 1).length);
+        assertEquals(1, ResponseBodyTransformer.transform(body, ResponseBodyMode.TRUNCATE, 50).length);
     }
 
     @Test

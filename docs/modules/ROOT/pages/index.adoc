@@ -141,7 +141,7 @@ Two transformation modes are available:
 * **`TRUNCATE`** -- keeps only the first `percentage`% of the body. For example, truncating a JSON payload to `50`% yields a prefix that is no longer valid JSON, so a strict JSON client fails to parse it. The `Content-Length` header is updated to the truncated size, so the response stays well-framed and the corruption is purely at the payload level.
 * **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). The `Content-Length` header keeps advertising the original, smaller length while more bytes are emitted, exercising length-validating proxies and parsers. The transformed bytes are written verbatim: truncation never re-encodes a split multibyte character, so the delivered size always matches the configured percentage.
 
-The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log both at startup and when saving in the Dev UI (e.g. `INFLATE` with `50` becomes `101`).
+The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log both at startup and when saving in the Dev UI (e.g. `INFLATE` with `50` becomes `101`). In both modes the target size is `floor(originalBytes * percentage / 100)`: the emitted size is rounded down so it never exceeds the requested percentage, and any non-zero percentage keeps at least one byte (`0` yields an empty body).
 
 NOTE: The response body assault rewrites the entity in the JAX-RS response filter, so it only applies to responses that carry a body your application produces (String or byte-array entities). It follows the same targeting rules as the other server-side assaults (target level and package/annotation filters), and it is recorded in the assault history like any other assault.
 
@@ -308,7 +308,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.body.percentage`
 | `int`
 | `50`
-| Target size of the transformed body in percent of the original. Valid range: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log.
+| Target size of the transformed body in percent of the original, rounded down (`floor`). Valid range: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log.
 
 | `quarkus.goblin.target.level`
 | `int`
