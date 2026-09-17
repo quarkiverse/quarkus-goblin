@@ -16,6 +16,10 @@ is eligible (`quarkus.goblin.*` targeting rules, percentage based on `quarkus.go
 
 Assaults are discovered automatically: no manual registration is required, adding a bean implements the SPI is enough.
 
+The same `GoblinChaosFilter` also implements a JAX-RS `ContainerResponseFilter`: on eligible responses it rewrites
+the entity when the **response body** assault is enabled (truncate/inflate), so the transformation composes with every
+other assault instead of replacing them.
+
 Outgoing MicroProfile / Quarkus REST Client calls are handled by `GoblinChaosClientFilter` (a JAX-RS
 `ClientRequestFilter`, registered globally as an unremovable bean by the deployment build step). It reuses the
 `engine.shouldAssaultClient()` level gate (same `quarkus.goblin.target.level` percentage as the server side, no package
@@ -32,9 +36,11 @@ leaves the application -- the remote service is never reached for exception assa
 | Exception | `ExceptionAssault` | 20 | `MutableAssaultConfig.isExceptionEnabled()` | Throws the configured exception class (String constructor) before the method runs; falls back to `RuntimeException` with a WARN log | `assault.exception.type`, `assault.exception.message` |
 | HTTP status | `HttpStatusAssault` | 30 | `MutableAssaultConfig.isHttpStatusEnabled()` | Aborts the request with the configured status code and body (`ABORTED`) | `assault.http-status.code`, `assault.http-status.message` |
 | Dependency degradation | `DependencyDegradationAssault` | 40 | `MutableAssaultConfig.isDependencyDegradationEnabled()` | Aborts the request with a fixed 503 response, to exercise outbound `@Fallback`/`@Retry` (`ABORTED`) | none (fixed values) |
+| Response body | `GoblinChaosFilter` (response phase) | n/a | `MutableAssaultConfig.isResponseBodyEnabled()` | Rewrites the emitted entity via `ResponseBodyTransformer`: `TRUNCATE` keeps the first `percentage`% of the body, `INFLATE` pads it with a `[goblin-response-inflated]` marker up to `percentage`% of the original size | `assault.body.mode`, `assault.body.percentage` |
 
-All classes live in `io.quarkiverse.goblin.assault`. The chain order convention is: latency first (10), then
-request-aborting assaults by increasing severity (20, 30, 40).
+All classes live in `io.quarkiverse.goblin.assault`, except the response body assault which runs directly in the
+`ContainerResponseFilter` phase of `GoblinChaosFilter` (it operates on the emitted entity, not on the inbound request).
+The chain order convention is: latency first (10), then request-aborting assaults by increasing severity (20, 30, 40).
 
 ### Client-side assaults
 

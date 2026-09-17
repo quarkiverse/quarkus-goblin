@@ -33,6 +33,7 @@ public class GoblinIntegrationTest {
         cfg.setDependencyDegradationEnabled(false);
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
+        cfg.setResponseBodyEnabled(false);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);
@@ -256,6 +257,54 @@ public class GoblinIntegrationTest {
                 .then()
                 .statusCode(200)
                 .body(equalTo("hello from Goblin test app"));
+    }
+
+    // ==================== Response body assault ====================
+
+    @Test
+    public void testResponseBodyTruncateToFiftyPercent() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseBodyEnabled(true);
+        cfg.setResponseBodyMode(io.quarkiverse.goblin.ResponseBodyMode.TRUNCATE);
+        cfg.setResponseBodyPercentage(50);
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .body(equalTo("hello from Go"));
+    }
+
+    @Test
+    public void testResponseBodyInflateToDouble() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseBodyEnabled(true);
+        cfg.setResponseBodyMode(io.quarkiverse.goblin.ResponseBodyMode.INFLATE);
+        cfg.setResponseBodyPercentage(200);
+
+        String body = RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .extract().asString();
+
+        assertEquals(52, body.length(), "inflated body must be 200% of the original 26 chars");
+        assertTrue(body.startsWith("hello from Goblin test app"));
+    }
+
+    @Test
+    public void testResponseBodyOffLeavesBodyUntouched() {
+        engine.setActive(true);
+
+        String body = RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .extract().asString();
+
+        assertEquals("hello from Goblin test app", body);
     }
 
     // ==================== History ====================

@@ -49,7 +49,7 @@ public class AssaultEngine {
         }
         if (active) {
             LOG.warnf(
-                    "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s)",
+                    "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s, responseBody=%s)",
                     mutableConfig.getTargetLevel(),
                     mutableConfig.getProfile(),
                     mutableConfig.isLatencyEnabled(),
@@ -57,7 +57,8 @@ public class AssaultEngine {
                     mutableConfig.isHttpStatusEnabled(),
                     mutableConfig.isDependencyDegradationEnabled(),
                     mutableConfig.isClientLatencyEnabled(),
-                    mutableConfig.isClientExceptionEnabled());
+                    mutableConfig.isClientExceptionEnabled(),
+                    mutableConfig.isResponseBodyEnabled());
         }
     }
 

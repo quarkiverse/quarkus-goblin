@@ -292,6 +292,19 @@ export class QwcGoblinDashboard extends LitElement {
         });
     }
 
+    _saveBody() {
+        const mode = this.shadowRoot.getElementById('body-mode').value;
+        const percentage = parseInt(this.shadowRoot.getElementById('body-pct').value);
+        this.jsonRpc.setResponseBodyConfig({mode, percentage}).then(r => {
+            if (r.result.ok) {
+                this._config = {...this._config, body: {mode: r.result.mode, percentage: r.result.percentage}};
+                this._showToast(r.result.warning || 'Response body updated', !!r.result.warning);
+            } else {
+                this._showToast((r.result && r.result.error) || 'Response body update failed', true);
+            }
+        }).catch(() => this._showToast('Response body update failed', true));
+    }
+
     _profileLabel(profile) {
         const match = QwcGoblinDashboard.profiles.find(p => p.value === profile);
         return match ? match.label : profile;
@@ -311,9 +324,11 @@ export class QwcGoblinDashboard extends LitElement {
                     dependencyDegradationEnabled: c.dependencyDegradationEnabled,
                     clientLatencyEnabled: c.clientLatencyEnabled,
                     clientExceptionEnabled: c.clientExceptionEnabled,
+                    responseBodyEnabled: c.responseBodyEnabled,
                     latency: c.latency,
                     exception: c.exception,
                     httpStatus: c.httpStatus,
+                    body: c.body,
                     level: c.level,
                 };
                 this._status = {...this._status, profile: c.profile};
@@ -451,6 +466,36 @@ export class QwcGoblinDashboard extends LitElement {
                     ${c.dependencyDegradationEnabled ? html`
                     <div class="helper">Returns HTTP 503 with a fixed "Dependency unavailable (Goblin chaos)" body.</div>` : html`
                     <div class="helper">Enable dependency degradation assault.</div>`}
+                </div>
+
+                <div class="section">
+                    <div class="assault-toggle ${c.responseBodyEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('responseBodyEnabled', 'toggleResponseBody')}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" ?checked="${c.responseBodyEnabled}"
+                                   @change="${() => this._toggleAssault('responseBodyEnabled', 'toggleResponseBody')}">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <div class="label">Response Body</div>
+                            <div class="desc">Truncate or inflate the response payload</div>
+                        </div>
+                    </div>
+                    ${c.responseBodyEnabled ? html`
+                    <div class="form-row">
+                        <label>Mode</label>
+                        <select id="body-mode">
+                            <option value="TRUNCATE" ?selected="${c.body.mode === 'TRUNCATE'}">Truncate</option>
+                            <option value="INFLATE" ?selected="${c.body.mode === 'INFLATE'}">Inflate</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Percentage %</label>
+                        <input type="number" id="body-pct" .value="${c.body.percentage}" min="0" max="1000">
+                        <button class="save-btn" @click="${this._saveBody}">Save</button>
+                    </div>
+                    <div class="helper">Truncate keeps percentage% of the original body; inflate pads it up to percentage% of its original length.</div>` : html`
+                    <div class="helper">Enable response body assault to configure</div>`}
                 </div>
 
                 <div class="section">

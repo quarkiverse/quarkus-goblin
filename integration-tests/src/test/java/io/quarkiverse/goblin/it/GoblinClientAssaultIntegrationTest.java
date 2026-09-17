@@ -36,6 +36,7 @@ public class GoblinClientAssaultIntegrationTest {
         cfg.setDependencyDegradationEnabled(false);
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
+        cfg.setResponseBodyEnabled(false);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);

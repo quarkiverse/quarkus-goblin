@@ -29,6 +29,7 @@ abstract class AbstractPackageTargetingTest {
         cfg.setExceptionEnabled(false);
         cfg.setHttpStatusEnabled(true);
         cfg.setDependencyDegradationEnabled(false);
+        cfg.setResponseBodyEnabled(false);
         cfg.setHttpStatusCode(503);
         cfg.setHttpStatusMessage("Service Unavailable (targeting test)");
         cfg.setTargetLevel(100);

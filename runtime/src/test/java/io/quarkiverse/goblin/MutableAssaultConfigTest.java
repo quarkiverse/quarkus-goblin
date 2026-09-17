@@ -28,8 +28,11 @@ class MutableAssaultConfigTest {
         config.setHttpStatusCode(418);
         config.setHttpStatusMessage("I'm a teapot");
         config.setTargetLevel(50);
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyMode(ResponseBodyMode.INFLATE);
+        config.setResponseBodyPercentage(150);
 
-        assertEquals(13, callCount.get());
+        assertEquals(16, callCount.get());
     }
 
     @Test
@@ -385,9 +388,208 @@ class MutableAssaultConfigTest {
         assertEquals("no assault enabled", config.describeAssaults());
     }
 
+    @Test
+    void bodyAssaultDefaultsOff() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        assertFalse(config.isResponseBodyEnabled());
+        assertEquals(ResponseBodyMode.TRUNCATE, config.getResponseBodyMode());
+        assertEquals(50, config.getResponseBodyPercentage());
+    }
+
+    @Test
+    void bodyAssaultCountsTowardsServerHasAnyAssaultEnabled() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(false);
+        config.setDependencyDegradationEnabled(false);
+        assertFalse(config.hasAnyAssaultEnabled());
+
+        config.setResponseBodyEnabled(true);
+        assertTrue(config.hasAnyAssaultEnabled());
+    }
+
+    @Test
+    void describeAssaultsIncludesBodyWhenEnabled() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(false);
+        config.setDependencyDegradationEnabled(false);
+
+        config.setResponseBodyMode(ResponseBodyMode.INFLATE);
+        config.setResponseBodyPercentage(150);
+        config.setResponseBodyEnabled(true);
+        String desc = config.describeAssaults();
+        assertTrue(desc.contains("response body inflate enabled"), "expected inflate in: " + desc);
+        assertTrue(desc.contains("150%"), "expected percentage in: " + desc);
+    }
+
+    @Test
+    void truncatePercentageAbove100IsClamped() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseBodyMode(ResponseBodyMode.TRUNCATE);
+        config.setResponseBodyPercentage(150);
+        assertEquals(100, config.getResponseBodyPercentage());
+    }
+
+    @Test
+    void inflatePercentageAtOrBelow100IsClampedTo101() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseBodyMode(ResponseBodyMode.INFLATE);
+        config.setResponseBodyPercentage(50);
+        assertEquals(101, config.getResponseBodyPercentage());
+    }
+
+    @Test
+    void inflatePercentageAbove1000IsClamped() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseBodyMode(ResponseBodyMode.INFLATE);
+        config.setResponseBodyPercentage(5000);
+        assertEquals(1000, config.getResponseBodyPercentage());
+    }
+
+    @Test
+    void invalidBodyModeFallsBackToTruncate() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseBodyMode(null);
+        assertEquals(ResponseBodyMode.TRUNCATE, config.getResponseBodyMode());
+    }
+
+    @Test
+    void fromConfigResponseBodyTypeEnabled() {
+        GoblinConfig goblinConfig = configWithResponseBody();
+        MutableAssaultConfig config = MutableAssaultConfig.fromConfig(goblinConfig);
+        assertTrue(config.isResponseBodyEnabled());
+        assertEquals(ResponseBodyMode.INFLATE, config.getResponseBodyMode());
+        assertEquals(150, config.getResponseBodyPercentage());
+    }
+
+    @Test
+    void profilesLeaveBodyToggleUntouched() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyMode(ResponseBodyMode.INFLATE);
+        config.setResponseBodyPercentage(200);
+
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        assertTrue(config.isResponseBodyEnabled(), "body toggle must survive profile application");
+        assertEquals(ResponseBodyMode.INFLATE, config.getResponseBodyMode());
+        assertEquals(200, config.getResponseBodyPercentage());
+    }
+
     private static GoblinConfig configWith(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
             int targetLevel) {
         return configWithProfile(latencyMin, latencyMax, httpStatus, exceptionType, targetLevel, AssaultProfile.NONE);
+    }
+
+    private static GoblinConfig configWithResponseBody() {
+        return new GoblinConfig() {
+            @Override
+            public boolean enabled() {
+                return true;
+            }
+
+            @Override
+            public AssaultConfig assault() {
+                return new AssaultConfig() {
+                    @Override
+                    public AssaultType type() {
+                        return AssaultType.RESPONSE_BODY;
+                    }
+
+                    @Override
+                    public AssaultProfile profile() {
+                        return AssaultProfile.NONE;
+                    }
+
+                    @Override
+                    public BodyConfig body() {
+                        return new BodyConfig() {
+                            @Override
+                            public ResponseBodyMode mode() {
+                                return ResponseBodyMode.INFLATE;
+                            }
+
+                            @Override
+                            public int percentage() {
+                                return 150;
+                            }
+                        };
+                    }
+
+                    @Override
+                    public LatencyConfig latency() {
+                        return new LatencyConfig() {
+                            @Override
+                            public long minMilliseconds() {
+                                return 100;
+                            }
+
+                            @Override
+                            public long maxMilliseconds() {
+                                return 5000;
+                            }
+                        };
+                    }
+
+                    @Override
+                    public ExceptionConfig exception() {
+                        return new ExceptionConfig() {
+                            @Override
+                            public String type() {
+                                return "java.lang.RuntimeException";
+                            }
+
+                            @Override
+                            public String message() {
+                                return "Goblin chaos: simulated exception";
+                            }
+                        };
+                    }
+
+                    @Override
+                    public HttpStatusConfig httpStatus() {
+                        return new HttpStatusConfig() {
+                            @Override
+                            public int code() {
+                                return 503;
+                            }
+
+                            @Override
+                            public String message() {
+                                return "Service Unavailable (Goblin chaos)";
+                            }
+                        };
+                    }
+                };
+            }
+
+            @Override
+            public TargetConfig target() {
+                return new TargetConfig() {
+                    @Override
+                    public int level() {
+                        return 100;
+                    }
+
+                    @Override
+                    public Optional<String[]> includePackages() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<String[]> excludePackages() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<String[]> excludeAnnotations() {
+                        return Optional.empty();
+                    }
+                };
+            }
+        };
     }
 
     private static GoblinConfig configWithProfile(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
@@ -452,6 +654,21 @@ class MutableAssaultConfigTest {
                             @Override
                             public String message() {
                                 return "unavailable";
+                            }
+                        };
+                    }
+
+                    @Override
+                    public BodyConfig body() {
+                        return new BodyConfig() {
+                            @Override
+                            public ResponseBodyMode mode() {
+                                return ResponseBodyMode.TRUNCATE;
+                            }
+
+                            @Override
+                            public int percentage() {
+                                return 50;
                             }
                         };
                     }

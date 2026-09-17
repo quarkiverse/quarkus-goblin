@@ -22,6 +22,7 @@ public class MutableAssaultConfig {
     private volatile boolean dependencyDegradationEnabled = false;
     private volatile boolean clientLatencyEnabled = false;
     private volatile boolean clientExceptionEnabled = false;
+    private volatile boolean responseBodyEnabled = false;
 
     private volatile long latencyMinMs = 100;
     private volatile long latencyMaxMs = 5000;
@@ -29,6 +30,8 @@ public class MutableAssaultConfig {
     private volatile String exceptionMessage = "Goblin chaos: simulated exception";
     private volatile int httpStatusCode = 503;
     private volatile String httpStatusMessage = "Service Unavailable (Goblin chaos)";
+    private volatile ResponseBodyMode responseBodyMode = ResponseBodyMode.TRUNCATE;
+    private volatile int responseBodyPercentage = 50;
     private volatile int targetLevel = 100;
 
     /**
@@ -45,12 +48,15 @@ public class MutableAssaultConfig {
         mutable.exceptionEnabled = (type == AssaultType.EXCEPTION);
         mutable.httpStatusEnabled = (type == AssaultType.HTTP_STATUS);
         mutable.dependencyDegradationEnabled = (type == AssaultType.DEPENDENCY_DEGRADATION);
+        mutable.responseBodyEnabled = (type == AssaultType.RESPONSE_BODY);
         mutable.latencyMinMs = config.assault().latency().minMilliseconds();
         mutable.latencyMaxMs = config.assault().latency().maxMilliseconds();
         mutable.exceptionType = config.assault().exception().type();
         mutable.exceptionMessage = config.assault().exception().message();
         mutable.httpStatusCode = config.assault().httpStatus().code();
         mutable.httpStatusMessage = config.assault().httpStatus().message();
+        mutable.responseBodyMode = config.assault().body().mode();
+        mutable.responseBodyPercentage = config.assault().body().percentage();
         mutable.targetLevel = config.target().level();
         mutable.profile = config.assault().profile();
         if (mutable.profile != AssaultProfile.NONE) {
@@ -89,6 +95,23 @@ public class MutableAssaultConfig {
             LOG.warnf("%s", message);
             issues.add(message);
             targetLevel = clamped;
+        }
+        int percentage = responseBodyPercentage;
+        if (responseBodyMode == ResponseBodyMode.TRUNCATE && (percentage < 0 || percentage > 100)) {
+            int clampedPercentage = Math.max(0, Math.min(100, percentage));
+            String message = "Invalid response body percentage: " + percentage
+                    + " is outside the valid range 0-100 for TRUNCATE. Clamping to " + clampedPercentage + ".";
+            LOG.warnf("%s", message);
+            issues.add(message);
+            responseBodyPercentage = clampedPercentage;
+        }
+        if (responseBodyMode == ResponseBodyMode.INFLATE && (percentage < 101 || percentage > 1000)) {
+            int clampedPercentage = Math.max(101, Math.min(1000, percentage));
+            String message = "Invalid response body percentage: " + percentage
+                    + " is outside the valid range 101-1000 for INFLATE. Clamping to " + clampedPercentage + ".";
+            LOG.warnf("%s", message);
+            issues.add(message);
+            responseBodyPercentage = clampedPercentage;
         }
         return issues;
     }
@@ -184,8 +207,67 @@ public class MutableAssaultConfig {
         notifyChange();
     }
 
+    /**
+     * @return whether the response body assault is enabled for incoming requests returning an entity
+     */
+    public boolean isResponseBodyEnabled() {
+        return responseBodyEnabled;
+    }
+
+    /**
+     * Toggles the response body assault, which truncates or inflates the entity returned by the endpoint.
+     *
+     * @param responseBodyEnabled {@code true} to alter response bodies, {@code false} to leave them untouched
+     */
+    public void setResponseBodyEnabled(boolean responseBodyEnabled) {
+        this.responseBodyEnabled = responseBodyEnabled;
+        notifyChange();
+    }
+
+    /**
+     * @return the transformation applied to the response body, never {@code null}
+     */
+    public ResponseBodyMode getResponseBodyMode() {
+        return responseBodyMode != null ? responseBodyMode : ResponseBodyMode.TRUNCATE;
+    }
+
+    /**
+     * Changes the response body transformation.
+     *
+     * @param responseBodyMode the transformation to apply ({@code TRUNCATE} or {@code INFLATE}); {@code null} keeps
+     *        {@link ResponseBodyMode#TRUNCATE}
+     */
+    public void setResponseBodyMode(ResponseBodyMode responseBodyMode) {
+        this.responseBodyMode = responseBodyMode != null ? responseBodyMode : ResponseBodyMode.TRUNCATE;
+        validateAndFix();
+        notifyChange();
+    }
+
+    /**
+     * @return the target size of the transformed body in percent (0-100 for {@code TRUNCATE}, 101-1000 for
+     *         {@code INFLATE})
+     */
+    public int getResponseBodyPercentage() {
+        return responseBodyPercentage;
+    }
+
+    /**
+     * Changes the response body target size in percent, clamping and warning when the value is invalid for the active
+     * mode.
+     *
+     * @param responseBodyPercentage the target size in percent
+     * @return a list of human-readable warnings for values that were clamped, empty when the value was accepted as-is
+     */
+    public List<String> setResponseBodyPercentage(int responseBodyPercentage) {
+        this.responseBodyPercentage = responseBodyPercentage;
+        List<String> issues = validateAndFix();
+        notifyChange();
+        return issues;
+    }
+
     public boolean hasAnyAssaultEnabled() {
-        return latencyEnabled || exceptionEnabled || httpStatusEnabled || dependencyDegradationEnabled;
+        return latencyEnabled || exceptionEnabled || httpStatusEnabled || dependencyDegradationEnabled
+                || responseBodyEnabled;
     }
 
     /**
@@ -296,6 +378,10 @@ public class MutableAssaultConfig {
         }
         if (clientExceptionEnabled) {
             parts.add("client exception enabled (" + exceptionType + ": \"" + exceptionMessage + "\")");
+        }
+        if (responseBodyEnabled) {
+            parts.add("response body " + getResponseBodyMode().name().toLowerCase() + " enabled ("
+                    + responseBodyPercentage + "%)");
         }
         if (parts.isEmpty()) {
             return "no assault enabled";

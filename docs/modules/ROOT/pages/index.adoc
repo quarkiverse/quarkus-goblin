@@ -49,7 +49,7 @@ You will see a warning log confirming chaos is active:
 
 [source]
 ----
-WARN  Chaos engineering active: 100% of REST requests subject to assault (latency=true, exception=false, httpStatus=false, dependencyDegradation=false)
+WARN  Chaos engineering active: 100% of REST requests subject to assault (profile=NONE, latency=true, exception=false, httpStatus=false, dependencyDegradation=false, clientLatency=false, clientException=false, responseBody=false)
 ----
 
 === Verify it works
@@ -65,7 +65,7 @@ You should see a response time well above your normal baseline.
 
 == Assault types
 
-Goblin supports four types of chaos assaults. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
+Goblin supports four types of server-side chaos assaults, plus client-side assaults for outgoing REST Client calls. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
 
 When multiple types are active, they are applied in order:
 
@@ -73,8 +73,9 @@ When multiple types are active, they are applied in order:
 2. **Exception** -- throws an exception, aborting the request.
 3. **HTTP Status** -- returns a specific status code, aborting the request.
 4. **Dependency Degradation** -- returns 503, aborting the request.
+5. **Response Body** -- rewrites the entity of an emitted response (truncate or inflate).
 
-In addition, **client-side assaults** (latency and exception) can be enabled for outgoing MicroProfile REST Client calls -- see xref:index.adoc#client-side-assaults[Client-side assaults].
+In addition, **client-side assaults** (latency and exception) can be enabled for outgoing MicroProfile REST Client calls -- see xref:index.adoc#client-side-assaults[Client-side assaults]. The response body assault is applied when the response is emitted, so it composes with every other type: for example, HTTP status + response body turns a 503 into a 503 with a truncated body.
 
 TIP: If both latency and exception are enabled, the delay is applied first, then the exception is thrown. This simulates a slow failure -- realistic for testing timeouts followed by fallbacks.
 
@@ -123,6 +124,26 @@ The status code must be in the `100`-`599` range. Out-of-range values are detect
 === DEPENDENCY_DEGRADATION
 
 Returns 503 with a "Dependency unavailable" message. Designed for testing `@Fallback` and `@Retry` on outbound service calls. No additional configuration needed -- it uses a fixed 503 response.
+
+=== RESPONSE_BODY
+
+Rewrites the entity returned by eligible endpoints to a corrupted or unexpected size. Useful for validating that your JSON clients (React, mobile apps, REST Client consumers) fail gracefully when the payload they receive is truncated or padded beyond the declared Content-Length.
+
+[source,properties]
+----
+quarkus.goblin.assault.type=RESPONSE_BODY
+quarkus.goblin.assault.body.mode=truncate
+quarkus.goblin.assault.body.percentage=50
+----
+
+Two transformation modes are available:
+
+* **`TRUNCATE`** -- keeps only the first `percentage`% of the body. For example, truncating a JSON payload to `50`% yields a prefix that is no longer valid JSON, so a strict JSON client fails to parse it.
+* **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). The declared Content-Length no longer matches the bytes actually delivered, exercising length-validating proxies and parsers.
+
+The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log both at startup and when saving in the Dev UI (e.g. `INFLATE` with `50` becomes `101`).
+
+NOTE: The response body assault rewrites the entity in the JAX-RS response filter, so it only applies to responses that carry a body your application produces (String or byte-array entities). It follows the same targeting rules as the other server-side assaults (target level and package/annotation filters), and it is recorded in the assault history like any other assault.
 
 === Client-side assaults (outgoing REST Client calls)
 
@@ -242,7 +263,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.type`
 | `AssaultType`
 | `LATENCY`
-| Initial assault type enabled at startup. Values: `LATENCY`, `EXCEPTION`, `HTTP_STATUS`, `DEPENDENCY_DEGRADATION`. Can be changed at runtime via the Dev UI. Ignored when a non-`NONE` profile is selected.
+| Initial assault type enabled at startup. Values: `LATENCY`, `EXCEPTION`, `HTTP_STATUS`, `DEPENDENCY_DEGRADATION`, `RESPONSE_BODY`. Can be changed at runtime via the Dev UI. Ignored when a non-`NONE` profile is selected.
 
 | `quarkus.goblin.assault.profile`
 | `AssaultProfile`
@@ -279,6 +300,16 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `Service Unavailable (Goblin chaos)`
 | HTTP response body
 
+| `quarkus.goblin.assault.body.mode`
+| `ResponseBodyMode`
+| `TRUNCATE`
+| Response body transformation to apply. Values: `TRUNCATE` (keep the first `percentage`% of the body), `INFLATE` (pad the body up to `percentage`% of its original size).
+
+| `quarkus.goblin.assault.body.percentage`
+| `int`
+| `50`
+| Target size of the transformed body in percent of the original. Valid range: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log.
+
 | `quarkus.goblin.target.level`
 | `int`
 | `100`
@@ -310,6 +341,7 @@ Goblin validates assault parameters at startup and whenever you save a change in
 | `assault.latency.min-milliseconds` / `assault.latency.max-milliseconds` | `min` must be lower than or equal to `max` | Values are swapped and a `WARN` is logged
 | `assault.http-status.code` | Must be in the `100`-`599` range | Defaults to `503` and an `ERROR` is logged
 | `assault.exception.type` | Class must exist and expose a `String` constructor | Falls back to `RuntimeException` and an `ERROR` is logged
+| `assault.body.percentage` | Must be in `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE` | Clamped to the valid range and a `WARN` is logged
 | `target.level` | Must be in the `0`-`100` range | Clamped and a `WARN` is logged
 |===
 
@@ -333,9 +365,9 @@ The Chaos Dashboard with latency enabled at 100% target level.
 
 * **Master toggle** -- Activate/deactivate all chaos with a single click. When inactive, the status dot turns red and the `Deactivate` button becomes `Activate`.
 * **Profile selector** -- Pick a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) with one click. The active profile is also shown in the status bar. Individual toggles stay overridable on top of the profile.
-* **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color.
+* **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation, Response Body). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color.
 * **Client-side assault toggles** -- A dedicated section controls `client latency` and `client exception`, applied to outgoing MicroProfile REST Client calls. They default to off and reuse the latency range and exception class/message configured above.
-* **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button.
+* **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message, response body mode/percentage). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button.
 * **Target level** -- Adjust the percentage of affected requests (0-100%) on the fly, saved with its own button.
 * **All changes apply instantly** -- no restart needed. A WARN log is emitted in the console for every change, and a toast confirms each action in the UI. If a change violates a validation rule (see <<Configuration validation>>), the toast shows the applied correction, e.g. a swapped latency range.
 
@@ -353,13 +385,13 @@ Each row shows:
 
 * the **timestamp** of the assault -- millisecond precision, with the full ISO timestamp shown on hover
 * the endpoint **method** targeted
-* the assault **type** (latency, exception, http-status, dependency-degradation)
+* the assault **type** shown as a colored badge -- `Latency`, `Exception`, `HTTP Status`, `Dependency`, and for response body assaults two distinct badges depending on the mode: `Truncate` (`response-body-truncate`) and `Inflate` (`response-body-inflate`)
 * the actual applied **latency duration** when the assault was a latency injection
 * the active assault configuration **at the time of the assault**, stored compactly in an `Active Config` cell -- click the cell to expand or collapse it
 
-Newest assaults appear first. A **summary band** above the table shows the totals per assault type and the average injected latency, updated live.
+Newest assaults appear first. A **summary band** above the table shows the totals per assault type and the average injected latency, updated live (the response body total combines both modes).
 
-A **filter bar** narrows the list: filter by assault type, by a method text search, or by time period (last 5 minutes, 30 minutes, 1 hour, 24 hours, or all time). The counter shows how many of the total assaults match the current filters.
+A **filter bar** narrows the list: filter by assault type (the `Response Body` entry groups the truncate and inflate modes), by a method text search, or by time period (last 5 minutes, 30 minutes, 1 hour, 24 hours, or all time). The counter shows how many of the total assaults match the current filters.
 
 The history is an in-memory buffer capped at the latest 1000 assaults. Use it to confirm that your targeting rules and level are applying to the expected endpoints before drawing conclusions about your resilience checks. **Clear History** wipes the buffer between test sessions -- the first click arms the button, a second click within 3 seconds performs the clear.
 
@@ -368,7 +400,7 @@ The history is an in-memory buffer capped at the latest 1000 assaults. Use it to
 The History panel also offers an **Export Markdown** button. Clicking it generates a factual Markdown report of the current Goblin session and displays it in a panel with **Copy** and **Download** actions:
 
 * the current status (active/inactive) and target level
-* the current assault configuration (active profile, latency, exception, HTTP status, dependency degradation toggles and values)
+* the current assault configuration (active profile, latency, exception, HTTP status, dependency degradation, response body toggles and values)
 * the full assault history, including the actual latency duration applied for each latency assault and a snapshot of the active configuration at the time of each assault -- so a config change between two calls is clearly visible (e.g. `latency enabled (100 - 500 ms)` vs `latency enabled (1000 - 5000 ms)`)
 
 image::dev-ui-history-report.png[Goblin Markdown report export,width=720,align=center]
@@ -387,7 +419,7 @@ Goblin operates at the JAX-RS filter layer using a `ContainerRequestFilter` (inc
    * Is chaos active?
    * Should this specific request be affected? (based on the `level` percentage)
    * Is the target endpoint eligible? (based on package/annotation filters)
-4. If all conditions are met, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request).
+4. If all conditions are met, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body assault is applied on the way out, in the `ContainerResponseFilter`, rewriting the entity before it reaches the client.
 5. An assault record is added to the history buffer (capped at 1000 entries).
 
 For every outbound MicroProfile REST Client call, the `ClientRequestFilter` checks the same `level` gate and the client-side toggles, then applies latency and/or exception (the remote service is never reached when the exception assault fires). The filter runs early in the JAX-RS pipeline, before any endpoint logic executes. This means:
@@ -413,7 +445,7 @@ Runtime config changes made through the Dev UI are automatically persisted to a 
 
 This means your chaos scenario survives restarts -- no need to reconfigure the dashboard every time you restart in dev mode.
 
-The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
+The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
 
 The persistence listener is only registered in dev mode, so integration or system tests never overwrite the chaos configuration you saved from the Dev UI.
 
@@ -527,10 +559,10 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Method | Effect
 
 | `getStatus`
-| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, and the target `level`.
+| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` toggle, and the target `level`.
 
 | `getConfig`
-| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, level).
+| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, level).
 
 | `toggleActive` / `setActive(boolean)`
 | Enable/disable chaos entirely. Emits a WARN log.
@@ -538,11 +570,14 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | `setProfile(profile)`
 | Activate a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`). Applies the profile defaults to the assault toggles; each toggle stays overridable afterwards.
 
-| `toggleLatency` / `toggleException` / `toggleHttpStatus` / `toggleDependencyDegradation`
+| `toggleLatency` / `toggleException` / `toggleHttpStatus` / `toggleDependencyDegradation` / `toggleResponseBody`
 | Flip the corresponding assault toggle on/off.
 
 | `toggleClientLatency` / `toggleClientException`
 | Flip the corresponding **client-side** assault toggle on/off (outgoing REST Client calls).
+
+| `setResponseBodyConfig(mode, percentage)`
+| Set the response body transformation (`TRUNCATE` or `INFLATE`) and its target size in percent. Invalid modes are rejected; out-of-range percentages are clamped with the correction surfaced in `warning`.
 
 | `setLatencyRange(minMs, maxMs)`
 | Set the min/max latency range.

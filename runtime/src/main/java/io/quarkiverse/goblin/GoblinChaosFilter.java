@@ -64,6 +64,66 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
             throws IOException {
+        if (!engine.isActive() || !engine.shouldAssault()) {
+            return;
+        }
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null || !cfg.isResponseBodyEnabled()) {
+            return;
+        }
+        if (!isTargetEligible()) {
+            return;
+        }
+        byte[] body = toBytes(responseContext.getEntity());
+        if (body == null) {
+            return;
+        }
+        byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
+                cfg.getResponseBodyPercentage());
+        setEntity(responseContext, transformed);
+        LOG.debugf("Goblin: response body %s (100%% -> %d%%) on %s",
+                cfg.getResponseBodyMode().name().toLowerCase(), cfg.getResponseBodyPercentage(), describeMethod());
+        engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
+    }
+
+    /**
+     * Extracts the response entity as raw bytes when it is a bufferable type ({@link String}, {@code byte[]} or
+     * {@link CharSequence}); streaming or resource backed entities are left untouched.
+     *
+     * @param entity the response entity
+     * @return the UTF-8 bytes of the entity, or {@code null} when the entity type is not supported
+     */
+    private static byte[] toBytes(Object entity) {
+        if (entity == null) {
+            return null;
+        }
+        if (entity instanceof byte[] bytes) {
+            return bytes;
+        }
+        if (entity instanceof String text) {
+            return text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        }
+        if (entity instanceof CharSequence sequence) {
+            return sequence.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return null;
+    }
+
+    /**
+     * Replaces the response entity with the transformed payload, keeping the original media type. Strings are restored
+     * as {@link String}, byte arrays remain byte arrays.
+     *
+     * @param responseContext the response context to update
+     * @param bytes the transformed payload
+     */
+    private static void setEntity(ContainerResponseContext responseContext, byte[] bytes) {
+        Object entity = responseContext.getEntity();
+        if (entity instanceof byte[]) {
+            responseContext.setEntity(bytes, null, responseContext.getMediaType());
+        } else {
+            responseContext.setEntity(new String(bytes, java.nio.charset.StandardCharsets.UTF_8), null,
+                    responseContext.getMediaType());
+        }
     }
 
     private boolean isTargetEligible() {

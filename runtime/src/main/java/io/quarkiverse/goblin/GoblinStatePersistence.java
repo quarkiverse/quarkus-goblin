@@ -75,6 +75,9 @@ public final class GoblinStatePersistence {
         map.put("dependencyDegradationEnabled", config.isDependencyDegradationEnabled());
         map.put("clientLatencyEnabled", config.isClientLatencyEnabled());
         map.put("clientExceptionEnabled", config.isClientExceptionEnabled());
+        map.put("responseBodyEnabled", config.isResponseBodyEnabled());
+        map.put("responseBodyMode", config.getResponseBodyMode().name());
+        map.put("responseBodyPercentage", config.getResponseBodyPercentage());
         map.put("latencyMinMs", config.getLatencyMinMs());
         map.put("latencyMaxMs", config.getLatencyMaxMs());
         map.put("exceptionType", config.getExceptionType());
@@ -103,6 +106,9 @@ public final class GoblinStatePersistence {
                 resolveBoolean(map, "dependencyDegradationEnabled", "false", defaulted));
         config.setClientLatencyEnabled(resolveBoolean(map, "clientLatencyEnabled", "false", defaulted));
         config.setClientExceptionEnabled(resolveBoolean(map, "clientExceptionEnabled", "false", defaulted));
+        config.setResponseBodyMode(parseBodyMode(resolve(map, "responseBodyMode", "TRUNCATE", defaulted)));
+        config.setResponseBodyEnabled(resolveBoolean(map, "responseBodyEnabled", "false", defaulted));
+        config.setResponseBodyPercentage(resolveInt(map, "responseBodyPercentage", "50", defaulted));
         config.setLatencyMinMs(resolveLong(map, "latencyMinMs", "100", defaulted));
         config.setLatencyMaxMs(resolveLong(map, "latencyMaxMs", "5000", defaulted));
         config.setExceptionType(resolve(map, "exceptionType", "java.lang.RuntimeException", defaulted));
@@ -180,6 +186,25 @@ public final class GoblinStatePersistence {
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid profile '%s' in state file, defaulting to NONE", name);
             return AssaultProfile.NONE;
+        }
+    }
+
+    /**
+     * Converts a persisted response body mode label back to its enum constant, tolerating case and surrounding
+     * whitespace.
+     *
+     * @param name the stored mode name
+     * @return the matching {@link ResponseBodyMode}, or {@link ResponseBodyMode#TRUNCATE} if the name is invalid
+     */
+    private static ResponseBodyMode parseBodyMode(String name) {
+        if (name == null || name.isBlank()) {
+            return ResponseBodyMode.TRUNCATE;
+        }
+        try {
+            return ResponseBodyMode.valueOf(name.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid response body mode '%s' in state file, defaulting to TRUNCATE", name);
+            return ResponseBodyMode.TRUNCATE;
         }
     }
 

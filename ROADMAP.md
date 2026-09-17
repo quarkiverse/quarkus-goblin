@@ -35,7 +35,7 @@ Current status: **preview** (v0.1.0)
 - [ ] **Client-side assault via Vert.x Web Client**
   Extend client-side chaos to Vert.x `WebClient` calls, which are common in reactive Quarkus applications. Use Vert.x handlers to inject delays and failures before the request is dispatched.
 
-- [ ] **Response body injection**
+- [x] **Response body injection**
   Add a new assault type that truncates or inflates the response body. Useful for testing how clients handle partial JSON, oversized payloads, or unexpected content lengths.
 
 - [ ] **HTTP header injection**
