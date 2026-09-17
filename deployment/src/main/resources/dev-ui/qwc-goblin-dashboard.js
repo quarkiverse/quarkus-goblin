@@ -329,6 +329,7 @@ export class QwcGoblinDashboard extends LitElement {
     constructor() {
         super();
         this._config = null;
+        this._form = null;
         this._status = null;
         this._counters = null;
         this._toast = '';
@@ -379,6 +380,7 @@ export class QwcGoblinDashboard extends LitElement {
             return;
         }
         this._config = {...result};
+        this._form = this._syncFormFromConfig(result);
         this._status = {
             ...this._status,
             active: result.active !== undefined ? result.active : (this._status && this._status.active !== undefined ? this._status.active : true),
@@ -406,6 +408,38 @@ export class QwcGoblinDashboard extends LitElement {
         if (kind === 'error') return 'toast-error';
         if (kind === 'info') return 'toast-info';
         return '';
+    }
+
+    _syncFormFromConfig(result) {
+        const latency = result.latency || {};
+        const exception = result.exception || {};
+        const httpStatus = result.httpStatus || {};
+        const body = result.body || {};
+        return {
+            level: String(result.level),
+            latency: {
+                min: String(latency.minMilliseconds),
+                max: String(latency.maxMilliseconds),
+            },
+            exception: {
+                type: exception.type == null ? '' : exception.type,
+                message: exception.message == null ? '' : exception.message,
+            },
+            httpStatus: {
+                code: httpStatus.code == null ? '' : String(httpStatus.code),
+                message: httpStatus.message == null ? '' : httpStatus.message,
+            },
+            body: {
+                mode: body.mode || 'TRUNCATE',
+                pct: body.percentage == null ? '' : String(body.percentage),
+            },
+        };
+    }
+
+    _ensureForm() {
+        if (!this._form) {
+            this._form = this._syncFormFromConfig(this._config || {});
+        }
     }
 
     _val(id) {
@@ -460,7 +494,8 @@ export class QwcGoblinDashboard extends LitElement {
             this._showToast(this._errorsFor('level'), 'error');
             return;
         }
-        const level = parseInt(this._val('target-level'));
+        this._ensureForm();
+        const level = parseInt(this._form.level);
         this.jsonRpc.setTargetLevel({level}).then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
@@ -470,7 +505,9 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _validateLevel() {
-        const level = parseInt(this._val('target-level'));
+        this._ensureForm();
+        this._form.level = this._val('target-level') || '';
+        const level = parseInt(this._form.level);
         const ok = !isNaN(level) && level >= 0 && level <= 100;
         this._validate('level', ok, 'Level must be between 0 and 100');
         this._markDirty('level');
@@ -558,8 +595,9 @@ export class QwcGoblinDashboard extends LitElement {
             this._showToast(this._errorsFor('latency'), 'error');
             return;
         }
-        const min = parseInt(this._val('lat-min'));
-        const max = parseInt(this._val('lat-max'));
+        this._ensureForm();
+        const min = parseInt(this._form.latency.min);
+        const max = parseInt(this._form.latency.max);
         this.jsonRpc.setLatencyRange({minMs: min, maxMs: max}).then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
@@ -569,8 +607,11 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _validateLatency() {
-        const min = parseInt(this._val('lat-min'));
-        const max = parseInt(this._val('lat-max'));
+        this._ensureForm();
+        this._form.latency.min = this._val('lat-min') || '';
+        this._form.latency.max = this._val('lat-max') || '';
+        const min = parseInt(this._form.latency.min);
+        const max = parseInt(this._form.latency.max);
         const ok = !isNaN(min) && !isNaN(max) && min >= 0 && max >= 0 && min <= max;
         this._validate('latency', ok, 'Requires min >= 0, max >= 0 and min <= max');
         this._markDirty('latency');
@@ -581,8 +622,9 @@ export class QwcGoblinDashboard extends LitElement {
             this._showToast(this._errorsFor('exception'), 'error');
             return;
         }
-        const type = this._val('exc-type');
-        const msg = this._val('exc-msg');
+        this._ensureForm();
+        const type = this._form.exception.type;
+        const msg = this._form.exception.message;
         this.jsonRpc.setExceptionConfig({type, message: msg}).then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
@@ -592,13 +634,23 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _validateException() {
-        const type = (this._val('exc-type') || '').trim();
+        this._ensureForm();
+        this._form.exception.type = this._val('exc-type') || '';
+        const type = this._form.exception.type.trim();
         const ok = type.length > 0;
         this._validate('exception', ok, 'Exception class must not be empty');
         this._markDirty('exception');
     }
 
+    _inputExceptionMessage() {
+        this._ensureForm();
+        this._form.exception.message = this._val('exc-msg') || '';
+        this._markDirty('exception');
+    }
+
     _pickException(type) {
+        this._ensureForm();
+        this._form.exception.type = type;
         this.shadowRoot.getElementById('exc-type').value = type;
         this._validateException();
     }
@@ -608,8 +660,9 @@ export class QwcGoblinDashboard extends LitElement {
             this._showToast(this._errorsFor('httpStatus'), 'error');
             return;
         }
-        const code = parseInt(this._val('http-code'));
-        const msg = this._val('http-msg');
+        this._ensureForm();
+        const code = parseInt(this._form.httpStatus.code);
+        const msg = this._form.httpStatus.message;
         this.jsonRpc.setHttpStatusConfig({code, message: msg}).then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
@@ -619,14 +672,24 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _validateHttpStatus() {
-        const code = parseInt(this._val('http-code'));
+        this._ensureForm();
+        this._form.httpStatus.code = this._val('http-code') || '';
+        const code = parseInt(this._form.httpStatus.code);
         const ok = !isNaN(code) && code >= 100 && code <= 599;
         this._validate('httpStatus', ok, 'Status code must be between 100 and 599');
         this._markDirty('httpStatus');
     }
 
+    _inputHttpMessage() {
+        this._ensureForm();
+        this._form.httpStatus.message = this._val('http-msg') || '';
+        this._markDirty('httpStatus');
+    }
+
     _pickHttpCode(code) {
-        this.shadowRoot.getElementById('http-code').value = code;
+        this._ensureForm();
+        this._form.httpStatus.code = String(code);
+        this.shadowRoot.getElementById('http-code').value = String(code);
         this._validateHttpStatus();
     }
 
@@ -635,8 +698,9 @@ export class QwcGoblinDashboard extends LitElement {
             this._showToast(this._errorsFor('body'), 'error');
             return;
         }
-        const mode = this._val('body-mode');
-        const percentage = parseInt(this._val('body-pct'));
+        this._ensureForm();
+        const mode = this._form.body.mode;
+        const percentage = parseInt(this._form.body.pct);
         this.jsonRpc.setResponseBodyConfig({mode, percentage}).then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
@@ -648,8 +712,11 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _validateBody() {
-        const mode = this._val('body-mode');
-        const percentage = parseInt(this._val('body-pct'));
+        this._ensureForm();
+        this._form.body.mode = this._val('body-mode') || this._form.body.mode;
+        this._form.body.pct = this._val('body-pct') || '';
+        const mode = this._form.body.mode;
+        const percentage = parseInt(this._form.body.pct);
         const bounds = mode === 'INFLATE' ? [101, 1000] : [0, 100];
         const ok = !isNaN(percentage) && percentage >= bounds[0] && percentage <= bounds[1];
         this._validate('body', ok, `Percentage must be ${bounds[0]}-${bounds[1]} for ${mode}`);
@@ -883,7 +950,8 @@ export class QwcGoblinDashboard extends LitElement {
                 <span class="status-sep">|</span>
                 <div class="status-level">
                     <label>Level</label>
-                    <input type="number" id="target-level" .value="${c ? c.level : s.level}" min="0" max="100"
+                    <input type="number" id="target-level"
+                           .value="${this._form ? this._form.level : (c ? c.level : s.level)}" min="0" max="100"
                            @input="${this._validateLevel}">
                     <button class="toggle-btn" @click="${this._saveLevel}"
                             ?disabled="${!this._dirtyFor('level') || this._errorsFor('level')}">Save</button>
@@ -914,7 +982,7 @@ export class QwcGoblinDashboard extends LitElement {
             <div class="status-section">
                 <div class="auto-off">
                     <span>Auto-off</span>
-                    <select id="auto-off-minutes" ?disabled="${!this._autoOffDeadline}">
+                    <select id="auto-off-minutes" ?disabled="${!!this._autoOffDeadline}">
                         <option value="5">5 min</option>
                         <option value="10">10 min</option>
                         <option value="30">30 min</option>
@@ -978,11 +1046,13 @@ export class QwcGoblinDashboard extends LitElement {
                     ${c.latencyEnabled ? html`
                     <div class="form-row">
                         <label>Min</label>
-                        <input type="number" id="lat-min" .value="${c.latency.minMilliseconds}" min="0"
-                               @input="${this._validateLatency}">
+                        <input type="number" id="lat-min"
+                               .value="${this._form ? this._form.latency.min : c.latency.minMilliseconds}"
+                               min="0" @input="${this._validateLatency}">
                         <label>Max</label>
-                        <input type="number" id="lat-max" .value="${c.latency.maxMilliseconds}" min="0"
-                               @input="${this._validateLatency}">
+                        <input type="number" id="lat-max"
+                               .value="${this._form ? this._form.latency.max : c.latency.maxMilliseconds}"
+                               min="0" @input="${this._validateLatency}">
                         <button class="save-btn" @click="${this._saveLatency}"
                                 ?disabled="${!this._dirtyFor('latency') || this._errorsFor('latency')}">Save</button>
                     </div>
@@ -1018,12 +1088,16 @@ export class QwcGoblinDashboard extends LitElement {
                     </div>
                     <div class="form-row">
                         <label>Class</label>
-                        <input type="text" id="exc-type" .value="${c.exception.type}" @input="${this._validateException}">
+                        <input type="text" id="exc-type"
+                               .value="${this._form ? this._form.exception.type : c.exception.type}"
+                               @input="${this._validateException}">
                     </div>
                     ${this._errorsFor('exception') ? html`<div class="field-error">${this._errorsFor('exception')}</div>` : ''}
                     <div class="form-row">
                         <label>Message</label>
-                        <input type="text" id="exc-msg" .value="${c.exception.message}">
+                        <input type="text" id="exc-msg"
+                               .value="${this._form ? this._form.exception.message : c.exception.message}"
+                               @input="${this._inputExceptionMessage}">
                     </div>
                     <button class="save-btn" @click="${this._saveException}"
                             ?disabled="${!this._dirtyFor('exception') || this._errorsFor('exception')}">Save</button>` : html`
@@ -1055,13 +1129,16 @@ export class QwcGoblinDashboard extends LitElement {
                     </div>
                     <div class="form-row">
                         <label>Code</label>
-                        <input type="number" id="http-code" .value="${c.httpStatus.code}" min="100" max="599"
-                               @input="${this._validateHttpStatus}">
+                        <input type="number" id="http-code"
+                               .value="${this._form ? this._form.httpStatus.code : c.httpStatus.code}"
+                               min="100" max="599" @input="${this._validateHttpStatus}">
                     </div>
                     ${this._errorsFor('httpStatus') ? html`<div class="field-error">${this._errorsFor('httpStatus')}</div>` : ''}
                     <div class="form-row">
                         <label>Message</label>
-                        <input type="text" id="http-msg" .value="${c.httpStatus.message}">
+                        <input type="text" id="http-msg"
+                               .value="${this._form ? this._form.httpStatus.message : c.httpStatus.message}"
+                               @input="${this._inputHttpMessage}">
                     </div>
                     <button class="save-btn" @click="${this._saveHttpStatus}"
                             ?disabled="${!this._dirtyFor('httpStatus') || this._errorsFor('httpStatus')}">Save</button>`
@@ -1109,15 +1186,15 @@ export class QwcGoblinDashboard extends LitElement {
                     <div class="form-row">
                         <label>Mode</label>
                         <select id="body-mode" @change="${this._bodyModeChanged}">
-                            <option value="TRUNCATE" ?selected="${c.body.mode === 'TRUNCATE'}">Truncate</option>
-                            <option value="INFLATE" ?selected="${c.body.mode === 'INFLATE'}">Inflate</option>
+                            <option value="TRUNCATE" ?selected="${this._form.body.mode === 'TRUNCATE'}">Truncate</option>
+                            <option value="INFLATE" ?selected="${this._form.body.mode === 'INFLATE'}">Inflate</option>
                         </select>
                     </div>
                     <div class="form-row">
                         <label>Percentage %</label>
-                        <input type="number" id="body-pct" .value="${c.body.percentage}"
-                               min="${c.body.mode === 'INFLATE' ? 101 : 0}"
-                               max="${c.body.mode === 'INFLATE' ? 1000 : 100}"
+                        <input type="number" id="body-pct" .value="${this._form.body.pct}"
+                               min="${this._form.body.mode === 'INFLATE' ? 101 : 0}"
+                               max="${this._form.body.mode === 'INFLATE' ? 1000 : 100}"
                                @input="${this._validateBody}">
                         <button class="save-btn" @click="${this._saveBody}"
                                 ?disabled="${!this._dirtyFor('body') || this._errorsFor('body')}">Save</button>
