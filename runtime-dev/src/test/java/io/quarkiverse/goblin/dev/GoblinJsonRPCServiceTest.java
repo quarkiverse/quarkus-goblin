@@ -133,6 +133,82 @@ class GoblinJsonRPCServiceTest {
     }
 
     /**
+     * The config and status payloads must expose the response body assault toggle and parameters.
+     */
+    @Test
+    void responseBodyExposedInConfigAndStatus() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject config = service.getConfig();
+        assertTrue(config.containsKey("responseBodyEnabled"));
+        JsonObject body = config.getJsonObject("body");
+        assertNotNull(body);
+        assertEquals("TRUNCATE", body.getString("mode"));
+        assertEquals(50, body.getInteger("percentage"));
+
+        JsonObject status = service.getStatus();
+        assertTrue(status.containsKey("responseBodyEnabled"));
+    }
+
+    /**
+     * {@code toggleResponseBody} flips the response body toggle and reports the new value.
+     */
+    @Test
+    void toggleResponseBodyFlipsValue() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.toggleResponseBody();
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseBodyEnabled"));
+
+        JsonObject again = service.toggleResponseBody();
+        assertFalse(again.getBoolean("responseBodyEnabled"));
+    }
+
+    /**
+     * {@code setResponseBodyConfig} applies the mode and percentage and reports them back.
+     */
+    @Test
+    void setResponseBodyConfigAppliesValues() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseBodyConfig("inflate", 175);
+
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("INFLATE", result.getString("mode"));
+        assertEquals(175, result.getInteger("percentage"));
+        assertFalse(service.getConfig().getBoolean("responseBodyEnabled"), "config does not enable the toggle");
+    }
+
+    /**
+     * {@code setResponseBodyConfig} rejects an unknown mode with a stable error object.
+     */
+    @Test
+    void setResponseBodyConfigRejectsUnknownMode() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseBodyConfig("SHRINK", 50);
+
+        assertFalse(result.getBoolean("ok"));
+        assertNotNull(result.getString("error"));
+    }
+
+    /**
+     * {@code setResponseBodyConfig} clamps an invalid percentage and surfaces a warning.
+     */
+    @Test
+    void setResponseBodyConfigWarnsWhenPercentageClamped() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseBodyConfig("TRUNCATE", 250);
+
+        assertTrue(result.getBoolean("ok"));
+        assertEquals(100, result.getInteger("percentage"));
+        assertTrue(result.containsKey("warning"));
+    }
+
+    /**
      * Injects a {@link MutableAssaultConfig} into the engine's private field so the service can be exercised without a
      * full CDI/Quarkus runtime.
      *

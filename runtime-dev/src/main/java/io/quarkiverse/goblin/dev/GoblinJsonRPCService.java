@@ -12,6 +12,7 @@ import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.ResponseBodyMode;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
@@ -39,6 +40,7 @@ public class GoblinJsonRPCService {
                 .put("dependencyDegradationEnabled", cfg != null && cfg.isDependencyDegradationEnabled())
                 .put("clientLatencyEnabled", cfg != null && cfg.isClientLatencyEnabled())
                 .put("clientExceptionEnabled", cfg != null && cfg.isClientExceptionEnabled())
+                .put("responseBodyEnabled", cfg != null && cfg.isResponseBodyEnabled())
                 .put("level", cfg != null ? cfg.getTargetLevel() : 100);
     }
 
@@ -102,6 +104,10 @@ public class GoblinJsonRPCService {
                 .put("code", cfg.getHttpStatusCode())
                 .put("message", cfg.getHttpStatusMessage());
 
+        JsonObject body = new JsonObject()
+                .put("mode", cfg.getResponseBodyMode().name())
+                .put("percentage", cfg.getResponseBodyPercentage());
+
         return new JsonObject()
                 .put("profile", cfg.getProfile().name())
                 .put("latencyEnabled", cfg.isLatencyEnabled())
@@ -110,9 +116,11 @@ public class GoblinJsonRPCService {
                 .put("dependencyDegradationEnabled", cfg.isDependencyDegradationEnabled())
                 .put("clientLatencyEnabled", cfg.isClientLatencyEnabled())
                 .put("clientExceptionEnabled", cfg.isClientExceptionEnabled())
+                .put("responseBodyEnabled", cfg.isResponseBodyEnabled())
                 .put("latency", latency)
                 .put("exception", exception)
                 .put("httpStatus", httpStatus)
+                .put("body", body)
                 .put("level", cfg.getTargetLevel());
     }
 
@@ -216,6 +224,72 @@ public class GoblinJsonRPCService {
         return new JsonObject()
                 .put("ok", true)
                 .put("clientExceptionEnabled", cfg.isClientExceptionEnabled());
+    }
+
+    /**
+     * Toggles the response body assault, which truncates or inflates the entity returned by eligible endpoints.
+     *
+     * @return a JSON object with the {@code ok} flag and the new {@code responseBodyEnabled} toggle value
+     */
+    public JsonObject toggleResponseBody() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseBodyEnabled(!cfg.isResponseBodyEnabled());
+        LOG.warnf("Goblin response body %s via Dev UI", cfg.isResponseBodyEnabled() ? "ENABLED" : "DISABLED");
+        return new JsonObject()
+                .put("ok", true)
+                .put("responseBodyEnabled", cfg.isResponseBodyEnabled());
+    }
+
+    /**
+     * Changes the response body transformation mode and target size at runtime via the Dev UI.
+     * <p>
+     * The mode is matched case-insensitively ({@code TRUNCATE} or {@code INFLATE}); invalid modes and percentages are
+     * rejected with a stable error object. The percentage is validated and clamped for the selected mode, with the
+     * corrective warning surfaced through the {@code warning} field.
+     *
+     * @param mode the transformation mode (case-insensitive)
+     * @param percentage the target size in percent of the original body
+     * @return a JSON object with the {@code ok} flag, the effective {@code mode}/{@code percentage}, and any clamping
+     *         {@code warning}
+     */
+    public JsonObject setResponseBodyConfig(String mode, int percentage) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        ResponseBodyMode parsed = parseBodyMode(mode);
+        if (parsed == null) {
+            return new JsonObject().put("ok", false)
+                    .put("error", "Unknown response body mode '" + mode + "'. Valid values: TRUNCATE, INFLATE");
+        }
+        String previous = cfg.getResponseBodyMode().name();
+        int previousPercentage = cfg.getResponseBodyPercentage();
+        cfg.setResponseBodyMode(parsed);
+        List<String> issues = cfg.setResponseBodyPercentage(percentage);
+        LOG.warnf("Goblin response body changed: %s %d%% -> %s %d%%", previous, previousPercentage,
+                cfg.getResponseBodyMode(), cfg.getResponseBodyPercentage());
+        return new JsonObject()
+                .put("ok", true)
+                .put("mode", cfg.getResponseBodyMode().name())
+                .put("percentage", cfg.getResponseBodyPercentage())
+                .put("warning", toWarning(issues));
+    }
+
+    /**
+     * Converts a raw response body mode string to its {@link ResponseBodyMode} constant, tolerating case and
+     * surrounding whitespace.
+     *
+     * @param mode the raw string (may be {@code null} or blank)
+     * @return the matching {@link ResponseBodyMode}, or {@code null} when blank or unknown
+     */
+    private static ResponseBodyMode parseBodyMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return null;
+        }
+        String normalized = mode.trim().toUpperCase();
+        for (ResponseBodyMode candidate : ResponseBodyMode.values()) {
+            if (candidate.name().equals(normalized)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     public JsonObject setLatencyRange(long minMs, long maxMs) {

@@ -38,8 +38,8 @@ public interface GoblinConfig {
     interface AssaultConfig {
 
         /**
-         * The type of assault to apply. Valid values: LATENCY, EXCEPTION, HTTP_STATUS, DEPENDENCY_DEGRADATION.
-         * Ignored when a non-{@code NONE} profile is selected.
+         * The type of assault to apply. Valid values: LATENCY, EXCEPTION, HTTP_STATUS, DEPENDENCY_DEGRADATION,
+         * RESPONSE_BODY. Ignored when a non-{@code NONE} profile is selected.
          */
         @WithDefault("LATENCY")
         AssaultType type();
@@ -51,6 +51,11 @@ public interface GoblinConfig {
          */
         @WithDefault("NONE")
         AssaultProfile profile();
+
+        /**
+         * Response body assault configuration (only used when type=RESPONSE_BODY).
+         */
+        BodyConfig body();
 
         /**
          * Latency configuration (only used when type=LATENCY).
@@ -66,6 +71,27 @@ public interface GoblinConfig {
          * HTTP status configuration (only used when type=HTTP_STATUS).
          */
         HttpStatusConfig httpStatus();
+    }
+
+    /**
+     * Response body assault configuration.
+     */
+    @ConfigGroup
+    interface BodyConfig {
+
+        /**
+         * Transformation applied to the response body: {@code TRUNCATE} cuts the body, {@code INFLATE} pads it.
+         */
+        @WithDefault("TRUNCATE")
+        ResponseBodyMode mode();
+
+        /**
+         * Target size of the transformed body relative to the original, in percent. For {@code TRUNCATE} it is the
+         * fraction of the body that is kept (0-100). For {@code INFLATE} it is the final size (values above 100 add
+         * padding; values at or below 100 are raised to 101 with a WARN log).
+         */
+        @WithDefault("50")
+        int percentage();
     }
 
     /**

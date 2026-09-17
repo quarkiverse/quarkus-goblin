@@ -64,6 +64,107 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
             throws IOException {
+        if (!engine.isActive() || !engine.shouldAssault()) {
+            return;
+        }
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null || !cfg.isResponseBodyEnabled()) {
+            return;
+        }
+        if (!isTargetEligible()) {
+            return;
+        }
+        byte[] body = toBytes(responseContext.getEntity());
+        if (body == null) {
+            return;
+        }
+        int declaredLength = declaredLength(responseContext, body);
+        byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
+                cfg.getResponseBodyPercentage());
+        setEntity(responseContext, transformed);
+        applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
+        int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
+        LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
+                cfg.getResponseBodyMode().name().toLowerCase(), describeMethod(), declared, transformed.length);
+        engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
+    }
+
+    /**
+     * Returns the length advertised for the original body: the existing {@code Content-Length} header when present and
+     * parseable, otherwise the length of the entity bytes.
+     *
+     * @param responseContext the response context
+     * @param body the original entity bytes
+     * @return the declared body length in bytes
+     */
+    private static int declaredLength(ContainerResponseContext responseContext, byte[] body) {
+        String header = responseContext.getHeaderString("Content-Length");
+        if (header != null) {
+            try {
+                return Integer.parseInt(header.trim());
+            } catch (NumberFormatException ignored) {
+                // fall through to the entity length
+            }
+        }
+        return body.length;
+    }
+
+    /**
+     * Defines the explicit {@code Content-Length} behavior of the assault.
+     * <p>
+     * {@link ResponseBodyMode#TRUNCATE} keeps the response well-framed: the declared length is updated to match the
+     * truncated payload, and the corruption is purely at the content level (a client parsing the payload fails).
+     * {@link ResponseBodyMode#INFLATE} deliberately advertises the <em>original</em>, smaller length while the emitted
+     * payload is larger, so the declared {@code Content-Length} and the actual bytes on the wire diverge -- exactly the
+     * condition length-validating proxies and clients must handle.
+     *
+     * @param responseContext the response context
+     * @param mode the active transformation mode
+     * @param originalLength the length advertised before the transformation
+     * @param transformedLength the length of the transformed payload
+     */
+    private static void applyContentLength(ContainerResponseContext responseContext, ResponseBodyMode mode,
+            int originalLength, int transformedLength) {
+        int declared = mode == ResponseBodyMode.INFLATE ? originalLength : transformedLength;
+        responseContext.getHeaders().putSingle("Content-Length", Integer.toString(declared));
+    }
+
+    /**
+     * Extracts the response entity as raw bytes when it is a bufferable type ({@link String}, {@code byte[]} or
+     * {@link CharSequence}); streaming or resource backed entities are left untouched.
+     *
+     * @param entity the response entity
+     * @return the UTF-8 bytes of the entity, or {@code null} when the entity type is not supported
+     */
+    private static byte[] toBytes(Object entity) {
+        if (entity == null) {
+            return null;
+        }
+        if (entity instanceof byte[] bytes) {
+            return bytes;
+        }
+        if (entity instanceof String text) {
+            return text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        }
+        if (entity instanceof CharSequence sequence) {
+            return sequence.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return null;
+    }
+
+    /**
+     * Replaces the response entity with the transformed payload, keeping the original media type.
+     * <p>
+     * The transformed value is always exposed as a {@code byte[]} so the exact bytes produced by
+     * {@link ResponseBodyTransformer} reach the wire unchanged. Rebuilding a {@link String} would let the UTF-8
+     * encoder replace a truncated multibyte character with a replacement character and change the byte length, making
+     * the configured percentage unreliable for non-ASCII payloads.
+     *
+     * @param responseContext the response context to update
+     * @param bytes the transformed payload
+     */
+    private static void setEntity(ContainerResponseContext responseContext, byte[] bytes) {
+        responseContext.setEntity(bytes, null, responseContext.getMediaType());
     }
 
     private boolean isTargetEligible() {

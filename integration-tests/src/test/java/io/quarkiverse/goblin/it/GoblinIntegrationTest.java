@@ -33,6 +33,7 @@ public class GoblinIntegrationTest {
         cfg.setDependencyDegradationEnabled(false);
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
+        cfg.setResponseBodyEnabled(false);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);
@@ -256,6 +257,88 @@ public class GoblinIntegrationTest {
                 .then()
                 .statusCode(200)
                 .body(equalTo("hello from Goblin test app"));
+    }
+
+    // ==================== Response body assault ====================
+
+    @Test
+    public void testResponseBodyTruncateToFiftyPercent() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseBodyEnabled(true);
+        cfg.setResponseBodyMode(io.quarkiverse.goblin.ResponseBodyMode.TRUNCATE);
+        cfg.setResponseBodyPercentage(50);
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("Content-Length", "13")
+                .body(equalTo("hello from Go"));
+    }
+
+    @Test
+    public void testResponseBodyInflateAdvertisesShorterLengthThanEmitted() throws Exception {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseBodyEnabled(true);
+        cfg.setResponseBodyMode(io.quarkiverse.goblin.ResponseBodyMode.INFLATE);
+        cfg.setResponseBodyPercentage(200);
+
+        RawResponse response = rawGet("/api/hello");
+
+        assertEquals("26", response.headers().get("content-length"),
+                "INFLATE must advertise the original, smaller length");
+        assertEquals(52, response.body().length,
+                "the emitted payload must be larger than the advertised Content-Length");
+        String body = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(body.startsWith("hello from Goblin test app"));
+        assertTrue(body.contains("[goblin-response-inflated]"));
+    }
+
+    @Test
+    public void testResponseBodyOffLeavesBodyUntouched() {
+        engine.setActive(true);
+
+        String body = RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .extract().asString();
+
+        assertEquals("hello from Goblin test app", body);
+    }
+
+    /**
+     * Sends a raw HTTP/1.1 request with {@code Connection: close} and reads every emitted byte until the server closes
+     * the connection. This reads the payload independently of its advertised {@code Content-Length}, which is required
+     * to observe the deliberate header/payload mismatch produced by {@link io.quarkiverse.goblin.ResponseBodyMode#INFLATE}.
+     *
+     * @param path the request path
+     * @return the parsed response headers (lower-cased names) and the raw body bytes
+     */
+    private RawResponse rawGet(String path) throws Exception {
+        try (java.net.Socket socket = new java.net.Socket("localhost", 8081)) {
+            socket.setSoTimeout(2000);
+            String request = "GET " + path + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+            socket.getOutputStream().write(request.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            byte[] raw = socket.getInputStream().readAllBytes();
+            String text = new String(raw, java.nio.charset.StandardCharsets.ISO_8859_1);
+            int separator = text.indexOf("\r\n\r\n");
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            for (String line : text.substring(0, separator).split("\r\n")) {
+                int colon = line.indexOf(':');
+                if (colon > 0) {
+                    headers.put(line.substring(0, colon).trim().toLowerCase(java.util.Locale.ROOT),
+                            line.substring(colon + 1).trim());
+                }
+            }
+            return new RawResponse(headers, java.util.Arrays.copyOfRange(raw, separator + 4, raw.length));
+        }
+    }
+
+    private record RawResponse(java.util.Map<String, String> headers, byte[] body) {
     }
 
     // ==================== History ====================

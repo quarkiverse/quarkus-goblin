@@ -194,6 +194,8 @@ export class QwcGoblinHistory extends LitElement {
         .type-badge.exception { background: var(--lumo-error-color-10pct); color: var(--lumo-error-color); }
         .type-badge.http-status { background: var(--lumo-warning-color-10pct); color: var(--lumo-warning-color); }
         .type-badge.dependency-degradation { background: var(--lumo-success-color-10pct); color: var(--lumo-success-color); }
+        .type-badge.response-body-truncate { background: var(--lumo-primary-color-50pct); color: var(--lumo-contrast-color); }
+        .type-badge.response-body-inflate { background: var(--lumo-success-color-50pct); color: var(--lumo-contrast-color); }
         .method-cell {
             font-family: var(--lumo-font-family-mono);
             font-size: 12px;
@@ -229,6 +231,8 @@ export class QwcGoblinHistory extends LitElement {
         exception: 'Exception',
         'http-status': 'HTTP Status',
         'dependency-degradation': 'Dependency',
+        'response-body-truncate': 'Truncate',
+        'response-body-inflate': 'Inflate',
     };
 
     static properties = {
@@ -342,7 +346,7 @@ export class QwcGoblinHistory extends LitElement {
         }[this._rangeFilter] || 0;
         const now = Date.now();
         return this._history.filter(r => {
-            if (type !== 'all' && r.type !== type) {
+            if (type !== 'all' && !this._matchesType(r, type)) {
                 return false;
             }
             if (method && !(r.method || '').toLowerCase().includes(method)) {
@@ -355,12 +359,20 @@ export class QwcGoblinHistory extends LitElement {
         });
     }
 
+    _matchesType(record, type) {
+        if (type === 'response-body') {
+            return record.type.startsWith('response-body-');
+        }
+        return record.type === type;
+    }
+
     _getRows() {
         return this._filtered().slice().sort((a, b) => b.timestamp - a.timestamp);
     }
 
     _summary() {
-        const counts = {latency: 0, exception: 0, 'http-status': 0, 'dependency-degradation': 0};
+        const counts = {latency: 0, exception: 0, 'http-status': 0, 'dependency-degradation': 0,
+            'response-body-truncate': 0, 'response-body-inflate': 0};
         let latencySum = 0;
         let latencyCount = 0;
         for (const r of this._history) {
@@ -378,6 +390,7 @@ export class QwcGoblinHistory extends LitElement {
             exception: counts.exception,
             httpStatus: counts['http-status'],
             dependency: counts['dependency-degradation'],
+            responseBody: counts['response-body-truncate'] + counts['response-body-inflate'],
             avgLatency: latencyCount > 0 ? Math.round(latencySum / latencyCount) : 0,
         };
     }
@@ -447,6 +460,7 @@ export class QwcGoblinHistory extends LitElement {
                 <span class="sum-item">Exception: <b>${s.exception}</b></span>
                 <span class="sum-item">HTTP Status: <b>${s.httpStatus}</b></span>
                 <span class="sum-item">Dependency: <b>${s.dependency}</b></span>
+                <span class="sum-item">Response Body: <b>${s.responseBody}</b></span>
                 <span class="sum-item">Avg latency: <b>${s.avgLatency} ms</b></span>
             </div>
 
@@ -458,6 +472,7 @@ export class QwcGoblinHistory extends LitElement {
                     <option value="exception">Exception</option>
                     <option value="http-status">HTTP Status</option>
                     <option value="dependency-degradation">Dependency</option>
+                    <option value="response-body">Response Body</option>
                 </select>
                 <label>Method</label>
                 <input type="text" placeholder="Search method…" .value="${this._methodFilter}"

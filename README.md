@@ -19,6 +19,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Exception injection** -- Throw configurable exceptions before method execution
 - **HTTP status forcing** -- Return specific HTTP status codes (503, 500, etc.)
 - **Dependency degradation** -- Simulate downstream service failures
+- **Response body injection** -- Truncate or inflate the response entity (`TRUNCATE` keeps the first N%, `INFLATE` pads it) to break strict JSON clients and length-validating consumers
 - **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`)
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
@@ -73,6 +74,10 @@ quarkus.goblin.assault.exception.message=Goblin chaos: simulated exception
 quarkus.goblin.assault.http-status.code=503
 quarkus.goblin.assault.http-status.message=Service Unavailable (Goblin chaos)
 
+# Response body settings
+quarkus.goblin.assault.body.mode=truncate
+quarkus.goblin.assault.body.percentage=50
+
 # Target level (0-100% of requests affected)
 quarkus.goblin.target.level=100
 
@@ -90,13 +95,14 @@ The Chaos Dashboard provides:
 
 - **Master toggle** -- Activate/deactivate all chaos
 - **Profile selector** -- Switch a whole assault setup (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) in one click; individual toggles stay overridable
-- **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation
+- **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation, Response Body
+- **Client-side assault toggles** -- `client latency` and `client exception` for outgoing REST Client calls
 - **Config sections** -- Edit parameters per type (disabled with placeholders when type is off)
 - **Target level** -- Adjust percentage of affected requests
 - **History** -- Live chaos-testing console: 2-second auto-refresh, newest-first ordering, filters (assault type, method, time period), a summary band with totals and average injected latency, and expandable Active Config cells
 - **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history (copy or download it), handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
 
-All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback -- inverted latency ranges are swapped, out-of-range HTTP status codes (100-599) fall back to 503, unknown exception classes fall back to `RuntimeException`, and the target level is clamped to 0-100. In the dashboard, a warning toast explains the applied correction.
+All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback -- inverted latency ranges are swapped, out-of-range HTTP status codes (100-599) fall back to 503, unknown exception classes fall back to `RuntimeException`, the response body percentage is clamped to its mode's valid range (0-100 for `TRUNCATE`, 101-1000 for `INFLATE`), and the target level is clamped to 0-100. In the dashboard, a warning toast explains the applied correction.
 
 ## Safety
 

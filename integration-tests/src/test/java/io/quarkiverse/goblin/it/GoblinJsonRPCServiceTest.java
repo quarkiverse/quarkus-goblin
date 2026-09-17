@@ -34,6 +34,7 @@ public class GoblinJsonRPCServiceTest {
         cfg.setDependencyDegradationEnabled(false);
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
+        cfg.setResponseBodyEnabled(false);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);
@@ -51,6 +52,9 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(status.containsKey("exceptionEnabled"));
         assertTrue(status.containsKey("httpStatusEnabled"));
         assertTrue(status.containsKey("dependencyDegradationEnabled"));
+        assertTrue(status.containsKey("clientLatencyEnabled"));
+        assertTrue(status.containsKey("clientExceptionEnabled"));
+        assertTrue(status.containsKey("responseBodyEnabled"));
         assertTrue(status.containsKey("level"));
     }
 
@@ -219,12 +223,72 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(config.containsKey("latency"));
         assertTrue(config.containsKey("exception"));
         assertTrue(config.containsKey("httpStatus"));
+        assertTrue(config.containsKey("body"));
         assertTrue(config.containsKey("level"));
 
         JsonObject latency = config.getJsonObject("latency");
         assertNotNull(latency);
         assertTrue(latency.containsKey("minMilliseconds"));
         assertTrue(latency.containsKey("maxMilliseconds"));
+
+        JsonObject body = config.getJsonObject("body");
+        assertNotNull(body);
+        assertTrue(body.containsKey("mode"));
+        assertTrue(body.containsKey("percentage"));
+    }
+
+    // ==================== response body assault ====================
+
+    @Test
+    public void testToggleResponseBody() {
+        assertFalse(engine.getMutableConfig().isResponseBodyEnabled());
+
+        JsonObject result = jsonRpc.toggleResponseBody();
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseBodyEnabled"));
+        assertTrue(engine.getMutableConfig().isResponseBodyEnabled());
+
+        result = jsonRpc.toggleResponseBody();
+        assertFalse(result.getBoolean("responseBodyEnabled"));
+        assertFalse(engine.getMutableConfig().isResponseBodyEnabled());
+    }
+
+    @Test
+    public void testSetResponseBodyConfig() {
+        JsonObject result = jsonRpc.setResponseBodyConfig("inflate", 150);
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("INFLATE", result.getString("mode"));
+        assertEquals(150, result.getInteger("percentage"));
+        assertEquals(io.quarkiverse.goblin.ResponseBodyMode.INFLATE,
+                engine.getMutableConfig().getResponseBodyMode());
+        assertEquals(150, engine.getMutableConfig().getResponseBodyPercentage());
+    }
+
+    @Test
+    public void testSetResponseBodyConfigUnknownMode() {
+        JsonObject result = jsonRpc.setResponseBodyConfig("SHRINK", 50);
+        assertFalse(result.getBoolean("ok"));
+        assertNotNull(result.getString("error"));
+    }
+
+    @Test
+    public void testSetResponseBodyPercentageClampedWithWarning() {
+        JsonObject result = jsonRpc.setResponseBodyConfig("TRUNCATE", 250);
+        assertTrue(result.getBoolean("ok"));
+        assertEquals(100, result.getInteger("percentage"));
+        assertTrue(result.getString("warning").contains("Clamping"));
+    }
+
+    @Test
+    public void testResponseBodyConfigEndToEnd() {
+        jsonRpc.toggleResponseBody();
+        jsonRpc.setResponseBodyConfig("TRUNCATE", 50);
+
+        io.restassured.RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .body(org.hamcrest.Matchers.equalTo("hello from Go"));
     }
 
     // ==================== AssaultType enum ====================
@@ -232,11 +296,12 @@ public class GoblinJsonRPCServiceTest {
     @Test
     public void testAssaultTypeEnumValues() {
         AssaultType[] types = AssaultType.values();
-        assertEquals(4, types.length);
+        assertEquals(5, types.length);
         assertEquals(AssaultType.LATENCY, AssaultType.valueOf("LATENCY"));
         assertEquals(AssaultType.EXCEPTION, AssaultType.valueOf("EXCEPTION"));
         assertEquals(AssaultType.HTTP_STATUS, AssaultType.valueOf("HTTP_STATUS"));
         assertEquals(AssaultType.DEPENDENCY_DEGRADATION, AssaultType.valueOf("DEPENDENCY_DEGRADATION"));
+        assertEquals(AssaultType.RESPONSE_BODY, AssaultType.valueOf("RESPONSE_BODY"));
     }
 
     // ==================== history ====================

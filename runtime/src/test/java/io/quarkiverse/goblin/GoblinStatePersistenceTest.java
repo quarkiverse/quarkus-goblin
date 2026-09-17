@@ -220,4 +220,30 @@ class GoblinStatePersistenceTest {
         MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
         assertFalse(config.isLatencyEnabled());
     }
+
+    @Test
+    void saveAndLoadPreservesResponseBodyConfig() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyMode(ResponseBodyMode.INFLATE);
+        config.setResponseBodyPercentage(200);
+
+        GoblinStatePersistence.save(config);
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertTrue(loaded.isResponseBodyEnabled());
+        assertEquals(ResponseBodyMode.INFLATE, loaded.getResponseBodyMode());
+        assertEquals(200, loaded.getResponseBodyPercentage());
+    }
+
+    @Test
+    void fromJsonRestoresResponseBodyFieldsWithDefaults() {
+        String json = "{\"responseBodyEnabled\": true, \"responseBodyMode\": \"inflate\", \"responseBodyPercentage\": 180}";
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson(json);
+
+        assertTrue(config.isResponseBodyEnabled());
+        assertEquals(ResponseBodyMode.INFLATE, config.getResponseBodyMode());
+        assertEquals(180, config.getResponseBodyPercentage());
+    }
 }
