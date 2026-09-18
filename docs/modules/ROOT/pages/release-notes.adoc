@@ -2,6 +2,31 @@
 
 include::../partials/attributes.adoc[]
 
+[[version-0-2]]
+== 0.2.x
+
+[cols="1,1"]
+|===
+|Version |Date
+
+|0.2.0
+|TBD
+|===
+
+In development.
+
+=== New Features
+
+* Predefined assault profiles (https://github.com/quarkiverse/quarkus-goblin/pull/35[#35]).
+* Turn the Assault History into a chaos testing console (https://github.com/quarkiverse/quarkus-goblin/pull/37[#37]).
+* Client-side assaults for outgoing REST Client calls (https://github.com/quarkiverse/quarkus-goblin/pull/38[#38]).
+* Response body injection assault (https://github.com/quarkiverse/quarkus-goblin/pull/40[#40]).
+* Chaos Dashboard overhaul with live controls and server-driven quick picks (https://github.com/quarkiverse/quarkus-goblin/pull/41[#41]).
+
+=== Improvements
+
+* The enabled flag now always comes from the property, never from persisted state (https://github.com/quarkiverse/quarkus-goblin/pull/39[#39]).
+
 [[version-0-1]]
 == 0.1.x
 
