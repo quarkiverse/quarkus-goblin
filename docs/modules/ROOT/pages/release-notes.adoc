@@ -1,0 +1,53 @@
+= Release Notes
+
+include::../partials/attributes.adoc[]
+
+[[version-0-1]]
+== 0.1.x
+
+[cols="1,1"]
+|===
+|Version |Date
+
+|0.1.0
+|2026-09-13
+|===
+
+=== New Features
+
+* Dev UI configuration persistence across restarts via `.goblin-state.json` (https://github.com/quarkiverse/quarkus-goblin/pull/22[#22]).
+* Assault parameter validation at startup and via the Dev UI (https://github.com/quarkiverse/quarkus-goblin/pull/24[#24]).
+* Thread-safe assault history (https://github.com/quarkiverse/quarkus-goblin/pull/23[#23]).
+* Extract per-assault-type classes into a dedicated `assault` package (https://github.com/quarkiverse/quarkus-goblin/pull/26[#26]).
+
+=== Improvements
+
+* Log a WARN when the configured exception class cannot be instantiated (https://github.com/quarkiverse/quarkus-goblin/pull/27[#27]).
+* Integration tests for package-based include/exclude targeting (https://github.com/quarkiverse/quarkus-goblin/pull/28[#28]).
+* Extension marked as preview status; minimum Java version aligned to 25 (https://github.com/quarkiverse/quarkus-goblin/pull/29[#29]).
+
+[[version-0-0]]
+== 0.0.x
+
+[cols="1,1"]
+|===
+|Version |Date
+
+|0.0.2
+|2026-09-01
+
+|0.0.1
+|2026-08-28
+|===
+
+=== New Features
+
+* Server-side assaults: latency, exception, HTTP status and dependency degradation (https://github.com/quarkiverse/quarkus-goblin/pull/1[#1]).
+* Dev UI dashboard with per-assault-type toggles (https://github.com/quarkiverse/quarkus-goblin/pull/10[#10]).
+* Factual markdown report export from the assault history (https://github.com/quarkiverse/quarkus-goblin/pull/13[#13]).
+* Adopt `-dev` naming for the dev-only extension modules (https://github.com/quarkiverse/quarkus-goblin/pull/14[#14]).
+
+=== Improvements
+
+* Migrate docs to the Antora structure for Quarkiverse publication (https://github.com/quarkiverse/quarkus-goblin/pull/6[#6]).
+* Add the Goblin icon to the extension list (https://github.com/quarkiverse/quarkus-goblin/pull/12[#12]).
