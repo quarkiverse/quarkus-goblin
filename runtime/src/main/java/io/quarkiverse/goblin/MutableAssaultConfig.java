@@ -363,6 +363,7 @@ public class MutableAssaultConfig {
             responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
             responseHeaders.put(name, new HeaderRule(action, safeValue));
         }
+        LOG.debugf("Goblin: response header rule stored: %s %s value='%s'", name, action, safeValue);
         notifyChange();
     }
 
@@ -403,6 +404,7 @@ public class MutableAssaultConfig {
             removed = responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
         }
         if (removed) {
+            LOG.debugf("Goblin: response header rule removed: %s", name);
             notifyChange();
         }
     }

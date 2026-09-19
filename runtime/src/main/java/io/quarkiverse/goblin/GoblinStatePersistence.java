@@ -272,6 +272,7 @@ public final class GoblinStatePersistence {
             }
             try {
                 config.setResponseHeader(name, action, value);
+                LOG.debugf("Goblin: restored response header rule '%s' %s value='%s' from state file", name, action, value);
             } catch (IllegalArgumentException e) {
                 LOG.warnf("Skipping invalid response header rule for '%s' in the state file: %s", name, e.getMessage());
             }

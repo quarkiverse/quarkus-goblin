@@ -288,20 +288,25 @@ public class GoblinJsonRPCService {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         ResponseHeaderAction parsed = parseHeaderAction(action);
         if (parsed == null) {
+            LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s' value='%s': unknown action", name,
+                    action, value);
             return new JsonObject().put("ok", false)
                     .put("error", "Unknown response header action '" + action + "'. Valid values: SET, REMOVE");
         }
         if (name == null || name.isBlank()) {
+            LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s': blank name", name, action);
             return new JsonObject().put("ok", false).put("error", "Response header name must not be blank");
         }
         String safeValue = value != null ? value : "";
         if (!MutableAssaultConfig.isValidResponseHeaderValue(safeValue)) {
+            LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s' value contains CR, LF or control "
+                    + "characters", name, action);
             return new JsonObject().put("ok", false)
                     .put("error", "Response header value must not contain CR, LF or control characters");
         }
         String trimmed = name.trim();
         cfg.setResponseHeader(trimmed, parsed, safeValue);
-        LOG.warnf("Goblin response header changed: %s %s", trimmed, parsed);
+        LOG.warnf("Goblin response header changed: %s %s value='%s'", trimmed, parsed, safeValue);
         return configJson(cfg)
                 .put("ok", true)
                 .put("name", trimmed)
@@ -534,7 +539,10 @@ public class GoblinJsonRPCService {
             return new JsonObject().put("ok", false).put("error", "Missing configuration payload");
         }
         List<String> issues = applyConfigTo(cfg, toJsonObject(config));
-        LOG.warnf("Goblin: configuration applied via Dev UI");
+        LOG.warnf("Goblin: configuration applied via Dev UI: fields=%s", new ArrayList<>(config.keySet()));
+        if (!issues.isEmpty()) {
+            LOG.warnf("Goblin: configuration applied with issues: %s", issues);
+        }
         return configJson(cfg).put("ok", true).put("warning", toWarning(issues));
     }
 
@@ -661,16 +669,20 @@ public class GoblinJsonRPCService {
             String name = entry.getKey();
             if (name == null || name.isBlank()) {
                 issues.add("Response header name must not be blank");
+                LOG.warnf("Goblin: skipping response header rule from applyConfig: blank name");
                 continue;
             }
             JsonObject rule = headers.getJsonObject(name);
             if (rule == null) {
                 issues.add("Response header '" + name + "' must carry an action and value");
+                LOG.warnf("Goblin: skipping response header rule '%s' from applyConfig: missing action/value object", name);
                 continue;
             }
             ResponseHeaderAction action = parseHeaderAction(rule.getString("action"));
             if (action == null) {
                 issues.add("Unknown response header action '" + rule.getString("action") + "' for header '" + name + "'");
+                LOG.warnf("Goblin: skipping response header rule '%s' from applyConfig: unknown action '%s'", name,
+                        rule.getString("action"));
                 continue;
             }
             String value = rule.getString("value");
@@ -678,9 +690,12 @@ public class GoblinJsonRPCService {
             if (!MutableAssaultConfig.isValidResponseHeaderValue(safeValue)) {
                 issues.add("Response header '" + name
                         + "' value contains characters that cannot be emitted in an HTTP header");
+                LOG.warnf("Goblin: skipping response header rule '%s' from applyConfig: value contains CR, LF or control "
+                        + "characters", name);
                 continue;
             }
             cfg.setResponseHeader(name, action, safeValue);
+            LOG.warnf("Goblin: response header rule applied via applyConfig: %s %s value='%s'", name, action, safeValue);
         }
     }
 
