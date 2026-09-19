@@ -167,7 +167,7 @@ Each header rule is configured under `quarkus.goblin.assault.headers.<header-nam
 * **`SET`** (default) -- forces the header to be present with the configured value: an existing value is **replaced**, and the header is **added** when the application did not emit it. Use it to inject a header the application never emits or to clobber an existing one.
 * **`REMOVE`** -- deletes the header when present. The configured `value` is ignored.
 
-The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Rules are matched by exact, case-sensitive header name. Blank header names are rejected; an invalid `action` falls back to `SET` with a `WARN` log.
+The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Blank header names are rejected; an invalid `action` falls back to `SET` with a `WARN` log.
 
 NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
 

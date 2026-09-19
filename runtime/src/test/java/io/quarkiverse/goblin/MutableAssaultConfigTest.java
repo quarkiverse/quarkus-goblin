@@ -499,6 +499,26 @@ class MutableAssaultConfigTest {
         assertEquals(200, config.getResponseBodyPercentage());
     }
 
+    @Test
+    void setResponseHeaderReplacesAnExistingRuleIgnoringCase() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "first");
+        config.setResponseHeader("x-goblin", ResponseHeaderAction.SET, "second");
+
+        assertEquals(1, config.getResponseHeaders().size(), "header names are case-insensitive");
+        assertEquals("second", config.getResponseHeaders().get("x-goblin").value());
+    }
+
+    @Test
+    void removeResponseHeaderIgnoresCase() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos");
+
+        config.removeResponseHeader("x-goblin");
+
+        assertTrue(config.getResponseHeaders().isEmpty());
+    }
+
     private static GoblinConfig configWith(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
             int targetLevel) {
         return configWithProfile(latencyMin, latencyMax, httpStatus, exceptionType, targetLevel, AssaultProfile.NONE);

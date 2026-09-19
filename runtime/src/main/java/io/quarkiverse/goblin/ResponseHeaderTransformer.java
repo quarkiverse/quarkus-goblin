@@ -1,5 +1,6 @@
 package io.quarkiverse.goblin;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 import jakarta.ws.rs.container.ContainerResponseContext;
@@ -14,6 +15,10 @@ import org.jboss.logging.Logger;
  * {@link ResponseHeaderAction}: {@code SET} forces the header to be present with the configured value (replacing any
  * existing value, or adding it when absent), and {@code REMOVE} deletes the header when present. Every applied rule is
  * recorded in the assault history with a type of the form {@code response-header-<action>:<headerName>}.
+ * <p>
+ * HTTP header names are case-insensitive, so existing headers are matched ignoring case: a {@code SET} replaces a
+ * header emitted with any casing (instead of adding a duplicate), and a {@code REMOVE} deletes it regardless of the
+ * casing the application used.
  */
 public final class ResponseHeaderTransformer {
 
@@ -38,17 +43,35 @@ public final class ResponseHeaderTransformer {
             MutableAssaultConfig.HeaderRule rule = entry.getValue();
             switch (rule.action()) {
                 case SET -> {
+                    removeIgnoringCase(headers, name);
                     headers.putSingle(name, rule.value());
                     record(engine, methodName, name, "set");
                 }
                 case REMOVE -> {
-                    if (responseContext.getHeaderString(name) != null) {
-                        headers.remove(name);
+                    if (removeIgnoringCase(headers, name)) {
                         record(engine, methodName, name, "remove");
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Removes every header whose name matches the given name ignoring case, returning whether at least one was found.
+     *
+     * @param headers the response headers
+     * @param name the header name to look for, matched case-insensitively
+     * @return {@code true} when at least one header was removed
+     */
+    private static boolean removeIgnoringCase(MultivaluedMap<String, Object> headers, String name) {
+        boolean removed = false;
+        for (String existing : new ArrayList<>(headers.keySet())) {
+            if (existing != null && existing.equalsIgnoreCase(name)) {
+                headers.remove(existing);
+                removed = true;
+            }
+        }
+        return removed;
     }
 
     private static void record(AssaultEngine engine, String methodName, String headerName, String action) {

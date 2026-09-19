@@ -326,6 +326,9 @@ public class MutableAssaultConfig {
 
     /**
      * Adds or replaces the rule applied to the named response header.
+     * <p>
+     * Header names are case-insensitive: an existing rule for the same name in a different casing is replaced, and the
+     * configured casing is kept for the emitted header.
      *
      * @param name the header name, never {@code null} or blank
      * @param action the action to apply, never {@code null}
@@ -339,17 +342,23 @@ public class MutableAssaultConfig {
         if (action == null) {
             throw new IllegalArgumentException("Response header action must not be null");
         }
+        responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
         responseHeaders.put(name, new HeaderRule(action, value != null ? value : ""));
         notifyChange();
     }
 
     /**
      * Removes the injection rule for the named header, leaving the response untouched.
+     * <p>
+     * Header names are case-insensitive, so a rule configured under a different casing is removed as well.
      *
      * @param name the header name
      */
     public void removeResponseHeader(String name) {
-        if (responseHeaders.remove(name) != null) {
+        if (name == null) {
+            return;
+        }
+        if (responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name))) {
             notifyChange();
         }
     }

@@ -59,6 +59,34 @@ class ResponseHeaderTransformerTest {
     }
 
     @Test
+    void setReplacesAnExistingValueIgnoringCase() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "new");
+        MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
+        headers.putSingle("x-goblin", "old");
+
+        ResponseHeaderTransformer.apply(response(headers), config, engine, "Api.hello");
+
+        assertEquals("new", headers.getFirst("X-Goblin"));
+        assertNull(headers.getFirst("x-goblin"), "the case-variant duplicate must be gone");
+        assertEquals(1, headers.size());
+    }
+
+    @Test
+    void removeDeletesAnExistingHeaderIgnoringCase() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.REMOVE, "");
+        MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
+        headers.putSingle("x-goblin", "chaos");
+
+        ResponseHeaderTransformer.apply(response(headers), config, engine, "Api.hello");
+
+        assertTrue(headers.isEmpty());
+        assertEquals(1, engine.getHistory().size());
+        assertEquals("response-header-remove:X-Goblin", engine.getHistory().get(0).type());
+    }
+
+    @Test
     void removeLeavesAbsentHeaderUnrecorded() {
         MutableAssaultConfig config = new MutableAssaultConfig();
         config.setResponseHeader("X-Goblin", ResponseHeaderAction.REMOVE, "");

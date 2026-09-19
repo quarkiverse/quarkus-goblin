@@ -5,7 +5,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Stream;
 
+import jakarta.enterprise.inject.Instance;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ResourceInfo;
@@ -15,6 +19,8 @@ import jakarta.ws.rs.core.MultivaluedMap;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import io.quarkiverse.goblin.assault.Assault;
 
 /**
  * Unit tests for the response-phase body assault of {@link GoblinChaosFilter}, using fake JAX-RS containers and a real
@@ -38,6 +44,7 @@ class GoblinChaosFilterResponseBodyTest {
         inject(filter, "engine", engine);
         inject(filter, "resourceInfo", resourceInfo());
         inject(filter, "config", noFilteringConfig());
+        inject(filter, "assaults", emptyAssaults());
     }
 
     @Test
@@ -131,11 +138,75 @@ class GoblinChaosFilterResponseBodyTest {
         assertTrue(engine.getHistory().isEmpty());
     }
 
+    @Test
+    void responsePhaseReusesTheRequestPhaseGateInsteadOfRollingAgain() throws Exception {
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyPercentage(50);
+        config.setTargetLevel(100);
+
+        Map<String, Object> properties = new HashMap<>();
+        ContainerRequestContext request = requestContext(properties);
+        filter.filter(request);
+        assertEquals(Boolean.TRUE, properties.get(GoblinChaosFilter.GATED_PROPERTY));
+
+        FakeResponse response = new FakeResponse("hello from Goblin test app", MediaType.TEXT_PLAIN_TYPE);
+        filter.filter(request, response.proxy());
+
+        assertEquals(13, ((byte[]) response.entity()).length,
+                "the response phase must apply to the request selected by the request phase");
+        assertEquals(1, engine.getHistory().size());
+    }
+
+    @Test
+    void responsePhaseSkipsWhenTheRequestPhaseGateDidNotSelectTheRequest() throws Exception {
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyPercentage(50);
+        config.setTargetLevel(100);
+
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(GoblinChaosFilter.GATED_PROPERTY, Boolean.FALSE);
+
+        FakeResponse response = new FakeResponse("hello from Goblin test app", MediaType.TEXT_PLAIN_TYPE);
+        filter.filter(requestContext(properties), response.proxy());
+
+        assertEquals("hello from Goblin test app", response.entity(),
+                "the response phase must not draw a second random number");
+        assertTrue(engine.getHistory().isEmpty());
+    }
+
+    @Test
+    void responsePhaseAppliesWhenTheStoredGatePassedEvenBelowTheCurrentLevel() throws Exception {
+        config.setResponseBodyEnabled(true);
+        config.setResponseBodyPercentage(50);
+        config.setTargetLevel(0);
+
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(GoblinChaosFilter.GATED_PROPERTY, Boolean.TRUE);
+
+        FakeResponse response = new FakeResponse("hello from Goblin test app", MediaType.TEXT_PLAIN_TYPE);
+        filter.filter(requestContext(properties), response.proxy());
+
+        assertEquals(13, ((byte[]) response.entity()).length,
+                "the stored request-phase decision wins over a re-evaluation of the target level");
+        assertEquals(1, engine.getHistory().size());
+    }
+
     private static void inject(Object target, String fieldName, Object value) throws Exception {
         Field field = fieldName.equals("mutableConfig") ? AssaultEngine.class.getDeclaredField(fieldName)
                 : GoblinChaosFilter.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Instance<Assault> emptyAssaults() {
+        InvocationHandler handler = (proxy, m, args) -> switch (m.getName()) {
+            case "stream" -> Stream.empty();
+            case "toString" -> "empty assaults";
+            default -> defaultValue(m.getReturnType());
+        };
+        return (Instance<Assault>) Proxy.newProxyInstance(Instance.class.getClassLoader(),
+                new Class<?>[] { Instance.class }, handler);
     }
 
     private static ResourceInfo resourceInfo() throws Exception {
@@ -189,11 +260,26 @@ class GoblinChaosFilterResponseBodyTest {
     }
 
     private static ContainerRequestContext requestContext() {
+        return requestContext(new HashMap<>());
+    }
+
+    private static ContainerRequestContext requestContext(Map<String, Object> properties) {
         InvocationHandler handler = (proxy, m, args) -> {
-            if (m.getName().equals("toString")) {
-                return "fake ContainerRequestContext";
+            switch (m.getName()) {
+                case "setProperty" -> {
+                    properties.put((String) args[0], args[1]);
+                    return null;
+                }
+                case "getProperty" -> {
+                    return properties.get((String) args[0]);
+                }
+                case "toString" -> {
+                    return "fake ContainerRequestContext";
+                }
+                default -> {
+                    return defaultValue(m.getReturnType());
+                }
             }
-            return defaultValue(m.getReturnType());
         };
         return (ContainerRequestContext) Proxy.newProxyInstance(ContainerRequestContext.class.getClassLoader(),
                 new Class<?>[] { ContainerRequestContext.class }, handler);
