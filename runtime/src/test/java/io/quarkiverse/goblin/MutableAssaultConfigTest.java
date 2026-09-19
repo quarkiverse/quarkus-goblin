@@ -2,6 +2,7 @@ package io.quarkiverse.goblin;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -498,12 +499,90 @@ class MutableAssaultConfigTest {
         assertEquals(200, config.getResponseBodyPercentage());
     }
 
+    @Test
+    void setResponseHeaderReplacesAnExistingRuleIgnoringCase() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "first");
+        config.setResponseHeader("x-goblin", ResponseHeaderAction.SET, "second");
+
+        assertEquals(1, config.getResponseHeaders().size(), "header names are case-insensitive");
+        assertEquals("second", config.getResponseHeaders().get("x-goblin").value());
+    }
+
+    @Test
+    void removeResponseHeaderIgnoresCase() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos");
+
+        config.removeResponseHeader("x-goblin");
+
+        assertTrue(config.getResponseHeaders().isEmpty());
+    }
+
+    @Test
+    void setResponseHeaderRejectsValuesWithControlCharacters() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos\r\nInjected: true"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos\nInjected: true"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos\u0000"));
+        assertTrue(config.getResponseHeaders().isEmpty(), "a rejected rule must not be stored");
+    }
+
+    @Test
+    void isValidResponseHeaderValueAllowsTabButRejectsControlCharacters() {
+        assertTrue(MutableAssaultConfig.isValidResponseHeaderValue(null));
+        assertTrue(MutableAssaultConfig.isValidResponseHeaderValue("a\tb"));
+        assertTrue(MutableAssaultConfig.isValidResponseHeaderValue("plain value; charset=utf-8"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\nb"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\rb"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\u007Fb"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\u0000b"));
+    }
+
+    @Test
+    void fromConfigSkipsResponseHeaderRulesThatAreNotValid() {
+        Map<String, GoblinConfig.HeaderConfig> headers = new java.util.LinkedHashMap<>();
+        headers.put("X-Valid", headerRule(ResponseHeaderAction.SET, "chaos"));
+        headers.put("X-NoAction", headerRule(null, "chaos"));
+        headers.put("X-Unsafe", headerRule(ResponseHeaderAction.SET, "chaos\nInjected: true"));
+
+        MutableAssaultConfig config = MutableAssaultConfig
+                .fromConfig(configWithBodyAndHeaders(AssaultType.RESPONSE_HEADER, headers));
+
+        assertTrue(config.isResponseHeaderEnabled());
+        assertEquals(1, config.getResponseHeaders().size(),
+                "invalid rules must be skipped, never implicitly restored as SET");
+        assertTrue(config.getResponseHeaders().containsKey("X-Valid"));
+    }
+
+    private static GoblinConfig.HeaderConfig headerRule(ResponseHeaderAction action, String value) {
+        return new GoblinConfig.HeaderConfig() {
+            @Override
+            public ResponseHeaderAction action() {
+                return action;
+            }
+
+            @Override
+            public String value() {
+                return value;
+            }
+        };
+    }
+
     private static GoblinConfig configWith(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
             int targetLevel) {
         return configWithProfile(latencyMin, latencyMax, httpStatus, exceptionType, targetLevel, AssaultProfile.NONE);
     }
 
     private static GoblinConfig configWithResponseBody() {
+        return configWithBodyAndHeaders(AssaultType.RESPONSE_BODY, Map.of());
+    }
+
+    private static GoblinConfig configWithBodyAndHeaders(AssaultType type, Map<String, GoblinConfig.HeaderConfig> headers) {
         return new GoblinConfig() {
             @Override
             public boolean enabled() {
@@ -515,7 +594,12 @@ class MutableAssaultConfigTest {
                 return new AssaultConfig() {
                     @Override
                     public AssaultType type() {
-                        return AssaultType.RESPONSE_BODY;
+                        return type;
+                    }
+
+                    @Override
+                    public Map<String, HeaderConfig> headers() {
+                        return headers;
                     }
 
                     @Override
@@ -626,6 +710,11 @@ class MutableAssaultConfigTest {
                     @Override
                     public AssaultType type() {
                         return AssaultType.LATENCY;
+                    }
+
+                    @Override
+                    public Map<String, HeaderConfig> headers() {
+                        return Map.of();
                     }
 
                     @Override

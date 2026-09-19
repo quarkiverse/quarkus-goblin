@@ -1,5 +1,6 @@
 package io.quarkiverse.goblin;
 
+import java.util.Map;
 import java.util.Optional;
 
 import io.quarkus.runtime.annotations.ConfigGroup;
@@ -39,10 +40,16 @@ public interface GoblinConfig {
 
         /**
          * The type of assault to apply. Valid values: LATENCY, EXCEPTION, HTTP_STATUS, DEPENDENCY_DEGRADATION,
-         * RESPONSE_BODY. Ignored when a non-{@code NONE} profile is selected.
+         * RESPONSE_BODY, RESPONSE_HEADER. Ignored when a non-{@code NONE} profile is selected.
          */
         @WithDefault("LATENCY")
         AssaultType type();
+
+        /**
+         * Response header injection rules, keyed by header name. Each entry declares the action applied to the named
+         * response header ({@code SET} or {@code REMOVE}) and, for {@code SET}, the value to write.
+         */
+        Map<String, HeaderConfig> headers();
 
         /**
          * Predefined composite assault mode. Valid values: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT.
@@ -71,6 +78,27 @@ public interface GoblinConfig {
          * HTTP status configuration (only used when type=HTTP_STATUS).
          */
         HttpStatusConfig httpStatus();
+    }
+
+    /**
+     * A single response header injection rule.
+     */
+    @ConfigGroup
+    interface HeaderConfig {
+
+        /**
+         * The action applied to the named response header: {@code SET} forces the header to be present with the
+         * configured value (replacing an existing value or adding it when absent), {@code REMOVE} deletes the header
+         * when present.
+         */
+        @WithDefault("SET")
+        ResponseHeaderAction action();
+
+        /**
+         * The header value written by {@code SET}; ignored by {@code REMOVE}. May be empty to emit a bare header name.
+         */
+        @WithDefault("")
+        String value();
     }
 
     /**

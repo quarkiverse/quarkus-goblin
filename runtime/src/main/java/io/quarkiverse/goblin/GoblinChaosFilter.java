@@ -23,6 +23,12 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
 
     private static final Logger LOG = Logger.getLogger(GoblinChaosFilter.class);
 
+    /**
+     * Request-context property holding the target-level gate decision made in the request phase, so the response phase
+     * applies response body/header assaults to the exact same selection instead of rolling the dice a second time.
+     */
+    static final String GATED_PROPERTY = "io.quarkiverse.goblin.gated";
+
     @Inject
     Instance<Assault> assaults;
 
@@ -37,7 +43,12 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
-        if (!engine.isActive() || !engine.shouldAssault()) {
+        if (!engine.isActive()) {
+            return;
+        }
+        boolean gated = engine.shouldAssault();
+        requestContext.setProperty(GATED_PROPERTY, gated);
+        if (!gated) {
             return;
         }
 
@@ -64,29 +75,53 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
             throws IOException {
-        if (!engine.isActive() || !engine.shouldAssault()) {
+        if (!engine.isActive()) {
             return;
         }
         MutableAssaultConfig cfg = engine.getMutableConfig();
-        if (cfg == null || !cfg.isResponseBodyEnabled()) {
+        if (cfg == null) {
+            return;
+        }
+        if (!isGated(requestContext)) {
             return;
         }
         if (!isTargetEligible()) {
             return;
         }
-        byte[] body = toBytes(responseContext.getEntity());
-        if (body == null) {
-            return;
+        if (cfg.isResponseBodyEnabled()) {
+            byte[] body = toBytes(responseContext.getEntity());
+            if (body != null) {
+                int declaredLength = declaredLength(responseContext, body);
+                byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
+                        cfg.getResponseBodyPercentage());
+                setEntity(responseContext, transformed);
+                applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
+                int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
+                LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
+                        cfg.getResponseBodyMode().name().toLowerCase(), describeMethod(), declared, transformed.length);
+                engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
+            }
         }
-        int declaredLength = declaredLength(responseContext, body);
-        byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
-                cfg.getResponseBodyPercentage());
-        setEntity(responseContext, transformed);
-        applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
-        int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
-        LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
-                cfg.getResponseBodyMode().name().toLowerCase(), describeMethod(), declared, transformed.length);
-        engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
+        if (cfg.isResponseHeaderEnabled()) {
+            ResponseHeaderTransformer.apply(responseContext, cfg, engine, describeMethod());
+        }
+    }
+
+    /**
+     * Returns the target-level gate decision for this request, reusing the one made during the request phase so the
+     * response phase does not draw a second random number (which would make response body/header assaults fire
+     * independently of the request-phase selection). When no request-phase decision is available -- for example a
+     * response filter running without a matching request filter -- the gate is evaluated once here.
+     *
+     * @param requestContext the request context carried over from the request phase
+     * @return {@code true} when the request was selected for assault
+     */
+    private boolean isGated(ContainerRequestContext requestContext) {
+        Object gated = requestContext.getProperty(GATED_PROPERTY);
+        if (gated instanceof Boolean decision) {
+            return decision;
+        }
+        return engine.shouldAssault();
     }
 
     /**

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.ResponseHeaderAction;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 
 class GoblinJsonRPCServiceTest {
@@ -29,7 +32,7 @@ class GoblinJsonRPCServiceTest {
 
     private static final String[] TOGGLE_KEYS = {
             "latencyEnabled", "exceptionEnabled", "httpStatusEnabled", "dependencyDegradationEnabled",
-            "clientLatencyEnabled", "clientExceptionEnabled", "responseBodyEnabled",
+            "clientLatencyEnabled", "clientExceptionEnabled", "responseBodyEnabled", "responseHeaderEnabled",
     };
 
     /**
@@ -216,6 +219,123 @@ class GoblinJsonRPCServiceTest {
     }
 
     /**
+     * The config and status payloads must expose the response header assault toggle and rules.
+     */
+    @Test
+    void responseHeaderExposedInConfigAndStatus() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject config = service.getConfig();
+        assertTrue(config.containsKey("responseHeaderEnabled"));
+        JsonObject headers = config.getJsonObject("headers");
+        assertNotNull(headers);
+
+        JsonObject status = service.getStatus();
+        assertTrue(status.containsKey("responseHeaderEnabled"));
+    }
+
+    /**
+     * {@code toggleResponseHeader} flips the response header toggle and reports the new value.
+     */
+    @Test
+    void toggleResponseHeaderFlipsValue() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.toggleResponseHeader();
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseHeaderEnabled"));
+
+        JsonObject again = service.toggleResponseHeader();
+        assertFalse(again.getBoolean("responseHeaderEnabled"));
+    }
+
+    /**
+     * {@code setResponseHeaderInfo} stores the rule, normalises the action to upper case, and reports it back.
+     */
+    @Test
+    void setResponseHeaderInfoStoresRule() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("X-Goblin", "set", "chaos");
+
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("SET", result.getString("action"));
+        assertEquals("chaos", result.getString("value"));
+        MutableAssaultConfig.HeaderRule rule = service.engine.getMutableConfig().getResponseHeaders().get("X-Goblin");
+        assertNotNull(rule);
+        assertEquals(ResponseHeaderAction.SET, rule.action());
+    }
+
+    /**
+     * {@code setResponseHeaderInfo} trims the header name and exposes the reported value from the effective rule.
+     */
+    @Test
+    void setResponseHeaderInfoTrimsName() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("  X-Goblin  ", "set", "chaos");
+
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("X-Goblin", result.getString("name"));
+    }
+
+    /**
+     * {@code setResponseHeaderInfo} rejects an unknown action with a stable error object.
+     */
+    @Test
+    void setResponseHeaderInfoRejectsUnknownAction() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("X-Goblin", "SHRINK", "chaos");
+
+        assertFalse(result.getBoolean("ok"));
+        assertNotNull(result.getString("error"));
+    }
+
+    /**
+     * {@code setResponseHeaderInfo} rejects a blank header name with a stable error object.
+     */
+    @Test
+    void setResponseHeaderInfoRejectsBlankName() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("  ", "SET", "chaos");
+
+        assertFalse(result.getBoolean("ok"));
+        assertNotNull(result.getString("error"));
+    }
+
+    /**
+     * {@code setResponseHeaderInfo} rejects a value carrying CR or LF instead of storing a header that could split the
+     * response.
+     */
+    @Test
+    void setResponseHeaderInfoRejectsControlCharacters() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("X-Goblin", "SET", "chaos\r\nInjected: true");
+
+        assertFalse(result.getBoolean("ok"));
+        assertTrue(result.getString("error").contains("CR, LF"), "unexpected error: " + result.getString("error"));
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().isEmpty());
+    }
+
+    /**
+     * {@code removeResponseHeader} drops the stored rule and reports the remaining configuration.
+     */
+    @Test
+    void removeResponseHeaderDropsRule() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        service.setResponseHeaderInfo("X-Goblin", "SET", "chaos");
+        JsonObject result = service.removeResponseHeader("X-Goblin");
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().isEmpty());
+    }
+
+    /**
      * Mutations return the full configuration so the Dev UI can use a single source of truth.
      */
     @Test
@@ -359,7 +479,7 @@ class GoblinJsonRPCServiceTest {
                 .put("level", 42)
                 .put("exception", new JsonObject().put("type", "java.io.IOException"));
 
-        JsonObject result = service.applyConfig(partial);
+        JsonObject result = service.applyConfig(partial.getMap());
 
         assertTrue(result.getBoolean("ok"));
         assertTrue(result.getBoolean("exceptionEnabled"));
@@ -383,12 +503,121 @@ class GoblinJsonRPCServiceTest {
                 .put("profile", "SLOW_FAILURE")
                 .put("latencyEnabled", false);
 
-        JsonObject result = service.applyConfig(config);
+        JsonObject result = service.applyConfig(config.getMap());
 
         assertTrue(result.getBoolean("ok"));
         assertEquals("SLOW_FAILURE", result.getString("profile"));
         assertTrue(result.getBoolean("exceptionEnabled"), "profile defaults apply");
         assertFalse(result.getBoolean("latencyEnabled"), "explicit field overrides the profile default");
+    }
+
+    /**
+     * {@code applyConfig} replaces the configured header rules with those declared in the payload.
+     */
+    @Test
+    void applyConfigReplacesHeaderRules() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+        service.setResponseHeaderInfo("X-Goblin", "SET", "boo");
+
+        JsonObject config = new JsonObject()
+                .put("responseHeaderEnabled", true)
+                .put("headers", new JsonObject()
+                        .put("X-Goblin", new JsonObject().put("action", "SET").put("value", "chaos"))
+                        .put("Server", new JsonObject().put("action", "REMOVE").put("value", "")));
+
+        JsonObject result = service.applyConfig(config.getMap());
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseHeaderEnabled"));
+        JsonObject headers = result.getJsonObject("headers");
+        assertEquals("chaos", headers.getJsonObject("X-Goblin").getString("value"));
+        assertEquals(2, headers.size());
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().containsKey("Server"));
+    }
+
+    /**
+     * {@code applyConfig} warns (but is {@code ok=true}) when a header rule carries an unknown action and leaves the
+     * remaining rules applied.
+     */
+    @Test
+    void applyConfigSkipsHeaderRuleWithUnknownAction() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject config = new JsonObject()
+                .put("headers", new JsonObject()
+                        .put("X-Goblin", new JsonObject().put("action", "BOGUS").put("value", "chaos"))
+                        .put("Server", new JsonObject().put("action", "SET").put("value", "goblin")));
+
+        JsonObject result = service.applyConfig(config.getMap());
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getString("warning").contains("BOGUS"));
+        assertFalse(service.engine.getMutableConfig().getResponseHeaders().containsKey("X-Goblin"));
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().containsKey("Server"));
+    }
+
+    /**
+     * {@code applyConfig} skips a header rule whose value carries CR or LF and keeps the remaining rules applied.
+     */
+    @Test
+    void applyConfigSkipsHeaderRuleWithUnsafeValue() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject config = new JsonObject()
+                .put("headers", new JsonObject()
+                        .put("X-Goblin", new JsonObject().put("action", "SET").put("value", "chaos\nInjected: true"))
+                        .put("Server", new JsonObject().put("action", "SET").put("value", "goblin")));
+
+        JsonObject result = service.applyConfig(config.getMap());
+
+        assertTrue(result.getBoolean("ok"));
+        assertNotNull(result.getString("warning"));
+        assertFalse(service.engine.getMutableConfig().getResponseHeaders().containsKey("X-Goblin"));
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().containsKey("Server"));
+    }
+
+    /**
+     * Reproduces the JSON-RPC transport deserialization: the Dev UI codec hands the service a plain map whose nested
+     * JSON objects are ordinary {@link java.util.Map} instances. Nested header rules must survive the conversion.
+     */
+    @Test
+    void applyConfigAcceptsTransportDeserializedPayloadWithNestedHeaders() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        String payload = """
+                {
+                  "responseHeaderEnabled": true,
+                  "headers": {
+                    "X-Goblin": { "action": "SET", "value": "chaos" },
+                    "Server": { "action": "REMOVE", "value": "" }
+                  }
+                }
+                """;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> decoded = Json.decodeValue(payload, Map.class);
+
+        JsonObject result = service.applyConfig(decoded);
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseHeaderEnabled"));
+        assertEquals("chaos",
+                service.engine.getMutableConfig().getResponseHeaders().get("X-Goblin").value());
+        assertEquals(ResponseHeaderAction.REMOVE,
+                service.engine.getMutableConfig().getResponseHeaders().get("Server").action());
+    }
+
+    /**
+     * {@code applyConfig} rejects a missing payload instead of failing with a {@code NullPointerException} (the Dev UI
+     * JSON-RPC router passes {@code null} when the incoming params object carries no {@code config} key).
+     */
+    @Test
+    void applyConfigRejectsMissingPayload() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.applyConfig(null);
+
+        assertFalse(result.getBoolean("ok"));
+        assertNotNull(result.getString("error"));
     }
 
     /**

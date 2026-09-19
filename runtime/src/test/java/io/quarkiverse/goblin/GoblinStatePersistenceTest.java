@@ -246,4 +246,96 @@ class GoblinStatePersistenceTest {
         assertEquals(ResponseBodyMode.INFLATE, config.getResponseBodyMode());
         assertEquals(180, config.getResponseBodyPercentage());
     }
+
+    @Test
+    void saveAndLoadPreservesResponseHeaderConfig() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeaderEnabled(true);
+        config.setResponseHeader("X-Added", ResponseHeaderAction.SET, "Say \"hi\", ok");
+        config.setResponseHeader("Server", ResponseHeaderAction.SET, "goblin");
+        config.setResponseHeader("Content-Type", ResponseHeaderAction.REMOVE, "");
+
+        GoblinStatePersistence.save(config);
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertTrue(loaded.isResponseHeaderEnabled());
+        assertEquals(3, loaded.getResponseHeaders().size());
+        assertEquals("Say \"hi\", ok", loaded.getResponseHeaders().get("X-Added").value());
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Added").action());
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("Server").action());
+        assertEquals(ResponseHeaderAction.REMOVE, loaded.getResponseHeaders().get("Content-Type").action());
+    }
+
+    @Test
+    void fromJsonDefaultsResponseHeaderWhenMissing() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"latencyEnabled\": false}");
+
+        assertFalse(config.isResponseHeaderEnabled());
+        assertTrue(config.getResponseHeaders().isEmpty());
+    }
+
+    @Test
+    void loadSkipsResponseHeaderRuleWithUnknownAction() throws IOException {
+        String inner = "{\"action\": \"BOGUS\", \"value\": \"chaos\"}";
+        writeStateWithResponseHeaders("{\"X-Goblin\": \"" + escape(inner) + "\"}");
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertTrue(loaded.getResponseHeaders().isEmpty(),
+                "an unknown action must be skipped instead of being restored as SET");
+    }
+
+    @Test
+    void loadSkipsResponseHeaderRuleWithoutAction() throws IOException {
+        String inner = "{\"value\": \"chaos\"}";
+        writeStateWithResponseHeaders("{\"X-Goblin\": \"" + escape(inner) + "\"}");
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertTrue(loaded.getResponseHeaders().isEmpty());
+    }
+
+    @Test
+    void loadSkipsResponseHeaderRuleThatIsNotANestedObject() throws IOException {
+        writeStateWithResponseHeaders("{\"X-Goblin\": \"chaos\"}");
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertTrue(loaded.getResponseHeaders().isEmpty(),
+                "a scalar entry must not be interpreted as a header rule");
+    }
+
+    @Test
+    void loadSkipsResponseHeaderRuleWithUnsafeValue() throws IOException {
+        String inner = "{\"action\": \"SET\", \"value\": \"chaos\nInjected: true\"}";
+        writeStateWithResponseHeaders("{\"X-Goblin\": \"" + escape(inner) + "\"}");
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertTrue(loaded.getResponseHeaders().isEmpty(),
+                "a value containing CR/LF must not be restored");
+    }
+
+    private void writeStateWithResponseHeaders(String encodedHeaders) throws IOException {
+        Files.writeString(stateFile, "{\n  \"responseHeaderEnabled\": true,\n  \"responseHeaders\": \""
+                + escape(encodedHeaders) + "\"\n}");
+    }
+
+    private static String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    @Test
+    void loadMigratesLegacyAddAndOverrideActionsToSet() throws IOException {
+        String added = "{\"action\": \"ADD\", \"value\": \"chaos\"}";
+        String overridden = "{\"action\": \"OVERRIDE\", \"value\": \"goblin\"}";
+        writeStateWithResponseHeaders("{\"X-Added\": \"" + escape(added) + "\", \"X-Override\": \""
+                + escape(overridden) + "\"}");
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Added").action());
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Override").action());
+    }
 }

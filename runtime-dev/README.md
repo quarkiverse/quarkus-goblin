@@ -19,10 +19,12 @@ Every **public method** becomes a JSON-RPC endpoint callable from the front-end 
 | Status | `getStatus()` | Active flag, all toggles, target level |
 | Status | `toggleActive()` / `setActive(boolean)` | Master on/off |
 | Config | `getConfig()` | Full mutable configuration snapshot |
-| Toggles | `toggleLatency()` / `toggleException()` / `toggleHttpStatus()` / `toggleDependencyDegradation()` | Flip a single assault |
+| Toggles | `toggleLatency()` / `toggleException()` / `toggleHttpStatus()` / `toggleDependencyDegradation()` / `toggleResponseBody()` / `toggleResponseHeader()` | Flip a single assault |
 | Editors | `setLatencyRange(minMs, maxMs)` | Update latency bounds |
 | Editors | `setExceptionConfig(type, message)` | Update exception class/message |
 | Editors | `setHttpStatusConfig(code, message)` | Update status code/body |
+| Editors | `setResponseBodyConfig(mode, percentage)` | Update body transformation mode/size |
+| Editors | `setResponseHeaderInfo(name, action, value)` / `removeResponseHeader(name)` | Set or drop a response header rule |
 | Editors | `setTargetLevel(level)` | Update percentage of affected requests |
 | History | `getHistory()` / `clearHistory()` | Read/clear the assault history |
 | Report | `getMarkdownReport()` | Export the Markdown resilience report |

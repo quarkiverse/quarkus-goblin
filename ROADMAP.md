@@ -38,7 +38,7 @@ Current status: **preview** (v0.1.0)
 - [x] **Response body injection**
   Add a new assault type that truncates or inflates the response body. Useful for testing how clients handle partial JSON, oversized payloads, or unexpected content lengths.
 
-- [ ] **HTTP header injection**
+- [x] **HTTP response header injection**
   Inject, modify, or remove HTTP response headers. Simulate rate-limiting (`Retry-After`, `X-RateLimit-Remaining`), cache headers, or custom error headers returned by upstream proxies.
 
 - [x] **Predefined composite assault modes**

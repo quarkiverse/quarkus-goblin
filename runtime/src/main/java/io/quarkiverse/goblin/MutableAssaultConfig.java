@@ -29,6 +29,7 @@ public class MutableAssaultConfig {
     private Runnable onChange;
 
     private final Object profileLock = new Object();
+    private final Object responseHeadersLock = new Object();
     private volatile AssaultProfile profile = AssaultProfile.NONE;
     private volatile boolean latencyEnabled = true;
     private volatile boolean exceptionEnabled = false;
@@ -37,6 +38,7 @@ public class MutableAssaultConfig {
     private volatile boolean clientLatencyEnabled = false;
     private volatile boolean clientExceptionEnabled = false;
     private volatile boolean responseBodyEnabled = false;
+    private volatile boolean responseHeaderEnabled = false;
 
     private volatile long latencyMinMs = 100;
     private volatile long latencyMaxMs = 5000;
@@ -47,6 +49,15 @@ public class MutableAssaultConfig {
     private volatile ResponseBodyMode responseBodyMode = ResponseBodyMode.TRUNCATE;
     private volatile int responseBodyPercentage = 50;
     private volatile int targetLevel = 100;
+
+    /**
+     * A single response header injection rule: the {@link ResponseHeaderAction} applied to the named header and the
+     * value written by {@code SET}.
+     */
+    public record HeaderRule(ResponseHeaderAction action, String value) {
+    }
+
+    private final Map<String, HeaderRule> responseHeaders = new ConcurrentHashMap<>();
 
     /**
      * Builds a mutable copy of the configuration from the static {@link GoblinConfig}, applying profile defaults when a
@@ -63,6 +74,7 @@ public class MutableAssaultConfig {
         mutable.httpStatusEnabled = (type == AssaultType.HTTP_STATUS);
         mutable.dependencyDegradationEnabled = (type == AssaultType.DEPENDENCY_DEGRADATION);
         mutable.responseBodyEnabled = (type == AssaultType.RESPONSE_BODY);
+        mutable.responseHeaderEnabled = (type == AssaultType.RESPONSE_HEADER);
         mutable.latencyMinMs = config.assault().latency().minMilliseconds();
         mutable.latencyMaxMs = config.assault().latency().maxMilliseconds();
         mutable.exceptionType = config.assault().exception().type();
@@ -71,6 +83,16 @@ public class MutableAssaultConfig {
         mutable.httpStatusMessage = config.assault().httpStatus().message();
         mutable.responseBodyMode = config.assault().body().mode();
         mutable.responseBodyPercentage = config.assault().body().percentage();
+        Map<String, GoblinConfig.HeaderConfig> headers = config.assault().headers();
+        if (headers != null) {
+            headers.forEach((name, header) -> {
+                try {
+                    mutable.setResponseHeader(name, header.action(), header.value());
+                } catch (IllegalArgumentException e) {
+                    LOG.warnf("Ignoring invalid response header rule '%s' from configuration: %s", name, e.getMessage());
+                }
+            });
+        }
         mutable.targetLevel = config.target().level();
         mutable.profile = config.assault().profile();
         if (mutable.profile != AssaultProfile.NONE) {
@@ -284,9 +306,126 @@ public class MutableAssaultConfig {
         return issues;
     }
 
+    /**
+     * @return whether the response header injection assault is enabled for incoming request responses
+     */
+    public boolean isResponseHeaderEnabled() {
+        return responseHeaderEnabled;
+    }
+
+    /**
+     * Toggles the response header injection assault, which applies the configured rules to the emitted response.
+     *
+     * @param responseHeaderEnabled {@code true} to alter response headers, {@code false} to leave them untouched
+     */
+    public void setResponseHeaderEnabled(boolean responseHeaderEnabled) {
+        this.responseHeaderEnabled = responseHeaderEnabled;
+        notifyChange();
+    }
+
+    /**
+     * @return an unmodifiable snapshot of the configured header rules, keyed by header name
+     */
+    public Map<String, HeaderRule> getResponseHeaders() {
+        synchronized (responseHeadersLock) {
+            return Map.copyOf(responseHeaders);
+        }
+    }
+
+    /**
+     * Adds or replaces the rule applied to the named response header.
+     * <p>
+     * Header names are case-insensitive: an existing rule for the same name in a different casing is replaced, and the
+     * configured casing is kept for the emitted header.
+     * <p>
+     * The removal of the case variants and the insertion of the new rule happen atomically under the header-rules
+     * lock, so concurrent readers never observe an intermediate state where the rule is absent.
+     *
+     * @param name the header name, never {@code null} or blank
+     * @param action the action to apply, never {@code null}
+     * @param value the header value written by {@code SET}; may be {@code null} to emit a bare header
+     * @throws IllegalArgumentException when the header name is blank, the action is {@code null}, or the value contains
+     *         characters that cannot be emitted in an HTTP header
+     */
+    public void setResponseHeader(String name, ResponseHeaderAction action, String value) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Response header name must not be blank");
+        }
+        if (action == null) {
+            throw new IllegalArgumentException("Response header action must not be null");
+        }
+        String safeValue = value != null ? value : "";
+        if (!isValidResponseHeaderValue(safeValue)) {
+            throw new IllegalArgumentException("Response header value for '" + name
+                    + "' contains characters that cannot be emitted in an HTTP header");
+        }
+        synchronized (responseHeadersLock) {
+            responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+            responseHeaders.put(name, new HeaderRule(action, safeValue));
+        }
+        notifyChange();
+    }
+
+    /**
+     * Validates that a value can be safely emitted as an HTTP header: it must not contain CR, LF, DEL or any other
+     * control character, except for the horizontal tab. This prevents the chaos configuration from producing an invalid
+     * response or a header-injection/splitting condition.
+     *
+     * @param value the header value, may be {@code null}
+     * @return {@code true} when the value is safe to emit
+     */
+    public static boolean isValidResponseHeaderValue(String value) {
+        if (value == null) {
+            return true;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\r' || c == '\n' || c == 0x7F || (c < 0x20 && c != '\t')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Removes the injection rule for the named header, leaving the response untouched.
+     * <p>
+     * Header names are case-insensitive, so a rule configured under a different casing is removed as well.
+     *
+     * @param name the header name
+     */
+    public void removeResponseHeader(String name) {
+        if (name == null) {
+            return;
+        }
+        boolean removed;
+        synchronized (responseHeadersLock) {
+            removed = responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+        }
+        if (removed) {
+            notifyChange();
+        }
+    }
+
+    /**
+     * @return a human-readable description of the configured header rules, or {@code "none"} when none are configured
+     */
+    public String describeResponseHeaders() {
+        Map<String, HeaderRule> snapshot = getResponseHeaders();
+        if (snapshot.isEmpty()) {
+            return "none";
+        }
+        return snapshot.entrySet().stream()
+                .map(entry -> entry.getKey() + " " + entry.getValue().action().name().toLowerCase()
+                        + (entry.getValue().action() != ResponseHeaderAction.REMOVE
+                                ? " \"" + entry.getValue().value() + "\""
+                                : ""))
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
     public boolean hasAnyAssaultEnabled() {
         return latencyEnabled || exceptionEnabled || httpStatusEnabled || dependencyDegradationEnabled
-                || responseBodyEnabled;
+                || responseBodyEnabled || responseHeaderEnabled;
     }
 
     /**
@@ -348,6 +487,7 @@ public class MutableAssaultConfig {
         exceptionEnabled = false;
         httpStatusEnabled = false;
         dependencyDegradationEnabled = false;
+        responseHeaderEnabled = false;
         switch (profile) {
             case SLOW_FAILURE -> {
                 latencyEnabled = true;
@@ -401,6 +541,9 @@ public class MutableAssaultConfig {
         if (responseBodyEnabled) {
             parts.add("response body " + getResponseBodyMode().name().toLowerCase() + " enabled ("
                     + responseBodyPercentage + "%)");
+        }
+        if (responseHeaderEnabled) {
+            parts.add("response header enabled (" + describeResponseHeaders() + ")");
         }
         if (parts.isEmpty()) {
             return "no assault enabled";
@@ -511,6 +654,10 @@ public class MutableAssaultConfig {
             clientLatencyEnabled = false;
             clientExceptionEnabled = false;
             responseBodyEnabled = false;
+            responseHeaderEnabled = false;
+            synchronized (responseHeadersLock) {
+                responseHeaders.clear();
+            }
             latencyMinMs = 100;
             latencyMaxMs = 5000;
             exceptionType = "java.lang.RuntimeException";

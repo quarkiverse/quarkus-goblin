@@ -245,6 +245,19 @@ export class QwcGoblinDashboard extends LitElement {
             color: var(--lumo-contrast-color);
         }
         .quick-pick:hover { background: var(--lumo-contrast-5pct); }
+        .icon-btn {
+            border: 1px solid var(--lumo-contrast-30pct);
+            background: var(--lumo-base-color);
+            color: var(--lumo-contrast-color);
+            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            line-height: 1;
+            font-size: 14px;
+            cursor: pointer;
+            flex: none;
+        }
+        .icon-btn:hover { background: var(--lumo-contrast-5pct); }
         .save-btn {
             border: none;
             background: var(--lumo-primary-color);
@@ -286,28 +299,28 @@ export class QwcGoblinDashboard extends LitElement {
             desc: 'No predefined setup; control each assault manually.',
             toggles: {latencyEnabled: false, exceptionEnabled: false, httpStatusEnabled: false,
                 dependencyDegradationEnabled: false, clientLatencyEnabled: false, clientExceptionEnabled: false,
-                responseBodyEnabled: false},
+                responseBodyEnabled: false, responseHeaderEnabled: false},
         },
         {
             value: 'SLOW_FAILURE', label: 'Slow failure',
             desc: 'Delay then fail: latency 100-5000 ms plus a RuntimeException.',
             toggles: {latencyEnabled: true, exceptionEnabled: true, httpStatusEnabled: false,
                 dependencyDegradationEnabled: false, clientLatencyEnabled: false, clientExceptionEnabled: false,
-                responseBodyEnabled: false},
+                responseBodyEnabled: false, responseHeaderEnabled: false},
         },
         {
             value: 'INTERMITTENT', label: 'Intermittent',
             desc: 'Percentage-based random HTTP 500 responses. Combine with target level.',
             toggles: {latencyEnabled: false, exceptionEnabled: false, httpStatusEnabled: true,
                 dependencyDegradationEnabled: false, clientLatencyEnabled: false, clientExceptionEnabled: false,
-                responseBodyEnabled: false},
+                responseBodyEnabled: false, responseHeaderEnabled: false},
         },
         {
             value: 'TIMEOUT', label: 'Timeout',
             desc: 'Very high fixed latency (30 s) to exercise @Timeout and fallback rules.',
             toggles: {latencyEnabled: true, exceptionEnabled: false, httpStatusEnabled: false,
                 dependencyDegradationEnabled: false, clientLatencyEnabled: false, clientExceptionEnabled: false,
-                responseBodyEnabled: false},
+                responseBodyEnabled: false, responseHeaderEnabled: false},
         },
     ];
 
@@ -393,6 +406,7 @@ export class QwcGoblinDashboard extends LitElement {
             clientLatencyEnabled: result.clientLatencyEnabled,
             clientExceptionEnabled: result.clientExceptionEnabled,
             responseBodyEnabled: result.responseBodyEnabled,
+            responseHeaderEnabled: result.responseHeaderEnabled,
         };
         this._dirty = {};
         this._errors = {};
@@ -415,6 +429,12 @@ export class QwcGoblinDashboard extends LitElement {
         const exception = result.exception || {};
         const httpStatus = result.httpStatus || {};
         const body = result.body || {};
+        const headers = result.headers || {};
+        const headerRows = Object.keys(headers).map(name => ({
+            name,
+            action: (headers[name] && headers[name].action) || 'SET',
+            value: headers[name] && headers[name].value != null ? headers[name].value : '',
+        }));
         return {
             level: String(result.level),
             latency: {
@@ -433,6 +453,7 @@ export class QwcGoblinDashboard extends LitElement {
                 mode: body.mode || 'TRUNCATE',
                 pct: body.percentage == null ? '' : String(body.percentage),
             },
+            headers: headerRows,
         };
     }
 
@@ -558,7 +579,7 @@ export class QwcGoblinDashboard extends LitElement {
             this._autoOffDeadline = null;
             localStorage.removeItem(AUTO_OFF_KEY);
             if (this._status && this._status.active) {
-                this.jsonRpc.setActive(false).then(r => {
+                this.jsonRpc.setActive({active: false}).then(r => {
                     if (r.result && r.result.ok) {
                         this._applyConfigResult(r.result);
                         this._showToast('Chaos auto-disabled', 'info');
@@ -727,6 +748,70 @@ export class QwcGoblinDashboard extends LitElement {
         this._validateBody();
     }
 
+    // ==================== response headers ====================
+
+    _captureHeaderRows() {
+        this._form.headers.forEach((row, i) => {
+            const name = this._val(`hdr-name-${i}`);
+            if (name !== null) row.name = name;
+            const action = this._val(`hdr-action-${i}`);
+            if (action !== null) row.action = action;
+            const value = this._val(`hdr-val-${i}`);
+            if (value !== null) row.value = value;
+        });
+    }
+
+    _addHeaderRule() {
+        this._ensureForm();
+        this._captureHeaderRows();
+        this._form.headers.push({name: '', action: 'SET', value: ''});
+        this._markDirty('headers');
+        this.requestUpdate();
+    }
+
+    _removeHeaderRule(index) {
+        this._ensureForm();
+        this._captureHeaderRows();
+        this._form.headers.splice(index, 1);
+        this._markDirty('headers');
+        this.requestUpdate();
+    }
+
+    _headerChanged() {
+        this._markDirty('headers');
+    }
+
+    _saveHeaders() {
+        this._ensureForm();
+        this._captureHeaderRows();
+        const headers = {};
+        for (const row of this._form.headers) {
+            const name = (row.name || '').trim();
+            if (!name) {
+                this._showToast('Header names must not be blank', 'error');
+                return;
+            }
+            headers[name] = {action: row.action, value: row.value || ''};
+        }
+        this.jsonRpc.applyConfig({config: {headers}}).then(r => {
+            if (r.result && r.result.ok) {
+                this._applyConfigResult(r.result);
+                this._showToast(r.result.warning || 'Response headers updated', r.result.warning ? 'warning' : '');
+            } else {
+                this._showToast(r.result && r.result.error || 'Response header update failed', 'error');
+            }
+        }).catch(() => this._showToast('Response header update failed', 'error'));
+    }
+
+    _headerSummary(config) {
+        const headers = (config && config.headers) || {};
+        const names = Object.keys(headers);
+        if (!names.length) {
+            return 'no rules';
+        }
+        return names.map(name => `${name} ${(headers[name].action || 'SET').toLowerCase()}`).join(', ');
+    }
+
     // ==================== profiles ====================
 
     _profileLabel(profile) {
@@ -755,7 +840,8 @@ export class QwcGoblinDashboard extends LitElement {
             return false;
         }
         return ['latencyEnabled', 'exceptionEnabled', 'httpStatusEnabled', 'dependencyDegradationEnabled',
-            'clientLatencyEnabled', 'clientExceptionEnabled', 'responseBodyEnabled'].some(k => c[k] !== profile.toggles[k]);
+            'clientLatencyEnabled', 'clientExceptionEnabled', 'responseBodyEnabled',
+            'responseHeaderEnabled'].some(k => c[k] !== profile.toggles[k]);
     }
 
     _setProfile(e) {
@@ -766,7 +852,7 @@ export class QwcGoblinDashboard extends LitElement {
             if (!saved) {
                 return;
             }
-            this.jsonRpc.applyConfig(saved.config).then(r => {
+            this.jsonRpc.applyConfig({config: saved.config}).then(r => {
                 if (r.result && r.result.ok) {
                     this._activeCustom = name;
                     this._applyConfigResult(r.result);
@@ -867,7 +953,7 @@ export class QwcGoblinDashboard extends LitElement {
         reader.onload = () => {
             try {
                 const config = JSON.parse(reader.result);
-                this.jsonRpc.applyConfig(config).then(r => {
+                this.jsonRpc.applyConfig({config}).then(r => {
                     if (r.result && r.result.ok) {
                         this._applyConfigResult(r.result);
                         this._showToast(r.result.warning || 'Configuration imported', r.result.warning ? 'warning' : '');
@@ -897,7 +983,7 @@ export class QwcGoblinDashboard extends LitElement {
     _enabledServerAssaults() {
         const c = this._status || {};
         return ['latencyEnabled', 'exceptionEnabled', 'httpStatusEnabled', 'dependencyDegradationEnabled',
-            'responseBodyEnabled'].filter(k => c[k]).length;
+            'responseBodyEnabled', 'responseHeaderEnabled'].filter(k => c[k]).length;
     }
 
     _enabledClientAssaults() {
@@ -1203,6 +1289,47 @@ export class QwcGoblinDashboard extends LitElement {
                     <div class="helper">Truncate keeps percentage% of the original body; inflate pads it up to percentage% of
                         its original length. Inflate must stay 101-1000%.</div>` : html`
                     <div class="helper">Current: ${c.body.mode} ${c.body.percentage}%. Enable response body assault to configure.</div>`}
+                </div>
+
+                <div class="section">
+                    <div class="assault-toggle ${c.responseHeaderEnabled ? 'enabled' : ''}"
+                         @click="${() => this._toggleAssault('responseHeaderEnabled', 'toggleResponseHeader')}"
+                         title="Response phase - sets or removes response headers">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" role="switch" aria-label="Response header assault"
+                                   ?checked="${c.responseHeaderEnabled}"
+                                   @change="${() => this._toggleAssault('responseHeaderEnabled', 'toggleResponseHeader')}">
+                            <span class="slider" aria-hidden="true"></span>
+                        </label>
+                        <div>
+                            <div class="label">Response Header</div>
+                            <div class="desc">Set or remove response headers</div>
+                        </div>
+                        <span class="priority">R</span>
+                    </div>
+                    ${c.responseHeaderEnabled ? html`
+                    ${this._form.headers.length ? this._form.headers.map((row, i) => html`
+                        <div class="form-row">
+                            <input type="text" id="hdr-name-${i}" placeholder="X-Header" .value="${row.name}"
+                                   @input="${this._headerChanged}">
+                            <select id="hdr-action-${i}" @change="${this._headerChanged}">
+                                <option value="SET" ?selected="${row.action === 'SET'}">Set</option>
+                                <option value="REMOVE" ?selected="${row.action === 'REMOVE'}">Remove</option>
+                            </select>
+                            <input type="text" id="hdr-val-${i}" placeholder="value" .value="${row.value}"
+                                   ?disabled="${row.action === 'REMOVE'}" @input="${this._headerChanged}">
+                            <button class="icon-btn" title="Remove rule"
+                                    @click="${() => this._removeHeaderRule(i)}">×</button>
+                        </div>`): html`
+                        <div class="helper">No header rules configured.</div>`}
+                    <div class="form-row">
+                        <button class="save-btn" style="margin-top:0" @click="${this._addHeaderRule}">Add header rule</button>
+                        <button class="save-btn" style="margin-top:0"
+                                ?disabled="${!this._dirtyFor('headers')}" @click="${this._saveHeaders}">Save headers</button>
+                    </div>
+                    <div class="helper">Set forces the header (replacing an existing value or adding it when absent);
+                        Remove deletes it when present.</div>` : html`
+                    <div class="helper">Current: ${this._headerSummary(c)}. Enable response header assault to configure.</div>`}
                 </div>
 
                 <div class="section">

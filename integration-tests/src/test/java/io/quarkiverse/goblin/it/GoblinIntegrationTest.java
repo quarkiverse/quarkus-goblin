@@ -1,6 +1,8 @@
 package io.quarkiverse.goblin.it;
 
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.*;
 
 import jakarta.inject.Inject;
@@ -34,6 +36,8 @@ public class GoblinIntegrationTest {
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
         cfg.setResponseBodyEnabled(false);
+        cfg.setResponseHeaderEnabled(false);
+        cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);
@@ -307,6 +311,81 @@ public class GoblinIntegrationTest {
                 .extract().asString();
 
         assertEquals("hello from Goblin test app", body);
+    }
+
+    // ==================== Response headers ====================
+
+    @Test
+    public void testResponseHeaderSetInjectsHeader() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseHeaderEnabled(true);
+        cfg.setResponseHeader("X-Goblin", io.quarkiverse.goblin.ResponseHeaderAction.SET, "chaos");
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("X-Goblin", equalTo("chaos"));
+    }
+
+    @Test
+    public void testResponseHeaderSetReplacesExistingHeader() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseHeaderEnabled(true);
+        cfg.setResponseHeader("Content-Type", io.quarkiverse.goblin.ResponseHeaderAction.SET, "application/x-goblin");
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("Content-Type", equalTo("application/x-goblin"));
+    }
+
+    @Test
+    public void testResponseHeaderRemoveDeletesHeader() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseHeaderEnabled(true);
+        cfg.setResponseHeader("Content-Type", io.quarkiverse.goblin.ResponseHeaderAction.REMOVE, "");
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("Content-Type", nullValue());
+    }
+
+    @Test
+    public void testResponseHeaderDisabledLeavesHeadersUntouched() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseHeader("X-Goblin", io.quarkiverse.goblin.ResponseHeaderAction.SET, "chaos");
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("X-Goblin", nullValue());
+    }
+
+    @Test
+    public void testResponseHeaderAssaultRecordedInHistory() {
+        engine.setActive(true);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseHeaderEnabled(true);
+        cfg.setResponseHeader("X-Goblin", io.quarkiverse.goblin.ResponseHeaderAction.SET, "chaos");
+
+        RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("X-Goblin", notNullValue());
+
+        boolean found = engine.getHistory().stream()
+                .anyMatch(record -> "response-header-set:X-Goblin".equals(record.type()));
+        assertTrue(found, "history must contain a response-header-set:X-Goblin record");
     }
 
     /**
