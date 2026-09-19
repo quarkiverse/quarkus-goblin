@@ -519,6 +519,30 @@ class MutableAssaultConfigTest {
         assertTrue(config.getResponseHeaders().isEmpty());
     }
 
+    @Test
+    void setResponseHeaderRejectsValuesWithControlCharacters() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos\r\nInjected: true"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos\nInjected: true"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos\u0000"));
+        assertTrue(config.getResponseHeaders().isEmpty(), "a rejected rule must not be stored");
+    }
+
+    @Test
+    void isValidResponseHeaderValueAllowsTabButRejectsControlCharacters() {
+        assertTrue(MutableAssaultConfig.isValidResponseHeaderValue(null));
+        assertTrue(MutableAssaultConfig.isValidResponseHeaderValue("a\tb"));
+        assertTrue(MutableAssaultConfig.isValidResponseHeaderValue("plain value; charset=utf-8"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\nb"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\rb"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\u007Fb"));
+        assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\u0000b"));
+    }
+
     private static GoblinConfig configWith(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
             int targetLevel) {
         return configWithProfile(latencyMin, latencyMax, httpStatus, exceptionType, targetLevel, AssaultProfile.NONE);

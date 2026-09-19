@@ -235,8 +235,11 @@ public final class GoblinStatePersistence {
     }
 
     /**
-     * Restores the configured header rules from their encoded JSON representation. Missing or blank entries (including
-     * an empty object) leave the configuration without any rule.
+     * Restores the configured header rules from their encoded JSON representation. The state file is user-editable, so
+     * every entry is validated before being restored: entries whose outer value is not a nested JSON object, whose
+     * action is missing or unknown, or whose value cannot be emitted as an HTTP header are skipped with a warning
+     * rather than turned into an unintended injection rule. Missing or blank entries (including an empty object) leave
+     * the configuration without any rule.
      *
      * @param encoded the encoded rules, or {@code null} when the state file predates the feature
      * @param config the configuration to populate
@@ -247,12 +250,46 @@ public final class GoblinStatePersistence {
         }
         parseJson(encoded).forEach((name, inner) -> {
             if (name == null || name.isBlank()) {
+                LOG.warnf("Skipping response header rule with a blank name in the state file");
+                return;
+            }
+            if (!isJsonObject(inner)) {
+                LOG.warnf("Skipping malformed response header rule for '%s' in the state file: expected a nested object",
+                        name);
                 return;
             }
             Map<String, String> rule = parseJson(inner);
-            config.setResponseHeader(name, parseResponseHeaderAction(rule.get("action")),
-                    rule.get("value") != null ? rule.get("value") : "");
+            ResponseHeaderAction action = parseResponseHeaderAction(rule.get("action"));
+            if (action == null) {
+                LOG.warnf("Skipping response header rule for '%s' in the state file: missing or invalid action", name);
+                return;
+            }
+            String value = rule.get("value") != null ? rule.get("value") : "";
+            if (!MutableAssaultConfig.isValidResponseHeaderValue(value)) {
+                LOG.warnf("Skipping response header rule for '%s' in the state file: the value cannot be emitted as an "
+                        + "HTTP header", name);
+                return;
+            }
+            try {
+                config.setResponseHeader(name, action, value);
+            } catch (IllegalArgumentException e) {
+                LOG.warnf("Skipping invalid response header rule for '%s' in the state file: %s", name, e.getMessage());
+            }
         });
+    }
+
+    /**
+     * Returns whether the persisted value is shaped like a nested JSON object.
+     *
+     * @param value the persisted value
+     * @return {@code true} when the value is non-{@code null} and wrapped in braces
+     */
+    private static boolean isJsonObject(String value) {
+        if (value == null) {
+            return false;
+        }
+        String trimmed = value.strip();
+        return trimmed.startsWith("{") && trimmed.endsWith("}");
     }
 
     /**
@@ -260,11 +297,11 @@ public final class GoblinStatePersistence {
      * whitespace. The historical {@code ADD} and {@code OVERRIDE} labels are mapped to {@link ResponseHeaderAction#SET}.
      *
      * @param name the stored action name
-     * @return the matching {@link ResponseHeaderAction}, or {@link ResponseHeaderAction#SET} if the name is invalid
+     * @return the matching {@link ResponseHeaderAction}, or {@code null} when the name is blank or invalid
      */
     private static ResponseHeaderAction parseResponseHeaderAction(String name) {
         if (name == null || name.isBlank()) {
-            return ResponseHeaderAction.SET;
+            return null;
         }
         String normalized = name.trim().toUpperCase();
         if ("ADD".equals(normalized) || "OVERRIDE".equals(normalized)) {
@@ -273,8 +310,7 @@ public final class GoblinStatePersistence {
         try {
             return ResponseHeaderAction.valueOf(normalized);
         } catch (IllegalArgumentException e) {
-            LOG.warnf("Invalid response header action '%s' in state file, defaulting to SET", name);
-            return ResponseHeaderAction.SET;
+            return null;
         }
     }
 

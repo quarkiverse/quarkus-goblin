@@ -294,8 +294,13 @@ public class GoblinJsonRPCService {
         if (name == null || name.isBlank()) {
             return new JsonObject().put("ok", false).put("error", "Response header name must not be blank");
         }
+        String safeValue = value != null ? value : "";
+        if (!MutableAssaultConfig.isValidResponseHeaderValue(safeValue)) {
+            return new JsonObject().put("ok", false)
+                    .put("error", "Response header value must not contain CR, LF or control characters");
+        }
         String trimmed = name.trim();
-        cfg.setResponseHeader(trimmed, parsed, value != null ? value : "");
+        cfg.setResponseHeader(trimmed, parsed, safeValue);
         LOG.warnf("Goblin response header changed: %s %s", trimmed, parsed);
         return configJson(cfg)
                 .put("ok", true)
@@ -514,7 +519,8 @@ public class GoblinJsonRPCService {
      * <p>
      * The parameter is a {@link Map} rather than a {@code JsonObject}: the Dev UI JSON-RPC codec deserializes
      * parameters through Jackson's bean conversion, which cannot bind arbitrary keys onto a {@code JsonObject}. The
-     * incoming map is wrapped back into a {@code JsonObject} so nested maps are exposed as JSON objects.
+     * incoming map is normalized recursively into a {@code JsonObject} so nested maps -- which Jackson returns as plain
+     * {@link Map} instances -- are exposed as JSON objects regardless of the transport's deserialization strategy.
      *
      * @param config the configuration fields to apply, never {@code null}
      * @return a JSON object with the {@code ok} flag, any clamping {@code warning}, and the full effective configuration
@@ -527,9 +533,43 @@ public class GoblinJsonRPCService {
         if (config == null) {
             return new JsonObject().put("ok", false).put("error", "Missing configuration payload");
         }
-        List<String> issues = applyConfigTo(cfg, new JsonObject(config));
+        List<String> issues = applyConfigTo(cfg, toJsonObject(config));
         LOG.warnf("Goblin: configuration applied via Dev UI");
         return configJson(cfg).put("ok", true).put("warning", toWarning(issues));
+    }
+
+    /**
+     * Recursively converts a map coming from the JSON-RPC codec into a {@code JsonObject}, turning every nested
+     * {@link Map} (which the Jackson-based codec produces for JSON objects) into a {@code JsonObject} and normalizing
+     * lists. This keeps nested structures such as the response header rules usable through {@code getJsonObject}.
+     *
+     * @param map the incoming map
+     * @return the equivalent {@code JsonObject} with nested objects normalized
+     */
+    private static JsonObject toJsonObject(Map<String, Object> map) {
+        JsonObject result = new JsonObject();
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            result.put(entry.getKey(), normalizeValue(entry.getValue()));
+        }
+        return result;
+    }
+
+    private static Object normalizeValue(Object value) {
+        if (value instanceof Map<?, ?> nested) {
+            JsonObject object = new JsonObject();
+            for (Map.Entry<?, ?> entry : nested.entrySet()) {
+                object.put(String.valueOf(entry.getKey()), normalizeValue(entry.getValue()));
+            }
+            return object;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> normalized = new ArrayList<>(list.size());
+            for (Object item : list) {
+                normalized.add(normalizeValue(item));
+            }
+            return normalized;
+        }
+        return value;
     }
 
     private static List<String> applyConfigTo(MutableAssaultConfig cfg, JsonObject config) {
@@ -634,7 +674,13 @@ public class GoblinJsonRPCService {
                 continue;
             }
             String value = rule.getString("value");
-            cfg.setResponseHeader(name, action, value != null ? value : "");
+            String safeValue = value != null ? value : "";
+            if (!MutableAssaultConfig.isValidResponseHeaderValue(safeValue)) {
+                issues.add("Response header '" + name
+                        + "' value contains characters that cannot be emitted in an HTTP header");
+                continue;
+            }
+            cfg.setResponseHeader(name, action, safeValue);
         }
     }
 

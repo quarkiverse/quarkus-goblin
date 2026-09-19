@@ -342,6 +342,14 @@ public class GoblinJsonRPCServiceTest {
     }
 
     @Test
+    public void testSetResponseHeaderInfoRejectsControlCharacters() {
+        JsonObject result = jsonRpc.setResponseHeaderInfo("X-Goblin", "SET", "chaos\r\nInjected: true");
+        assertFalse(result.getBoolean("ok"));
+        assertTrue(result.getString("error").contains("CR, LF"));
+        assertTrue(engine.getMutableConfig().getResponseHeaders().isEmpty());
+    }
+
+    @Test
     public void testRemoveResponseHeader() {
         jsonRpc.setResponseHeaderInfo("X-Goblin", "SET", "chaos");
         assertFalse(engine.getMutableConfig().getResponseHeaders().isEmpty());

@@ -84,8 +84,13 @@ public class MutableAssaultConfig {
         mutable.responseBodyPercentage = config.assault().body().percentage();
         Map<String, GoblinConfig.HeaderConfig> headers = config.assault().headers();
         if (headers != null) {
-            headers.forEach((name, header) -> mutable.setResponseHeader(name, normalizeAction(header.action()),
-                    header.value()));
+            headers.forEach((name, header) -> {
+                try {
+                    mutable.setResponseHeader(name, normalizeAction(header.action()), header.value());
+                } catch (IllegalArgumentException e) {
+                    LOG.warnf("Ignoring invalid response header rule '%s' from configuration: %s", name, e.getMessage());
+                }
+            });
         }
         mutable.targetLevel = config.target().level();
         mutable.profile = config.assault().profile();
@@ -333,7 +338,8 @@ public class MutableAssaultConfig {
      * @param name the header name, never {@code null} or blank
      * @param action the action to apply, never {@code null}
      * @param value the header value written by {@code SET}; may be {@code null} to emit a bare header
-     * @throws IllegalArgumentException when the header name is blank or the action is {@code null}
+     * @throws IllegalArgumentException when the header name is blank, the action is {@code null}, or the value contains
+     *         characters that cannot be emitted in an HTTP header
      */
     public void setResponseHeader(String name, ResponseHeaderAction action, String value) {
         if (name == null || name.isBlank()) {
@@ -342,9 +348,35 @@ public class MutableAssaultConfig {
         if (action == null) {
             throw new IllegalArgumentException("Response header action must not be null");
         }
+        String safeValue = value != null ? value : "";
+        if (!isValidResponseHeaderValue(safeValue)) {
+            throw new IllegalArgumentException("Response header value for '" + name
+                    + "' contains characters that cannot be emitted in an HTTP header");
+        }
         responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
-        responseHeaders.put(name, new HeaderRule(action, value != null ? value : ""));
+        responseHeaders.put(name, new HeaderRule(action, safeValue));
         notifyChange();
+    }
+
+    /**
+     * Validates that a value can be safely emitted as an HTTP header: it must not contain CR, LF, DEL or any other
+     * control character, except for the horizontal tab. This prevents the chaos configuration from producing an invalid
+     * response or a header-injection/splitting condition.
+     *
+     * @param value the header value, may be {@code null}
+     * @return {@code true} when the value is safe to emit
+     */
+    public static boolean isValidResponseHeaderValue(String value) {
+        if (value == null) {
+            return true;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\r' || c == '\n' || c == 0x7F || (c < 0x20 && c != '\t')) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

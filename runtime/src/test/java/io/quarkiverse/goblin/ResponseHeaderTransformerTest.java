@@ -125,6 +125,27 @@ class ResponseHeaderTransformerTest {
         assertTrue(engine.getHistory().isEmpty());
     }
 
+    @Test
+    void skipsRuleWithUnsafeValueInjectedOutsideTheConfigApi() throws Exception {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        injectRule(config, "X-Goblin", "chaos\nInjected: true");
+        MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
+
+        ResponseHeaderTransformer.apply(response(headers), config, engine, "Api.hello");
+
+        assertTrue(headers.isEmpty(), "a value that cannot be emitted as a header must be skipped");
+        assertTrue(engine.getHistory().isEmpty());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void injectRule(MutableAssaultConfig config, String name, String value) throws Exception {
+        java.lang.reflect.Field field = MutableAssaultConfig.class.getDeclaredField("responseHeaders");
+        field.setAccessible(true);
+        java.util.Map<String, MutableAssaultConfig.HeaderRule> rules = (java.util.Map<String, MutableAssaultConfig.HeaderRule>) field
+                .get(config);
+        rules.put(name, new MutableAssaultConfig.HeaderRule(ResponseHeaderAction.SET, value));
+    }
+
     private static ContainerResponseContext response(MultivaluedMap<String, Object> headers) {
         InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
             case "getHeaders" -> headers;

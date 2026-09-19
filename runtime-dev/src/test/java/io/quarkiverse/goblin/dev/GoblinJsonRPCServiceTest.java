@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseHeaderAction;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 
 class GoblinJsonRPCServiceTest {
@@ -305,6 +307,21 @@ class GoblinJsonRPCServiceTest {
     }
 
     /**
+     * {@code setResponseHeaderInfo} rejects a value carrying CR or LF instead of storing a header that could split the
+     * response.
+     */
+    @Test
+    void setResponseHeaderInfoRejectsControlCharacters() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("X-Goblin", "SET", "chaos\r\nInjected: true");
+
+        assertFalse(result.getBoolean("ok"));
+        assertTrue(result.getString("error").contains("CR, LF"), "unexpected error: " + result.getString("error"));
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().isEmpty());
+    }
+
+    /**
      * {@code removeResponseHeader} drops the stored rule and reports the remaining configuration.
      */
     @Test
@@ -537,6 +554,56 @@ class GoblinJsonRPCServiceTest {
         assertTrue(result.getString("warning").contains("BOGUS"));
         assertFalse(service.engine.getMutableConfig().getResponseHeaders().containsKey("X-Goblin"));
         assertTrue(service.engine.getMutableConfig().getResponseHeaders().containsKey("Server"));
+    }
+
+    /**
+     * {@code applyConfig} skips a header rule whose value carries CR or LF and keeps the remaining rules applied.
+     */
+    @Test
+    void applyConfigSkipsHeaderRuleWithUnsafeValue() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject config = new JsonObject()
+                .put("headers", new JsonObject()
+                        .put("X-Goblin", new JsonObject().put("action", "SET").put("value", "chaos\nInjected: true"))
+                        .put("Server", new JsonObject().put("action", "SET").put("value", "goblin")));
+
+        JsonObject result = service.applyConfig(config.getMap());
+
+        assertTrue(result.getBoolean("ok"));
+        assertNotNull(result.getString("warning"));
+        assertFalse(service.engine.getMutableConfig().getResponseHeaders().containsKey("X-Goblin"));
+        assertTrue(service.engine.getMutableConfig().getResponseHeaders().containsKey("Server"));
+    }
+
+    /**
+     * Reproduces the JSON-RPC transport deserialization: the Dev UI codec hands the service a plain map whose nested
+     * JSON objects are ordinary {@link java.util.Map} instances. Nested header rules must survive the conversion.
+     */
+    @Test
+    void applyConfigAcceptsTransportDeserializedPayloadWithNestedHeaders() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        String payload = """
+                {
+                  "responseHeaderEnabled": true,
+                  "headers": {
+                    "X-Goblin": { "action": "SET", "value": "chaos" },
+                    "Server": { "action": "REMOVE", "value": "" }
+                  }
+                }
+                """;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> decoded = Json.decodeValue(payload, Map.class);
+
+        JsonObject result = service.applyConfig(decoded);
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseHeaderEnabled"));
+        assertEquals("chaos",
+                service.engine.getMutableConfig().getResponseHeaders().get("X-Goblin").value());
+        assertEquals(ResponseHeaderAction.REMOVE,
+                service.engine.getMutableConfig().getResponseHeaders().get("Server").action());
     }
 
     /**

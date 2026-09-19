@@ -43,6 +43,11 @@ public final class ResponseHeaderTransformer {
             MutableAssaultConfig.HeaderRule rule = entry.getValue();
             switch (rule.action()) {
                 case SET -> {
+                    if (!MutableAssaultConfig.isValidResponseHeaderValue(rule.value())) {
+                        LOG.warnf("Goblin: skipping response header '%s' on %s: the configured value cannot be emitted "
+                                + "as an HTTP header", name, methodName);
+                        continue;
+                    }
                     removeIgnoringCase(headers, name);
                     headers.putSingle(name, rule.value());
                     record(engine, methodName, name, "set");
