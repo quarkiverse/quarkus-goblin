@@ -47,8 +47,7 @@ public interface GoblinConfig {
 
         /**
          * Response header injection rules, keyed by header name. Each entry declares the action applied to the named
-         * response header ({@code add}, {@code override} or {@code remove}) and, for {@code add}/{@code override}, the
-         * value to write.
+         * response header ({@code SET} or {@code REMOVE}) and, for {@code SET}, the value to write.
          */
         Map<String, HeaderConfig> headers();
 

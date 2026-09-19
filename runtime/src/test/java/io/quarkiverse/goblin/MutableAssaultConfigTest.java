@@ -543,12 +543,46 @@ class MutableAssaultConfigTest {
         assertFalse(MutableAssaultConfig.isValidResponseHeaderValue("a\u0000b"));
     }
 
+    @Test
+    void fromConfigSkipsResponseHeaderRulesThatAreNotValid() {
+        Map<String, GoblinConfig.HeaderConfig> headers = new java.util.LinkedHashMap<>();
+        headers.put("X-Valid", headerRule(ResponseHeaderAction.SET, "chaos"));
+        headers.put("X-NoAction", headerRule(null, "chaos"));
+        headers.put("X-Unsafe", headerRule(ResponseHeaderAction.SET, "chaos\nInjected: true"));
+
+        MutableAssaultConfig config = MutableAssaultConfig
+                .fromConfig(configWithBodyAndHeaders(AssaultType.RESPONSE_HEADER, headers));
+
+        assertTrue(config.isResponseHeaderEnabled());
+        assertEquals(1, config.getResponseHeaders().size(),
+                "invalid rules must be skipped, never implicitly restored as SET");
+        assertTrue(config.getResponseHeaders().containsKey("X-Valid"));
+    }
+
+    private static GoblinConfig.HeaderConfig headerRule(ResponseHeaderAction action, String value) {
+        return new GoblinConfig.HeaderConfig() {
+            @Override
+            public ResponseHeaderAction action() {
+                return action;
+            }
+
+            @Override
+            public String value() {
+                return value;
+            }
+        };
+    }
+
     private static GoblinConfig configWith(long latencyMin, long latencyMax, int httpStatus, String exceptionType,
             int targetLevel) {
         return configWithProfile(latencyMin, latencyMax, httpStatus, exceptionType, targetLevel, AssaultProfile.NONE);
     }
 
     private static GoblinConfig configWithResponseBody() {
+        return configWithBodyAndHeaders(AssaultType.RESPONSE_BODY, Map.of());
+    }
+
+    private static GoblinConfig configWithBodyAndHeaders(AssaultType type, Map<String, GoblinConfig.HeaderConfig> headers) {
         return new GoblinConfig() {
             @Override
             public boolean enabled() {
@@ -560,12 +594,12 @@ class MutableAssaultConfigTest {
                 return new AssaultConfig() {
                     @Override
                     public AssaultType type() {
-                        return AssaultType.RESPONSE_BODY;
+                        return type;
                     }
 
                     @Override
                     public Map<String, HeaderConfig> headers() {
-                        return Map.of();
+                        return headers;
                     }
 
                     @Override

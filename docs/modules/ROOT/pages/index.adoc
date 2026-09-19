@@ -167,7 +167,7 @@ Each header rule is configured under `quarkus.goblin.assault.headers.<header-nam
 * **`SET`** (default) -- forces the header to be present with the configured value: an existing value is **replaced**, and the header is **added** when the application did not emit it. Use it to inject a header the application never emits or to clobber an existing one.
 * **`REMOVE`** -- deletes the header when present. The configured `value` is ignored.
 
-The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Blank header names are rejected; an invalid `action` falls back to `SET` with a `WARN` log.
+The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Blank header names are rejected; an invalid `action` is rejected too -- the rule is skipped with a `WARN` log and never implicitly becomes `SET`.
 
 NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
 
@@ -339,7 +339,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.headers.<name>.action`
 | `ResponseHeaderAction`
 | `SET`
-| Action applied to the `<name>` response header. Values: `SET` (force the header with the configured value, replacing any existing one or adding it when absent), `REMOVE` (delete the header when present). An invalid value falls back to `SET` with a `WARN` log.
+| Action applied to the `<name>` response header. Values: `SET` (force the header with the configured value, replacing any existing one or adding it when absent), `REMOVE` (delete the header when present). Any other value is rejected at startup as a configuration error.
 
 | `quarkus.goblin.assault.headers.<name>.value`
 | `String`

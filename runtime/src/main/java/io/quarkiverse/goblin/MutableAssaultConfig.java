@@ -29,6 +29,7 @@ public class MutableAssaultConfig {
     private Runnable onChange;
 
     private final Object profileLock = new Object();
+    private final Object responseHeadersLock = new Object();
     private volatile AssaultProfile profile = AssaultProfile.NONE;
     private volatile boolean latencyEnabled = true;
     private volatile boolean exceptionEnabled = false;
@@ -86,7 +87,7 @@ public class MutableAssaultConfig {
         if (headers != null) {
             headers.forEach((name, header) -> {
                 try {
-                    mutable.setResponseHeader(name, normalizeAction(header.action()), header.value());
+                    mutable.setResponseHeader(name, header.action(), header.value());
                 } catch (IllegalArgumentException e) {
                     LOG.warnf("Ignoring invalid response header rule '%s' from configuration: %s", name, e.getMessage());
                 }
@@ -326,7 +327,9 @@ public class MutableAssaultConfig {
      * @return an unmodifiable snapshot of the configured header rules, keyed by header name
      */
     public Map<String, HeaderRule> getResponseHeaders() {
-        return Map.copyOf(responseHeaders);
+        synchronized (responseHeadersLock) {
+            return Map.copyOf(responseHeaders);
+        }
     }
 
     /**
@@ -334,6 +337,9 @@ public class MutableAssaultConfig {
      * <p>
      * Header names are case-insensitive: an existing rule for the same name in a different casing is replaced, and the
      * configured casing is kept for the emitted header.
+     * <p>
+     * The removal of the case variants and the insertion of the new rule happen atomically under the header-rules
+     * lock, so concurrent readers never observe an intermediate state where the rule is absent.
      *
      * @param name the header name, never {@code null} or blank
      * @param action the action to apply, never {@code null}
@@ -353,8 +359,10 @@ public class MutableAssaultConfig {
             throw new IllegalArgumentException("Response header value for '" + name
                     + "' contains characters that cannot be emitted in an HTTP header");
         }
-        responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
-        responseHeaders.put(name, new HeaderRule(action, safeValue));
+        synchronized (responseHeadersLock) {
+            responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+            responseHeaders.put(name, new HeaderRule(action, safeValue));
+        }
         notifyChange();
     }
 
@@ -390,7 +398,11 @@ public class MutableAssaultConfig {
         if (name == null) {
             return;
         }
-        if (responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name))) {
+        boolean removed;
+        synchronized (responseHeadersLock) {
+            removed = responseHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+        }
+        if (removed) {
             notifyChange();
         }
     }
@@ -399,19 +411,16 @@ public class MutableAssaultConfig {
      * @return a human-readable description of the configured header rules, or {@code "none"} when none are configured
      */
     public String describeResponseHeaders() {
-        if (responseHeaders.isEmpty()) {
+        Map<String, HeaderRule> snapshot = getResponseHeaders();
+        if (snapshot.isEmpty()) {
             return "none";
         }
-        return responseHeaders.entrySet().stream()
+        return snapshot.entrySet().stream()
                 .map(entry -> entry.getKey() + " " + entry.getValue().action().name().toLowerCase()
                         + (entry.getValue().action() != ResponseHeaderAction.REMOVE
                                 ? " \"" + entry.getValue().value() + "\""
                                 : ""))
                 .collect(java.util.stream.Collectors.joining(", "));
-    }
-
-    private static ResponseHeaderAction normalizeAction(ResponseHeaderAction action) {
-        return action != null ? action : ResponseHeaderAction.SET;
     }
 
     public boolean hasAnyAssaultEnabled() {
@@ -646,7 +655,9 @@ public class MutableAssaultConfig {
             clientExceptionEnabled = false;
             responseBodyEnabled = false;
             responseHeaderEnabled = false;
-            responseHeaders.clear();
+            synchronized (responseHeadersLock) {
+                responseHeaders.clear();
+            }
             latencyMinMs = 100;
             latencyMaxMs = 5000;
             exceptionType = "java.lang.RuntimeException";
