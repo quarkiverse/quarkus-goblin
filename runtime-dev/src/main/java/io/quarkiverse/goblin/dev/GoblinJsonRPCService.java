@@ -2,6 +2,7 @@ package io.quarkiverse.goblin.dev;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -14,6 +15,7 @@ import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseBodyMode;
+import io.quarkiverse.goblin.ResponseHeaderAction;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
@@ -42,6 +44,7 @@ public class GoblinJsonRPCService {
                 .put("clientLatencyEnabled", cfg != null && cfg.isClientLatencyEnabled())
                 .put("clientExceptionEnabled", cfg != null && cfg.isClientExceptionEnabled())
                 .put("responseBodyEnabled", cfg != null && cfg.isResponseBodyEnabled())
+                .put("responseHeaderEnabled", cfg != null && cfg.isResponseHeaderEnabled())
                 .put("level", cfg != null ? cfg.getTargetLevel() : 100);
     }
 
@@ -118,12 +121,29 @@ public class GoblinJsonRPCService {
                 .put("clientLatencyEnabled", cfg.isClientLatencyEnabled())
                 .put("clientExceptionEnabled", cfg.isClientExceptionEnabled())
                 .put("responseBodyEnabled", cfg.isResponseBodyEnabled())
+                .put("responseHeaderEnabled", cfg.isResponseHeaderEnabled())
                 .put("latency", latency)
                 .put("exception", exception)
                 .put("httpStatus", httpStatus)
                 .put("body", body)
+                .put("headers", headersJson(cfg))
                 .put("level", cfg.getTargetLevel())
                 .put("exceptionPresets", MutableAssaultConfig.EXCEPTION_PRESETS);
+    }
+
+    /**
+     * Serialises the configured response header rules as a JSON object mapping each header name to an object holding the
+     * {@code action} and {@code value}.
+     *
+     * @param cfg the current mutable assault configuration
+     * @return the header rules keyed by header name
+     */
+    private static JsonObject headersJson(MutableAssaultConfig cfg) {
+        JsonObject result = new JsonObject();
+        cfg.getResponseHeaders().forEach(
+                (name, rule) -> result.put(name,
+                        new JsonObject().put("action", rule.action().name()).put("value", rule.value())));
+        return result;
     }
 
     /**
@@ -238,6 +258,91 @@ public class GoblinJsonRPCService {
         cfg.setResponseBodyEnabled(!cfg.isResponseBodyEnabled());
         LOG.warnf("Goblin response body %s via Dev UI", cfg.isResponseBodyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
+    }
+
+    /**
+     * Toggles the response header injection assault, which applies the configured add/override/remove rules to the
+     * emitted response.
+     *
+     * @return a JSON object with the {@code ok} flag and the new {@code responseHeaderEnabled} toggle value
+     */
+    public JsonObject toggleResponseHeader() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setResponseHeaderEnabled(!cfg.isResponseHeaderEnabled());
+        LOG.warnf("Goblin response header %s via Dev UI", cfg.isResponseHeaderEnabled() ? "ENABLED" : "DISABLED");
+        return configJson(cfg).put("ok", true);
+    }
+
+    /**
+     * Adds or replaces the injection rule applied to the named response header at runtime via the Dev UI.
+     * <p>
+     * The action is matched case-insensitively ({@code SET} or {@code REMOVE}); unknown actions and blank header names
+     * are rejected with a stable error object. {@code REMOVE} ignores the supplied value.
+     *
+     * @param name the header name, never blank
+     * @param action the action (case-insensitive)
+     * @param value the value written by {@code SET}
+     * @return a JSON object with the {@code ok} flag, the effective rule, and any {@code error}
+     */
+    public JsonObject setResponseHeaderInfo(String name, String action, String value) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        ResponseHeaderAction parsed = parseHeaderAction(action);
+        if (parsed == null) {
+            return new JsonObject().put("ok", false)
+                    .put("error", "Unknown response header action '" + action + "'. Valid values: SET, REMOVE");
+        }
+        if (name == null || name.isBlank()) {
+            return new JsonObject().put("ok", false).put("error", "Response header name must not be blank");
+        }
+        String trimmed = name.trim();
+        cfg.setResponseHeader(trimmed, parsed, value != null ? value : "");
+        LOG.warnf("Goblin response header changed: %s %s", trimmed, parsed);
+        return configJson(cfg)
+                .put("ok", true)
+                .put("name", trimmed)
+                .put("action", parsed.name())
+                .put("value", cfg.getResponseHeaders().get(trimmed).value());
+    }
+
+    /**
+     * Removes the injection rule for the named response header at runtime via the Dev UI.
+     *
+     * @param name the header name, never blank
+     * @return a JSON object with the {@code ok} flag, and any {@code error}
+     */
+    public JsonObject removeResponseHeader(String name) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (name == null || name.isBlank()) {
+            return new JsonObject().put("ok", false).put("error", "Response header name must not be blank");
+        }
+        String trimmed = name.trim();
+        cfg.removeResponseHeader(trimmed);
+        LOG.warnf("Goblin response header removed: %s", trimmed);
+        return configJson(cfg).put("ok", true);
+    }
+
+    /**
+     * Converts a raw response header action string to its {@link ResponseHeaderAction} constant, tolerating case and
+     * surrounding whitespace. The historical {@code ADD} and {@code OVERRIDE} labels are mapped to
+     * {@link ResponseHeaderAction#SET} so pre-existing saved profiles keep working.
+     *
+     * @param action the raw string (may be {@code null} or blank)
+     * @return the matching {@link ResponseHeaderAction}, or {@code null} when blank or unknown
+     */
+    private static ResponseHeaderAction parseHeaderAction(String action) {
+        if (action == null || action.isBlank()) {
+            return null;
+        }
+        String normalized = action.trim().toUpperCase();
+        if ("ADD".equals(normalized) || "OVERRIDE".equals(normalized)) {
+            return ResponseHeaderAction.SET;
+        }
+        for (ResponseHeaderAction candidate : ResponseHeaderAction.values()) {
+            if (candidate.name().equals(normalized)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**
@@ -378,6 +483,7 @@ public class GoblinJsonRPCService {
             cfg.setClientLatencyEnabled(false);
             cfg.setClientExceptionEnabled(false);
             cfg.setResponseBodyEnabled(false);
+            cfg.setResponseHeaderEnabled(false);
             cfg.setProfile(AssaultProfile.NONE);
         }
         LOG.warnf("Goblin: all assaults disabled via Dev UI kill switch");
@@ -405,16 +511,23 @@ public class GoblinJsonRPCService {
      * <p>
      * Every field present in {@code config} is applied; missing fields keep their current value. The profile, when
      * present, is applied first so its defaults can then be explicitly overridden by the remaining fields.
+     * <p>
+     * The parameter is a {@link Map} rather than a {@code JsonObject}: the Dev UI JSON-RPC codec deserializes
+     * parameters through Jackson's bean conversion, which cannot bind arbitrary keys onto a {@code JsonObject}. The
+     * incoming map is wrapped back into a {@code JsonObject} so nested maps are exposed as JSON objects.
      *
      * @param config the configuration fields to apply, never {@code null}
      * @return a JSON object with the {@code ok} flag, any clamping {@code warning}, and the full effective configuration
      */
-    public JsonObject applyConfig(JsonObject config) {
+    public JsonObject applyConfig(Map<String, Object> config) {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         if (cfg == null) {
             return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
         }
-        List<String> issues = applyConfigTo(cfg, config);
+        if (config == null) {
+            return new JsonObject().put("ok", false).put("error", "Missing configuration payload");
+        }
+        List<String> issues = applyConfigTo(cfg, new JsonObject(config));
         LOG.warnf("Goblin: configuration applied via Dev UI");
         return configJson(cfg).put("ok", true).put("warning", toWarning(issues));
     }
@@ -445,6 +558,9 @@ public class GoblinJsonRPCService {
         }
         if (config.containsKey("responseBodyEnabled")) {
             cfg.setResponseBodyEnabled(config.getBoolean("responseBodyEnabled"));
+        }
+        if (config.containsKey("responseHeaderEnabled")) {
+            cfg.setResponseHeaderEnabled(config.getBoolean("responseHeaderEnabled"));
         }
         JsonObject latency = config.getJsonObject("latency");
         if (latency != null && latency.containsKey("minMilliseconds") && latency.containsKey("maxMilliseconds")) {
@@ -480,10 +596,46 @@ public class GoblinJsonRPCService {
                 issues.addAll(cfg.setResponseBodyPercentage(body.getInteger("percentage")));
             }
         }
+        JsonObject headers = config.getJsonObject("headers");
+        if (headers != null) {
+            applyConfigHeaders(cfg, headers, issues);
+        }
         if (config.containsKey("level")) {
             issues.addAll(cfg.setTargetLevel(config.getInteger("level")));
         }
         return issues;
+    }
+
+    /**
+     * Replaces the configured response header rules with those declared in the payload. Unknown actions are skipped and
+     * reported as an issue; every other pre-existing rule is dropped, matching the full-replacement semantics of the
+     * {@code headers} object.
+     *
+     * @param cfg the configuration to populate
+     * @param headers the header map from the payload
+     * @param issues collecting validation warnings
+     */
+    private static void applyConfigHeaders(MutableAssaultConfig cfg, JsonObject headers, List<String> issues) {
+        cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
+        for (Map.Entry<String, Object> entry : headers) {
+            String name = entry.getKey();
+            if (name == null || name.isBlank()) {
+                issues.add("Response header name must not be blank");
+                continue;
+            }
+            JsonObject rule = headers.getJsonObject(name);
+            if (rule == null) {
+                issues.add("Response header '" + name + "' must carry an action and value");
+                continue;
+            }
+            ResponseHeaderAction action = parseHeaderAction(rule.getString("action"));
+            if (action == null) {
+                issues.add("Unknown response header action '" + rule.getString("action") + "' for header '" + name + "'");
+                continue;
+            }
+            String value = rule.getString("value");
+            cfg.setResponseHeader(name, action, value != null ? value : "");
+        }
     }
 
     /**

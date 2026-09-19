@@ -196,6 +196,7 @@ export class QwcGoblinHistory extends LitElement {
         .type-badge.dependency-degradation { background: var(--lumo-success-color-10pct); color: var(--lumo-success-color); }
         .type-badge.response-body-truncate { background: var(--lumo-primary-color-50pct); color: var(--lumo-contrast-color); }
         .type-badge.response-body-inflate { background: var(--lumo-success-color-50pct); color: var(--lumo-contrast-color); }
+        .type-badge.response-header { background: var(--lumo-contrast-10pct); color: var(--lumo-contrast-color); }
         .method-cell {
             font-family: var(--lumo-font-family-mono);
             font-size: 12px;
@@ -363,7 +364,26 @@ export class QwcGoblinHistory extends LitElement {
         if (type === 'response-body') {
             return record.type.startsWith('response-body-');
         }
+        if (type === 'response-header') {
+            return record.type.startsWith('response-header-');
+        }
         return record.type === type;
+    }
+
+    _typeClass(record) {
+        return record.type && record.type.startsWith('response-header-') ? 'response-header' : record.type;
+    }
+
+    _typeLabel(record) {
+        if (record.type && record.type.startsWith('response-header-')) {
+            const rest = record.type.substring('response-header-'.length);
+            const separator = rest.indexOf(':');
+            const action = separator >= 0 ? rest.substring(0, separator) : rest;
+            const header = separator >= 0 ? rest.substring(separator + 1) : '';
+            const verb = {set: 'Set', remove: 'Remove'}[action] || action;
+            return `Header ${verb}: ${header}`;
+        }
+        return QwcGoblinHistory.TYPE_LABELS[record.type] || record.type;
     }
 
     _getRows() {
@@ -375,9 +395,13 @@ export class QwcGoblinHistory extends LitElement {
             'response-body-truncate': 0, 'response-body-inflate': 0};
         let latencySum = 0;
         let latencyCount = 0;
+        let responseHeader = 0;
         for (const r of this._history) {
             if (counts[r.type] !== undefined) {
                 counts[r.type]++;
+            }
+            if (r.type && r.type.startsWith('response-header-')) {
+                responseHeader++;
             }
             if (r.latencyMs) {
                 latencySum += r.latencyMs;
@@ -391,6 +415,7 @@ export class QwcGoblinHistory extends LitElement {
             httpStatus: counts['http-status'],
             dependency: counts['dependency-degradation'],
             responseBody: counts['response-body-truncate'] + counts['response-body-inflate'],
+            responseHeader,
             avgLatency: latencyCount > 0 ? Math.round(latencySum / latencyCount) : 0,
         };
     }
@@ -461,6 +486,7 @@ export class QwcGoblinHistory extends LitElement {
                 <span class="sum-item">HTTP Status: <b>${s.httpStatus}</b></span>
                 <span class="sum-item">Dependency: <b>${s.dependency}</b></span>
                 <span class="sum-item">Response Body: <b>${s.responseBody}</b></span>
+                <span class="sum-item">Response Header: <b>${s.responseHeader}</b></span>
                 <span class="sum-item">Avg latency: <b>${s.avgLatency} ms</b></span>
             </div>
 
@@ -473,6 +499,7 @@ export class QwcGoblinHistory extends LitElement {
                     <option value="http-status">HTTP Status</option>
                     <option value="dependency-degradation">Dependency</option>
                     <option value="response-body">Response Body</option>
+                    <option value="response-header">Response Header</option>
                 </select>
                 <label>Method</label>
                 <input type="text" placeholder="Search method…" .value="${this._methodFilter}"
@@ -506,7 +533,7 @@ export class QwcGoblinHistory extends LitElement {
                                 <tr>
                                     <td title="${this._isoTimestamp(record.timestamp)}">${this._formatTimestamp(record.timestamp)}</td>
                                     <td class="method-cell">${record.method}</td>
-                                    <td><span class="type-badge ${record.type}">${QwcGoblinHistory.TYPE_LABELS[record.type] || record.type}</span></td>
+                                    <td><span class="type-badge ${this._typeClass(record)}">${this._typeLabel(record)}</span></td>
                                     <td>${record.latencyMs ? record.latencyMs + ' ms' : '-'}</td>
                                     <td class="cfg-cell ${this._isExpanded(record) ? 'expanded' : 'collapsed'}"
                                         title="${this._isExpanded(record) ? '' : 'Click to expand'}"

@@ -37,6 +37,8 @@ public class GoblinClientAssaultIntegrationTest {
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
         cfg.setResponseBodyEnabled(false);
+        cfg.setResponseHeaderEnabled(false);
+        cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);

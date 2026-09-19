@@ -12,6 +12,7 @@ public final class MarkdownReportGenerator {
             - HTTP Status (enabled: %s): %d - "%s"
             - Dependency Degradation (enabled: %s): HTTP 503 with fixed body
             - Response Body (enabled: %s): %s %d%%
+            - Response Headers (enabled: %s): %s
             """;
 
     private static final String REPORT_TEMPLATE = """
@@ -63,7 +64,8 @@ public final class MarkdownReportGenerator {
                 cfg.isExceptionEnabled(), cfg.getExceptionType(), cfg.getExceptionMessage(),
                 cfg.isHttpStatusEnabled(), cfg.getHttpStatusCode(), cfg.getHttpStatusMessage(),
                 cfg.isDependencyDegradationEnabled(),
-                cfg.isResponseBodyEnabled(), cfg.getResponseBodyMode(), cfg.getResponseBodyPercentage());
+                cfg.isResponseBodyEnabled(), cfg.getResponseBodyMode(), cfg.getResponseBodyPercentage(),
+                cfg.isResponseHeaderEnabled(), cfg.describeResponseHeaders());
     }
 
     private static String formatHistory(List<AssaultEngine.AssaultRecord> history) {

@@ -2,6 +2,7 @@ package io.quarkiverse.goblin;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -519,6 +520,11 @@ class MutableAssaultConfigTest {
                     }
 
                     @Override
+                    public Map<String, HeaderConfig> headers() {
+                        return Map.of();
+                    }
+
+                    @Override
                     public AssaultProfile profile() {
                         return AssaultProfile.NONE;
                     }
@@ -626,6 +632,11 @@ class MutableAssaultConfigTest {
                     @Override
                     public AssaultType type() {
                         return AssaultType.LATENCY;
+                    }
+
+                    @Override
+                    public Map<String, HeaderConfig> headers() {
+                        return Map.of();
                     }
 
                     @Override

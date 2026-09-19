@@ -35,6 +35,8 @@ public class GoblinJsonRPCServiceTest {
         cfg.setClientLatencyEnabled(false);
         cfg.setClientExceptionEnabled(false);
         cfg.setResponseBodyEnabled(false);
+        cfg.setResponseHeaderEnabled(false);
+        cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         cfg.setTargetLevel(100);
@@ -55,6 +57,7 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(status.containsKey("clientLatencyEnabled"));
         assertTrue(status.containsKey("clientExceptionEnabled"));
         assertTrue(status.containsKey("responseBodyEnabled"));
+        assertTrue(status.containsKey("responseHeaderEnabled"));
         assertTrue(status.containsKey("level"));
     }
 
@@ -296,17 +299,94 @@ public class GoblinJsonRPCServiceTest {
                 .body(org.hamcrest.Matchers.equalTo("hello from Go"));
     }
 
+    // ==================== response header assault ====================
+
+    @Test
+    public void testToggleResponseHeader() {
+        assertFalse(engine.getMutableConfig().isResponseHeaderEnabled());
+        JsonObject result = jsonRpc.toggleResponseHeader();
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(result.getBoolean("responseHeaderEnabled"));
+        assertTrue(engine.getMutableConfig().isResponseHeaderEnabled());
+
+        result = jsonRpc.toggleResponseHeader();
+        assertFalse(engine.getMutableConfig().isResponseHeaderEnabled());
+    }
+
+    @Test
+    public void testSetResponseHeaderInfo() {
+        JsonObject result = jsonRpc.setResponseHeaderInfo("X-Goblin", "set", "chaos");
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("SET", result.getString("action"));
+        assertEquals("chaos", result.getString("value"));
+        io.quarkiverse.goblin.MutableAssaultConfig.HeaderRule rule = engine.getMutableConfig().getResponseHeaders()
+                .get("X-Goblin");
+        assertNotNull(rule);
+        assertEquals(io.quarkiverse.goblin.ResponseHeaderAction.SET, rule.action());
+        assertEquals("chaos", rule.value());
+    }
+
+    @Test
+    public void testSetResponseHeaderInfoInvalidAction() {
+        JsonObject result = jsonRpc.setResponseHeaderInfo("X-Goblin", "bogus", "chaos");
+        assertFalse(result.getBoolean("ok"));
+        assertTrue(result.getString("error").contains("SET"));
+        assertTrue(engine.getMutableConfig().getResponseHeaders().isEmpty());
+    }
+
+    @Test
+    public void testSetResponseHeaderInfoBlankName() {
+        JsonObject result = jsonRpc.setResponseHeaderInfo("   ", "SET", "chaos");
+        assertFalse(result.getBoolean("ok"));
+        assertTrue(result.getString("error").contains("blank"));
+    }
+
+    @Test
+    public void testRemoveResponseHeader() {
+        jsonRpc.setResponseHeaderInfo("X-Goblin", "SET", "chaos");
+        assertFalse(engine.getMutableConfig().getResponseHeaders().isEmpty());
+
+        JsonObject result = jsonRpc.removeResponseHeader("X-Goblin");
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(engine.getMutableConfig().getResponseHeaders().isEmpty());
+    }
+
+    @Test
+    public void testHeadersInGetConfig() {
+        jsonRpc.setResponseHeaderInfo("X-Goblin", "SET", "v1");
+        JsonObject config = jsonRpc.getConfig();
+        assertTrue(config.getBoolean("responseHeaderEnabled") == Boolean.FALSE
+                || config.containsKey("responseHeaderEnabled"));
+        assertTrue(config.containsKey("headers"));
+        JsonObject headers = config.getJsonObject("headers");
+        assertNotNull(headers.getJsonObject("X-Goblin"));
+        assertEquals("SET", headers.getJsonObject("X-Goblin").getString("action"));
+    }
+
+    @Test
+    public void testResponseHeaderConfigEndToEnd() {
+        jsonRpc.toggleResponseHeader();
+        jsonRpc.setResponseHeaderInfo("X-Goblin", "SET", "chaos");
+
+        io.restassured.RestAssured.given()
+                .get("/api/hello")
+                .then()
+                .statusCode(200)
+                .header("X-Goblin", org.hamcrest.Matchers.equalTo("chaos"));
+    }
+
     // ==================== AssaultType enum ====================
 
     @Test
     public void testAssaultTypeEnumValues() {
         AssaultType[] types = AssaultType.values();
-        assertEquals(5, types.length);
+        assertEquals(6, types.length);
         assertEquals(AssaultType.LATENCY, AssaultType.valueOf("LATENCY"));
         assertEquals(AssaultType.EXCEPTION, AssaultType.valueOf("EXCEPTION"));
         assertEquals(AssaultType.HTTP_STATUS, AssaultType.valueOf("HTTP_STATUS"));
         assertEquals(AssaultType.DEPENDENCY_DEGRADATION, AssaultType.valueOf("DEPENDENCY_DEGRADATION"));
         assertEquals(AssaultType.RESPONSE_BODY, AssaultType.valueOf("RESPONSE_BODY"));
+        assertEquals(AssaultType.RESPONSE_HEADER, AssaultType.valueOf("RESPONSE_HEADER"));
     }
 
     // ==================== history ====================
@@ -351,7 +431,7 @@ public class GoblinJsonRPCServiceTest {
     public void testApplyConfigAppliesProvidedFieldsOnly() {
         JsonObject result = jsonRpc.applyConfig(new JsonObject()
                 .put("profile", "SLOW_FAILURE")
-                .put("level", 30));
+                .put("level", 30).getMap());
 
         assertTrue(result.getBoolean("ok"));
         assertEquals("SLOW_FAILURE", result.getString("profile"));

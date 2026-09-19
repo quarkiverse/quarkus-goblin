@@ -5,5 +5,6 @@ public enum AssaultType {
     EXCEPTION,
     HTTP_STATUS,
     DEPENDENCY_DEGRADATION,
-    RESPONSE_BODY
+    RESPONSE_BODY,
+    RESPONSE_HEADER
 }

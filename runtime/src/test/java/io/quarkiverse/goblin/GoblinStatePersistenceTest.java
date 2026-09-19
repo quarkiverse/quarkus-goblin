@@ -246,4 +246,64 @@ class GoblinStatePersistenceTest {
         assertEquals(ResponseBodyMode.INFLATE, config.getResponseBodyMode());
         assertEquals(180, config.getResponseBodyPercentage());
     }
+
+    @Test
+    void saveAndLoadPreservesResponseHeaderConfig() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeaderEnabled(true);
+        config.setResponseHeader("X-Added", ResponseHeaderAction.SET, "Say \"hi\", ok");
+        config.setResponseHeader("Server", ResponseHeaderAction.SET, "goblin");
+        config.setResponseHeader("Content-Type", ResponseHeaderAction.REMOVE, "");
+
+        GoblinStatePersistence.save(config);
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertTrue(loaded.isResponseHeaderEnabled());
+        assertEquals(3, loaded.getResponseHeaders().size());
+        assertEquals("Say \"hi\", ok", loaded.getResponseHeaders().get("X-Added").value());
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Added").action());
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("Server").action());
+        assertEquals(ResponseHeaderAction.REMOVE, loaded.getResponseHeaders().get("Content-Type").action());
+    }
+
+    @Test
+    void fromJsonDefaultsResponseHeaderWhenMissing() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"latencyEnabled\": false}");
+
+        assertFalse(config.isResponseHeaderEnabled());
+        assertTrue(config.getResponseHeaders().isEmpty());
+    }
+
+    @Test
+    void loadFallsBackToSetWhenStoredResponseHeaderActionIsUnknown() throws IOException {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos");
+        GoblinStatePersistence.save(config);
+
+        String content = Files.readString(stateFile)
+                .replace("\\\"action\\\": \\\"SET\\\"", "\\\"action\\\": \\\"BOGUS\\\"");
+        Files.writeString(stateFile, content);
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded.getResponseHeaders().get("X-Goblin"));
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Goblin").action());
+        assertEquals("chaos", loaded.getResponseHeaders().get("X-Goblin").value());
+    }
+
+    @Test
+    void loadMigratesLegacyAddAndOverrideActionsToSet() throws IOException {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setResponseHeader("X-Added", ResponseHeaderAction.SET, "chaos");
+        GoblinStatePersistence.save(config);
+
+        String content = Files.readString(stateFile)
+                .replace("\\\"action\\\": \\\"SET\\\"", "\\\"action\\\": \\\"ADD\\\"");
+        Files.writeString(stateFile, content);
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Added").action());
+    }
 }

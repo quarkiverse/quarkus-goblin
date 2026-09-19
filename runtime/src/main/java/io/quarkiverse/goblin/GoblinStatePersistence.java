@@ -78,6 +78,8 @@ public final class GoblinStatePersistence {
         map.put("responseBodyEnabled", config.isResponseBodyEnabled());
         map.put("responseBodyMode", config.getResponseBodyMode().name());
         map.put("responseBodyPercentage", config.getResponseBodyPercentage());
+        map.put("responseHeaderEnabled", config.isResponseHeaderEnabled());
+        map.put("responseHeaders", encodeResponseHeaders(config.getResponseHeaders()));
         map.put("latencyMinMs", config.getLatencyMinMs());
         map.put("latencyMaxMs", config.getLatencyMaxMs());
         map.put("exceptionType", config.getExceptionType());
@@ -109,6 +111,8 @@ public final class GoblinStatePersistence {
         config.setResponseBodyMode(parseBodyMode(resolve(map, "responseBodyMode", "TRUNCATE", defaulted)));
         config.setResponseBodyEnabled(resolveBoolean(map, "responseBodyEnabled", "false", defaulted));
         config.setResponseBodyPercentage(resolveInt(map, "responseBodyPercentage", "50", defaulted));
+        config.setResponseHeaderEnabled(resolveBoolean(map, "responseHeaderEnabled", "false", defaulted));
+        applyResponseHeaders(map.get("responseHeaders"), config);
         config.setLatencyMinMs(resolveLong(map, "latencyMinMs", "100", defaulted));
         config.setLatencyMaxMs(resolveLong(map, "latencyMaxMs", "5000", defaulted));
         config.setExceptionType(resolve(map, "exceptionType", "java.lang.RuntimeException", defaulted));
@@ -205,6 +209,72 @@ public final class GoblinStatePersistence {
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid response body mode '%s' in state file, defaulting to TRUNCATE", name);
             return ResponseBodyMode.TRUNCATE;
+        }
+    }
+
+    /**
+     * Encodes the configured header rules as a JSON object string mapping each header name to a nested
+     * {@code {"action": ..., "value": ...}} object string, so the flat state file can carry the whole map under a single
+     * key.
+     *
+     * @param headers the configured rules
+     * @return the JSON object string (an empty object when no rules are configured)
+     */
+    private static String encodeResponseHeaders(Map<String, MutableAssaultConfig.HeaderRule> headers) {
+        if (headers.isEmpty()) {
+            return "{}";
+        }
+        Map<String, Object> outer = new LinkedHashMap<>();
+        headers.forEach((name, rule) -> {
+            Map<String, Object> inner = new LinkedHashMap<>();
+            inner.put("action", rule.action().name());
+            inner.put("value", rule.value());
+            outer.put(name, mapToJson(inner));
+        });
+        return mapToJson(outer);
+    }
+
+    /**
+     * Restores the configured header rules from their encoded JSON representation. Missing or blank entries (including
+     * an empty object) leave the configuration without any rule.
+     *
+     * @param encoded the encoded rules, or {@code null} when the state file predates the feature
+     * @param config the configuration to populate
+     */
+    private static void applyResponseHeaders(String encoded, MutableAssaultConfig config) {
+        if (encoded == null || encoded.isBlank()) {
+            return;
+        }
+        parseJson(encoded).forEach((name, inner) -> {
+            if (name == null || name.isBlank()) {
+                return;
+            }
+            Map<String, String> rule = parseJson(inner);
+            config.setResponseHeader(name, parseResponseHeaderAction(rule.get("action")),
+                    rule.get("value") != null ? rule.get("value") : "");
+        });
+    }
+
+    /**
+     * Converts a persisted response header action label back to its enum constant, tolerating case and surrounding
+     * whitespace. The historical {@code ADD} and {@code OVERRIDE} labels are mapped to {@link ResponseHeaderAction#SET}.
+     *
+     * @param name the stored action name
+     * @return the matching {@link ResponseHeaderAction}, or {@link ResponseHeaderAction#SET} if the name is invalid
+     */
+    private static ResponseHeaderAction parseResponseHeaderAction(String name) {
+        if (name == null || name.isBlank()) {
+            return ResponseHeaderAction.SET;
+        }
+        String normalized = name.trim().toUpperCase();
+        if ("ADD".equals(normalized) || "OVERRIDE".equals(normalized)) {
+            return ResponseHeaderAction.SET;
+        }
+        try {
+            return ResponseHeaderAction.valueOf(normalized);
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid response header action '%s' in state file, defaulting to SET", name);
+            return ResponseHeaderAction.SET;
         }
     }
 

@@ -68,25 +68,29 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
             return;
         }
         MutableAssaultConfig cfg = engine.getMutableConfig();
-        if (cfg == null || !cfg.isResponseBodyEnabled()) {
+        if (cfg == null) {
             return;
         }
         if (!isTargetEligible()) {
             return;
         }
-        byte[] body = toBytes(responseContext.getEntity());
-        if (body == null) {
-            return;
+        if (cfg.isResponseBodyEnabled()) {
+            byte[] body = toBytes(responseContext.getEntity());
+            if (body != null) {
+                int declaredLength = declaredLength(responseContext, body);
+                byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
+                        cfg.getResponseBodyPercentage());
+                setEntity(responseContext, transformed);
+                applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
+                int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
+                LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
+                        cfg.getResponseBodyMode().name().toLowerCase(), describeMethod(), declared, transformed.length);
+                engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
+            }
         }
-        int declaredLength = declaredLength(responseContext, body);
-        byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
-                cfg.getResponseBodyPercentage());
-        setEntity(responseContext, transformed);
-        applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
-        int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
-        LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
-                cfg.getResponseBodyMode().name().toLowerCase(), describeMethod(), declared, transformed.length);
-        engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
+        if (cfg.isResponseHeaderEnabled()) {
+            ResponseHeaderTransformer.apply(responseContext, cfg, engine, describeMethod());
+        }
     }
 
     /**
