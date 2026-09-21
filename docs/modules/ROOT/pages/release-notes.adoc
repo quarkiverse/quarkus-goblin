@@ -10,7 +10,7 @@ include::../partials/attributes.adoc[]
 |Version |Date
 
 |0.2.0
-|TBD
+|2026-09-21
 |===
 
 In development.
