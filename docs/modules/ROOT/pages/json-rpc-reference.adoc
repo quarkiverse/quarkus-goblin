@@ -27,7 +27,7 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Flip the corresponding assault toggle on/off.
 
 | `toggleClientLatency` / `toggleClientException`
-| Flip the corresponding **client-side** assault toggle on/off (outgoing REST Client calls).
+| Flip the corresponding **client-side** assault toggle on/off (outgoing REST Client and Vert.x WebClient calls).
 
 | `setResponseBodyConfig(mode, percentage)`
 | Set the response body transformation (`TRUNCATE` or `INFLATE`) and its target size in percent. Invalid modes are rejected; out-of-range percentages are clamped with the correction surfaced in `warning`.

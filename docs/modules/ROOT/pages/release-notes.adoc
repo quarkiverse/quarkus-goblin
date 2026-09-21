@@ -20,6 +20,7 @@ In development.
 * Predefined assault profiles (https://github.com/quarkiverse/quarkus-goblin/pull/35[#35]).
 * Turn the Assault History into a chaos testing console (https://github.com/quarkiverse/quarkus-goblin/pull/37[#37]).
 * Client-side assaults for outgoing REST Client calls (https://github.com/quarkiverse/quarkus-goblin/pull/38[#38]).
+* Client-side assaults for outgoing Vert.x WebClient calls via `GoblinWebClient.enable(...)` (https://github.com/quarkiverse/quarkus-goblin/issues/31[#31]).
 * Response body injection assault (https://github.com/quarkiverse/quarkus-goblin/pull/40[#40]).
 * Response header injection assault (https://github.com/quarkiverse/quarkus-goblin/pull/42[#42]).
 

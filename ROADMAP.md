@@ -32,8 +32,8 @@ Current status: **preview** (v0.1.0)
 - [x] **Client-side assault via REST Client**
   Intercept outgoing calls made with MicroProfile REST Client or Quarkus REST Client Reactive. Inject latency and exceptions on the client side to simulate downstream failures without touching the remote service.
 
-- [ ] **Client-side assault via Vert.x Web Client**
-  Extend client-side chaos to Vert.x `WebClient` calls, which are common in reactive Quarkus applications. Use Vert.x handlers to inject delays and failures before the request is dispatched.
+- [x] **Client-side assault via Vert.x Web Client**
+  Extend client-side chaos to Vert.x `WebClient` calls, which are common in reactive Quarkus applications. The application arms a client once with `GoblinWebClient.enable(webClient)`; an interceptor attached through Vert.x's internal `WebClientInternal` mechanism applies delays and failures before the request is dispatched (the remote service is never reached for exceptions).
 
 - [x] **Response body injection**
   Add a new assault type that truncates or inflates the response body. Useful for testing how clients handle partial JSON, oversized payloads, or unexpected content lengths.
