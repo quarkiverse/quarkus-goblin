@@ -28,6 +28,15 @@ When enabled it applies latency before the request is dispatched and/or throws t
 leaves the application -- the remote service is never reached for exception assaults. History records use the
 `REST-Client <METHOD> <URI>` method format.
 
+Outgoing Vert.x `WebClient` calls are handled by the static utility `GoblinWebClient`, in the same package. Vert.x 4.x
+exposes no public interceptor hook on `WebClient`, so the application opts in once with
+`WebClient client = GoblinWebClient.enable(WebClient.create(vertx))`. The utility casts to Vert.x's internal
+`WebClientInternal` and registers an interceptor (the same mechanism Vert.x uses for its `OAuth2WebClient` /
+`CachingWebClient` / `WebClientSession` decorators); repeated calls with the same instance are idempotent. The
+interceptor applies the same client-side toggles, on `PREPARE_REQUEST` (before dispatch), with the latency wait done
+via a Vert.x timer when a context is active (blocking `Thread.sleep` fallback otherwise). History records use the
+`WebClient <METHOD> <URI>` method format.
+
 ## Existing assaults
 
 | Assault | Class | `order()` | Enabled via | Behavior | Config keys (`quarkus.goblin.*`) |
@@ -47,9 +56,11 @@ severity (20, 30, 40).
 ### Client-side assaults
 
 Client-facing latency and exception assaults are not part of the `Assault` chain above; they run in
-`GoblinChaosClientFilter`. They are driven by the runtime-only toggles `clientLatencyEnabled` and
-`clientExceptionEnabled` on `MutableAssaultConfig` (default `false`, persisted by `GoblinStatePersistence`,
-no static `GoblinConfig` key), reusing the latency range and exception class/message configured for the server side.
+`GoblinChaosClientFilter` (REST Client, global) and `GoblinWebClient` (Vert.x WebClient, opt-in). They are driven by the
+runtime-only toggles `clientLatencyEnabled` and `clientExceptionEnabled` on `MutableAssaultConfig` (default `false`,
+persisted by `GoblinStatePersistence`, no static `GoblinConfig` key), reusing the latency range and exception
+class/message configured for the server side. Both record their history with a dedicated source prefix
+(`REST-Client ...` / `WebClient ...`) that the Dev UI history renders as a source badge.
 
 ### Profiles
 

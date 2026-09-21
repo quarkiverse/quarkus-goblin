@@ -21,7 +21,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Dependency degradation** -- Simulate downstream service failures
 - **Response body injection** -- Truncate or inflate the response entity (`TRUNCATE` keeps the first N%, `INFLATE` pads it) to break strict JSON clients and length-validating consumers
 - **Response header injection** -- Set or remove headers on emitted responses (`SET` forces the value, replacing an existing header or adding it when absent; `REMOVE` deletes it when present)
-- **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`)
+- **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`) and Vert.x `WebClient` calls (`GoblinWebClient.enable(...)`, opt-in at client creation)
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
@@ -105,7 +105,7 @@ The Chaos Dashboard provides:
 - **Master toggle** -- Activate/deactivate all chaos
 - **Profile selector** -- Switch a whole assault setup (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) in one click; individual toggles stay overridable
 - **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation, Response Body, and Response Header
-- **Client-side assault toggles** -- `client latency` and `client exception` for outgoing REST Client calls
+- **Client-side assault toggles** -- `client latency` and `client exception` for outgoing REST Client and Vert.x WebClient calls
 - **Config sections** -- Edit parameters per type (disabled with placeholders when type is off)
 - **Target level** -- Adjust percentage of affected requests
 - **History** -- Live chaos-testing console: 2-second auto-refresh, newest-first ordering, filters (assault type, method, time period), a summary band with totals and average injected latency, and expandable Active Config cells

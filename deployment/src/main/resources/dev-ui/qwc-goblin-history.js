@@ -194,9 +194,22 @@ export class QwcGoblinHistory extends LitElement {
         .type-badge.exception { background: var(--lumo-error-color-10pct); color: var(--lumo-error-color); }
         .type-badge.http-status { background: var(--lumo-warning-color-10pct); color: var(--lumo-warning-color); }
         .type-badge.dependency-degradation { background: var(--lumo-success-color-10pct); color: var(--lumo-success-color); }
-        .type-badge.response-body-truncate { background: var(--lumo-primary-color-50pct); color: var(--lumo-contrast-color); }
-        .type-badge.response-body-inflate { background: var(--lumo-success-color-50pct); color: var(--lumo-contrast-color); }
+        .type-badge.response-body-truncate { background: rgba(8, 145, 178, 0.12); color: #0891b2; }
+        .type-badge.response-body-inflate { background: rgba(234, 88, 12, 0.12); color: #ea580c; }
         .type-badge.response-header { background: var(--lumo-contrast-10pct); color: var(--lumo-contrast-color); }
+        .source-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-right: 6px;
+            white-space: nowrap;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .source-badge.rest-client { background: rgba(13, 148, 136, 0.12); color: #0f766e; }
+        .source-badge.webclient { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
         .method-cell {
             font-family: var(--lumo-font-family-mono);
             font-size: 12px;
@@ -386,6 +399,22 @@ export class QwcGoblinHistory extends LitElement {
         return QwcGoblinHistory.TYPE_LABELS[record.type] || record.type;
     }
 
+    _sourceClass(record) {
+        if (record.method && record.method.startsWith('WebClient ')) {
+            return 'webclient';
+        }
+        if (record.method && record.method.startsWith('REST-Client ')) {
+            return 'rest-client';
+        }
+        return '';
+    }
+
+    _sourceLabel(record) {
+        return this._sourceClass(record) === 'webclient'
+            ? 'WebClient'
+            : (this._sourceClass(record) === 'rest-client' ? 'REST Client' : '');
+    }
+
     _getRows() {
         return this._filtered().slice().sort((a, b) => b.timestamp - a.timestamp);
     }
@@ -533,7 +562,9 @@ export class QwcGoblinHistory extends LitElement {
                                 <tr>
                                     <td title="${this._isoTimestamp(record.timestamp)}">${this._formatTimestamp(record.timestamp)}</td>
                                     <td class="method-cell">${record.method}</td>
-                                    <td><span class="type-badge ${this._typeClass(record)}">${this._typeLabel(record)}</span></td>
+                                    <td>${this._sourceClass(record)
+                                        ? html`<span class="source-badge ${this._sourceClass(record)}">${this._sourceLabel(record)}</span>`
+                                        : ''}<span class="type-badge ${this._typeClass(record)}">${this._typeLabel(record)}</span></td>
                                     <td>${record.latencyMs ? record.latencyMs + ' ms' : '-'}</td>
                                     <td class="cfg-cell ${this._isExpanded(record) ? 'expanded' : 'collapsed'}"
                                         title="${this._isExpanded(record) ? '' : 'Click to expand'}"

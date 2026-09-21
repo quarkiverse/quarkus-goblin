@@ -5,7 +5,7 @@
 
 include::../partials/attributes.adoc[]
 
-Goblin supports five types of server-side chaos assaults, plus client-side assaults for outgoing REST Client calls. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
+Goblin supports five types of server-side chaos assaults, plus client-side assaults for outgoing REST Client and Vert.x WebClient calls. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
 
 When multiple types are active, they are applied in order:
 
@@ -16,7 +16,7 @@ When multiple types are active, they are applied in order:
 5. **Response Body** -- rewrites the entity of an emitted response (truncate or inflate).
 6. **Response Header** -- sets or removes headers on an emitted response.
 
-In addition, **client-side assaults** (latency and exception) can be enabled for outgoing MicroProfile REST Client calls -- see xref:assault-types.adoc#client-side-assaults[Client-side assaults]. The response body and response header assaults are applied when the response is emitted, so they compose with every other type: for example, HTTP status + response body turns a 503 into a 503 with a truncated body, and HTTP status + response header adds a custom header to the 503.
+In addition, **client-side assaults** (latency and exception) can be enabled for outgoing REST Client and Vert.x WebClient calls -- see xref:assault-types.adoc#client-side-assaults[Client-side assaults]. The response body and response header assaults are applied when the response is emitted, so they compose with every other type: for example, HTTP status + response body turns a 503 into a 503 with a truncated body, and HTTP status + response header adds a custom header to the 503.
 
 TIP: If both latency and exception are enabled, the delay is applied first, then the exception is thrown. This simulates a slow failure -- realistic for testing timeouts followed by fallbacks.
 
@@ -111,12 +111,12 @@ The header rules are applied in the response phase, **after** any response body 
 
 NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
 
-== Client-side assaults (outgoing REST Client calls)
+== Client-side assaults (outgoing REST Client and Vert.x WebClient calls)
 
 [#client-side-assaults]
-Goblin also attacks **outgoing** calls made with MicroProfile REST Client or Quarkus REST Client Reactive (`quarkus-rest-client`). A JAX-RS `ClientRequestFilter` is registered globally and intercepts every outbound REST Client call:
+Goblin also attacks **outgoing** calls, both MicroProfile REST Client / Quarkus REST Client Reactive (`quarkus-rest-client`) calls and Vert.x `WebClient` calls:
 
-* **Client latency** -- sleeps for a random duration within the configured `latency` range before the request is dispatched, simulating a slow downstream service. The remote service is reached, but after the delay.
+* **Client latency** -- waits for a random duration within the configured `latency` range before the request is dispatched, simulating a slow downstream service. The remote service is reached, but after the delay (for Vert.x WebClient the wait does not block the event loop).
 * **Client exception** -- throws the configured exception before the request is sent. The remote service is **never reached**.
 
 Client-side assaults reuse the latency range and exception class/message configured for the incoming side, but are controlled by their **own toggles**, which default to off:
@@ -124,4 +124,19 @@ Client-side assaults reuse the latency range and exception class/message configu
 * `client latency` / `client exception` toggles in the Dev UI Chaos Dashboard;
 * `toggleClientLatency()` / `toggleClientException()` via JSON-RPC.
 
-NOTE: Client-side assaults are off by default. They are recorded in the assault history like any other assault, with the HTTP method and URI of the outbound call as the method (e.g. `/api/books` inside `REST-Client GET http://localhost:8081/api/books`). They respect the shared `target.level` percentage but ignore the package/annotation filters, which only select incoming endpoints. HTTP status and dependency degradation assaults are server-side response manipulations and are never applied to outgoing calls.
+=== MicroProfile / Quarkus REST Client
+
+A JAX-RS `ClientRequestFilter` is registered globally and intercepts every outbound REST Client call automatically -- no configuration required beyond enabling the toggles.
+
+=== Vert.x WebClient
+
+Vert.x 4.x exposes no public request-interceptor hook on `WebClient`, so Goblin attaches its interceptor explicitly where the application builds the client. Wrap the client creation in one call:
+
+[source,java]
+----
+WebClient client = GoblinWebClient.enable(WebClient.create(vertx));
+----
+
+The interceptor is registered only once per instance (repeat calls to `enable` are harmless). It uses the same internal interceptor mechanism Vert.x itself relies on for its `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators, and it fails fast with an `IllegalArgumentException` if the instance is not backed by Vert.x's `WebClientInternal` implementation. Without `GoblinWebClient.enable(...)` a `WebClient` is left untouched and behaves exactly as before.
+
+NOTE: Client-side assaults are off by default. They are recorded in the assault history like any other assault, with the HTTP method and target URL of the outbound call as the method (e.g. `REST-Client GET http://localhost:8081/api/books` for REST Client, `WebClient GET http://localhost:8081/api/books` for Vert.x WebClient). They respect the shared `target.level` percentage but ignore the package/annotation filters, which only select incoming endpoints. HTTP status and dependency degradation assaults are server-side response manipulations and are never applied to outgoing calls.

@@ -21,3 +21,7 @@ Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter`
 == MicroProfile REST Client / Quarkus REST Client
 
 Client-side assaults are implemented as a standard JAX-RS `ClientRequestFilter` registered as a global provider. They apply to any client built with `quarkus-rest-client` (the RESTEasy Reactive-based MicroProfile REST Client implementation). The filter is inert in production builds and, being opt-in, off by default, so it has no effect unless you enable the client-side toggles.
+
+== Vert.x WebClient
+
+The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClient` calls, but Vert.x 4.x exposes no public interceptor hook on `WebClient`. Goblin therefore attaches its interceptor explicitly, at the point where the application creates its client, via `GoblinWebClient.enable(webClient)`. The interceptor relies on Vert.x's internal `WebClientInternal.addInterceptor` mechanism (the same one used by Vert.x's own `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators), so it works with any client backed by Vert.x's default `WebClientImpl`; a custom decorator that does not extend the base client fails fast with an `IllegalArgumentException`. A plain `WebClient` is protected by Goblin's opt-in default: without `enable(...)` it is never touched.

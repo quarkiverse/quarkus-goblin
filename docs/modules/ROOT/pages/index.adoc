@@ -65,7 +65,7 @@ You should see a response time well above your normal baseline.
 
 == Explore the documentation
 
-* xref:assault-types.adoc[] -- the six server-side chaos assaults (latency, exception, HTTP status, dependency degradation, response body, response header) plus client-side assaults for outgoing REST Client calls.
+* xref:assault-types.adoc[] -- the six server-side chaos assaults (latency, exception, HTTP status, dependency degradation, response body, response header) plus client-side assaults for outgoing REST Client and Vert.x WebClient calls.
 * xref:profiles.adoc[] -- bundle common effects into `SLOW_FAILURE`, `INTERMITTENT` or `TIMEOUT`.
 * xref:targeting.adoc[] -- blast radius, package and annotation filters.
 * xref:configuration-reference.adoc[] -- every configuration key and the startup/Dev UI validation rules.
