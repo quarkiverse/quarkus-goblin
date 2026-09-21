@@ -2,7 +2,7 @@
 
 > Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application.
 
-Current status: **preview** (v0.1.0)
+Current status: **preview** (v0.2.0)
 
 ---
 
