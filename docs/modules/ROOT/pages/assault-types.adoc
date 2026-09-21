@@ -1,0 +1,127 @@
+= Assault types
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+Goblin supports five types of server-side chaos assaults, plus client-side assaults for outgoing REST Client calls. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
+
+When multiple types are active, they are applied in order:
+
+1. **Latency** -- adds delay before processing (applied first).
+2. **Exception** -- throws an exception, aborting the request.
+3. **HTTP Status** -- returns a specific status code, aborting the request.
+4. **Dependency Degradation** -- returns 503, aborting the request.
+5. **Response Body** -- rewrites the entity of an emitted response (truncate or inflate).
+6. **Response Header** -- sets or removes headers on an emitted response.
+
+In addition, **client-side assaults** (latency and exception) can be enabled for outgoing MicroProfile REST Client calls -- see xref:assault-types.adoc#client-side-assaults[Client-side assaults]. The response body and response header assaults are applied when the response is emitted, so they compose with every other type: for example, HTTP status + response body turns a 503 into a 503 with a truncated body, and HTTP status + response header adds a custom header to the 503.
+
+TIP: If both latency and exception are enabled, the delay is applied first, then the exception is thrown. This simulates a slow failure -- realistic for testing timeouts followed by fallbacks.
+
+== LATENCY
+
+Injects a random delay (between `min-milliseconds` and `max-milliseconds`) before processing the request. Useful for testing timeouts, circuit breakers, and retry mechanisms.
+
+[source,properties]
+----
+quarkus.goblin.assault.latency.min-milliseconds=500
+quarkus.goblin.assault.latency.max-milliseconds=5000
+----
+
+The delay is applied via `Thread.sleep()` in the JAX-RS filter, before the request reaches your endpoint logic.
+
+If `min-milliseconds` is greater than `max-milliseconds`, the values are swapped (with a `WARN` log) both at startup and when saving the range in the Dev UI.
+
+== EXCEPTION
+
+Throws a configurable exception before the request reaches the endpoint. The exception class and message are fully configurable.
+
+[source,properties]
+----
+quarkus.goblin.assault.exception.type=java.io.IOException
+quarkus.goblin.assault.exception.message=Connection refused to downstream service
+----
+
+The exception must extend `RuntimeException` and have a constructor that accepts a single `String` parameter (the message). `RuntimeException` is used as a fallback if the specified class cannot be instantiated.
+
+If the class cannot be found, does not extend `RuntimeException`, or lacks a `String` constructor, an `ERROR` is logged at startup (and when saving in the Dev UI), and the engine falls back to `RuntimeException`.
+
+The Dev UI quick-picks are served by the engine (`exceptionPresets` in the config) and only offer classes validated against those constraints (e.g. `RuntimeException`, `IllegalStateException`, `WebApplicationException`, `InternalServerErrorException`) -- a preset can never trigger the runtime fallback, so each proposed choice is guaranteed to be throwable. Checked exceptions such as `java.io.IOException` or `java.util.concurrent.TimeoutException` are rejected because the filter layer can only throw unchecked exceptions.
+
+== HTTP_STATUS
+
+Returns a specific HTTP status code without executing the endpoint method at all. The request is aborted at the filter level.
+
+[source,properties]
+----
+quarkus.goblin.assault.http-status.code=503
+quarkus.goblin.assault.http-status.message=Service Unavailable (simulated outage)
+----
+
+Common use case: verify that your frontend handles 503 responses gracefully.
+
+The status code must be in the `100`-`599` range. Out-of-range values are detected at startup (and when saving in the Dev UI) and default to `503` with an `ERROR` log.
+
+== DEPENDENCY_DEGRADATION
+
+Returns 503 with a "Dependency unavailable" message. Designed for testing `@Fallback` and `@Retry` on outbound service calls. No additional configuration needed -- it uses a fixed 503 response.
+
+== RESPONSE_BODY
+
+Rewrites the entity returned by eligible endpoints to a corrupted or unexpected size. Useful for validating that your JSON clients (React, mobile apps, REST Client consumers) fail gracefully when the payload they receive is truncated or padded beyond the declared Content-Length.
+
+[source,properties]
+----
+quarkus.goblin.assault.type=RESPONSE_BODY
+quarkus.goblin.assault.body.mode=truncate
+quarkus.goblin.assault.body.percentage=50
+----
+
+Two transformation modes are available:
+
+* **`TRUNCATE`** -- keeps only the first `percentage`% of the body. For example, truncating a JSON payload to `50`% yields a prefix that is no longer valid JSON, so a strict JSON client fails to parse it. The `Content-Length` header is updated to the truncated size, so the response stays well-framed and the corruption is purely at the payload level.
+* **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). The `Content-Length` header keeps advertising the original, smaller length while more bytes are emitted, exercising length-validating proxies and parsers. The transformed bytes are written verbatim: truncation never re-encodes a split multibyte character, so the delivered size always matches the configured percentage.
+
+The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log both at startup and when saving in the Dev UI (e.g. `INFLATE` with `50` becomes `101`). In both modes the target size is `floor(originalBytes * percentage / 100)`: the emitted size is rounded down so it never exceeds the requested percentage, and any non-zero percentage keeps at least one byte (`0` yields an empty body).
+
+NOTE: The response body assault rewrites the entity in the JAX-RS response filter, so it only applies to responses that carry a body your application produces (String or byte-array entities). It follows the same targeting rules as the other server-side assaults (target level and package/annotation filters), and it is recorded in the assault history like any other assault.
+
+== RESPONSE_HEADER
+
+Adds, replaces or removes headers on the emitted response. Useful for exercising client-side assumptions about caching, CORS, security or content-negotiation headers without touching the application code.
+
+[source,properties]
+----
+quarkus.goblin.assault.type=RESPONSE_HEADER
+quarkus.goblin.assault.headers.X-Chaos.action=set
+quarkus.goblin.assault.headers.X-Chaos.value=goblin
+quarkus.goblin.assault.headers.Cache-Control.action=set
+quarkus.goblin.assault.headers.Cache-Control.value=no-store
+quarkus.goblin.assault.headers.Content-Type.action=remove
+----
+
+Each header rule is configured under `quarkus.goblin.assault.headers.<header-name>` with an `action` and, when relevant, a `value`:
+
+* **`SET`** (default) -- forces the header to be present with the configured value: an existing value is **replaced**, and the header is **added** when the application did not emit it. Use it to inject a header the application never emits or to clobber an existing one.
+* **`REMOVE`** -- deletes the header when present. The configured `value` is ignored.
+
+The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Blank header names are rejected; an invalid `action` is rejected too -- the rule is skipped with a `WARN` log and never implicitly becomes `SET`.
+
+NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
+
+== Client-side assaults (outgoing REST Client calls)
+
+[#client-side-assaults]
+Goblin also attacks **outgoing** calls made with MicroProfile REST Client or Quarkus REST Client Reactive (`quarkus-rest-client`). A JAX-RS `ClientRequestFilter` is registered globally and intercepts every outbound REST Client call:
+
+* **Client latency** -- sleeps for a random duration within the configured `latency` range before the request is dispatched, simulating a slow downstream service. The remote service is reached, but after the delay.
+* **Client exception** -- throws the configured exception before the request is sent. The remote service is **never reached**.
+
+Client-side assaults reuse the latency range and exception class/message configured for the incoming side, but are controlled by their **own toggles**, which default to off:
+
+* `client latency` / `client exception` toggles in the Dev UI Chaos Dashboard;
+* `toggleClientLatency()` / `toggleClientException()` via JSON-RPC.
+
+NOTE: Client-side assaults are off by default. They are recorded in the assault history like any other assault, with the HTTP method and URI of the outbound call as the method (e.g. `/api/books` inside `REST-Client GET http://localhost:8081/api/books`). They respect the shared `target.level` percentage but ignore the package/annotation filters, which only select incoming endpoints. HTTP status and dependency degradation assaults are server-side response manipulations and are never applied to outgoing calls.

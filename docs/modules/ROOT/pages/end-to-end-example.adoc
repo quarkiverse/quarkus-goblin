@@ -1,0 +1,40 @@
+= End-to-end example: prove your @Timeout works
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+This walkthrough exercises a realistic scenario: verifying that a MicroProfile `@Timeout` and `@Fallback` react correctly when a downstream call becomes slow.
+
+. Start the sample application in dev mode:
++
+[source,bash]
+----
+./mvnw -pl integration-tests quarkus:dev
+----
+
+. Configure a latency assault that exceeds your `@Timeout` threshold. If the downstream endpoint has a `@Timeout(1000)` (1 second), set a latency range well above it:
++
+[source,properties]
+----
+quarkus.goblin.enabled=true
+quarkus.goblin.assault.type=LATENCY
+quarkus.goblin.assault.latency.min-milliseconds=2000
+quarkus.goblin.assault.latency.max-milliseconds=4000
+quarkus.goblin.target.level=100
+# Exclude other fault-tolerant endpoints so only the one under test is affected
+----
+
+. Open the Dev UI at `http://localhost:8080/q/dev` and confirm latency is enabled in the Chaos Dashboard.
+
+. Call the endpoint under test and observe the response time and whether the fallback was invoked:
++
+[source,bash]
+----
+curl -w "\nstatus=%{http_code} time=%{time_total}s\n" http://localhost:8080/api/hello
+----
+
+. Check the **Assault History** panel to confirm the latency assault was recorded against the expected method.
+
+. Repeat with `quarkus.goblin.target.level=10` to observe intermittent, non-deterministic failures -- the hardest scenario to get right in production.

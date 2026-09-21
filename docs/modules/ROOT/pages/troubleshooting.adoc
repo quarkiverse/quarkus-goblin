@@ -1,0 +1,34 @@
+= Troubleshooting
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+*Chaos is not activating:*
+
+* Verify you are running in dev mode (`quarkus:dev`), not in test or production mode.
+* Check that `quarkus.goblin.enabled=true` (the default).
+* Verify at least one assault type is enabled in the Dev UI.
+* Look for the WARN log at startup confirming chaos activation.
+
+*Previous config is not restored on restart:*
+
+* Check that `.goblin-state.json` exists in the project working directory.
+* If the file is corrupted (e.g. manual edits), delete it and reconfigure via the Dev UI. Goblin will recreate it automatically.
+* Look for a WARN log: `Failed to load .goblin-state.json, falling back to application.properties`.
+
+*Endpoints are returning 500:*
+
+* If using EXCEPTION assault, verify the exception class exists and has a `String` constructor.
+* Check the Quarkus dev console for stack traces.
+
+*Targeting filters not working:*
+
+* Package matching uses `startsWith`, so `com.example` matches `com.example.api` and `com.example.internal`.
+* Annotation matching uses fully qualified class names, not simple names. Use `jakarta.ws.rs.GET`, not `GET`.
+
+*Dev UI config changes not visible:*
+
+* Check the Quarkus console for WARN logs confirming the change.
+* Changes are persisted to `.goblin-state.json` and restored on restart. If the file is missing or corrupted, Goblin falls back to `application.properties` defaults.

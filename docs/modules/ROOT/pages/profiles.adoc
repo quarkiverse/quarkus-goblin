@@ -1,0 +1,41 @@
+= Profiles
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+Realistic failure scenarios usually combine several effects, and tuning every parameter by hand for each scenario is repetitive. A **profile** bundles a common assault combination into a single config line.
+
+[source,properties]
+----
+quarkus.goblin.assault.profile=SLOW_FAILURE
+----
+
+Available profiles:
+
+|===
+| Profile | Assaults enabled | Sensible defaults
+| `NONE`
+| none (manual mode, `assault.type` is used instead)
+|
+| `SLOW_FAILURE`
+| latency + exception
+| Latency `100`-`5000` ms, `RuntimeException("Goblin chaos: simulated exception")`
+| `INTERMITTENT`
+| HTTP status
+| HTTP 500 -- combine with `quarkus.goblin.target.level` to control frequency
+| `TIMEOUT`
+| latency
+| Fixed `30000` ms (30 s) -- ideal for exercising client-side `@Timeout`
+|===
+
+TIP: Profiles are a **starting point, not a lock-in**. Once a profile is active, each assault toggle stays independently overridable through the Dev UI or JSON-RPC, and those overrides survive restarts like any other Dev UI change.
+
+TIP: At startup, a non-`NONE` profile takes **precedence over the static configuration**: `fromConfig` first copies the static `assault.type` and per-assault parameters, then the profile defaults are applied on top -- so a configured profile overrides the static toggles and parameters at boot. Tune the values afterwards through the Dev UI if needed.
+
+image::dev-ui-profile.png[Profile selector in the Dev UI,width=720,align=center]
+[.text-center]
+The Profile section of the Chaos Dashboard: pick a predefined assault mode in one click -- the active profile also appears in the status bar.
+
+The active profile is displayed in the Dev UI status bar and included in the Markdown report and the `describeAssaults()` snapshot recorded in the assault history.

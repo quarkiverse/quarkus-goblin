@@ -1,0 +1,54 @@
+= Targeting
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+By default, Goblin affects **all REST endpoints** in your application. You can narrow or expand this scope with targeting configuration.
+
+== Percentage-based targeting
+
+Control what fraction of incoming requests are affected (0-100%):
+
+[source,properties]
+----
+# Only affect 10% of requests (useful for simulating intermittent failures)
+quarkus.goblin.target.level=10
+----
+
+Setting `level=0` effectively disables chaos without removing the extension. Setting `level=100` (default) affects every request.
+
+Values outside the `0`-`100` range are clamped (with a `WARN` log) both at startup and when saved in the Dev UI.
+
+== Package filtering
+
+Include only specific packages:
+
+[source,properties]
+----
+quarkus.goblin.target.include-packages=com.example.api,com.example.internal
+----
+
+Exclude specific packages:
+
+[source,properties]
+----
+quarkus.goblin.target.exclude-packages=com.example.health,com.example.metrics
+----
+
+The filter matches on the declaring class's package name using `startsWith`, so `com.example` will match `com.example.api`, `com.example.internal`, etc.
+
+== Annotation-based exclusion
+
+Exclude methods (or their declaring classes) that carry specific annotations. This is particularly useful for coexisting with MicroProfile Fault Tolerance:
+
+[source,properties]
+----
+# Don't inject chaos on endpoints that already have fault tolerance annotations
+quarkus.goblin.target.exclude-annotations=org.eclipse.microprofile.faulttolerance.Timeout,org.eclipse.microprofile.faulttolerance.Fallback
+----
+
+This prevents double-interception: you can chaos-test your unprotected endpoints while leaving fault-tolerant ones to their own mechanisms.
+
+NOTE: Exclusion by annotation never requires you to *add* an annotation to your application. Goblin only reacts to annotations that are already present on your endpoints (such as MicroProfile Fault Tolerance types). There is deliberately no Goblin-owned annotation to scatter across your code -- consistent with the *zero code modification* principle.

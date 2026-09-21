@@ -1,0 +1,60 @@
+= How it works
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+Goblin operates at the JAX-RS filter layer using a `ContainerRequestFilter` (incoming) and a `ClientRequestFilter` (outgoing REST Client calls):
+
+1. At build time, the deployment module registers both filters and the `goblin` feature with Quarkus.
+2. At runtime startup, the `AssaultEngine` is initialized: it first checks for a persisted state file (`.goblin-state.json`), then falls back to the configuration from `application.properties`. In dev mode a change listener is registered so that every subsequent config mutation automatically persists the state to disk.
+3. For every incoming HTTP request, the filter checks:
+   * Is chaos active?
+   * Should this specific request be affected? (based on the `level` percentage)
+   * Is the target endpoint eligible? (based on package/annotation filters)
+4. If all conditions are met, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body and response header assaults are applied on the way out, in the `ContainerResponseFilter`, rewriting the entity and its headers before they reach the client (header rules run after the body transformation, so an explicit header change always wins).
+5. An assault record is added to the history buffer (capped at 1000 entries).
+
+For every outbound MicroProfile REST Client call, the `ClientRequestFilter` checks the same `level` gate and the client-side toggles, then applies latency and/or exception (the remote service is never reached when the exception assault fires). The filter runs early in the JAX-RS pipeline, before any endpoint logic executes. This means:
+
+* Exception and HTTP_STATUS assaults **completely bypass** your endpoint code -- no side effects, no partial state mutations.
+* Latency assaults add delay **before** processing, simulating network or upstream slowness.
+* Client-side exceptions abort the outbound call **before it is dispatched** -- the downstream service never sees the request.
+
+== Runtime config modification
+
+All assault parameters can be modified at runtime through the Dev UI or via JSON-RPC. The initial config is loaded from `application.properties` at startup, then held in a mutable in-memory config (`MutableAssaultConfig`). This means you can:
+
+* Enable latency AND exception simultaneously to simulate a slow failure.
+* Toggle assault types on/off without restarting.
+* Change the latency range, exception class, or HTTP status code on the fly.
+* Drop the target level from 100% to 10% to test intermittent failures.
+
+Changes take effect on the **next request** -- no restart, no redeployment. A WARN log confirms every change in the console.
+
+== State persistence
+
+Runtime config changes made through the Dev UI are automatically persisted to a `.goblin-state.json` file in the project working directory. On the next startup, Goblin checks for this file and restores the previous configuration instead of starting fresh from `application.properties`.
+
+This means your chaos scenario survives restarts -- no need to reconfigure the dashboard every time you restart in dev mode.
+
+The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, response header rules, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
+
+The persistence listener is only registered in dev mode, so integration or system tests never overwrite the chaos configuration you saved from the Dev UI.
+
+TIP: Add `.goblin-state.json` to your `.gitignore` to avoid committing local chaos state to version control.
+
+If the state file is corrupted or unreadable, Goblin logs a warning and falls back to the configuration from `application.properties`.
+
+== Adding your own assault type
+
+Goblin ships with four built-in assault types and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface, annotate the class `@ApplicationScoped`, and it is discovered automatically at build time -- no other wiring required:
+
+* `type()` -- the `AssaultType` this assault represents.
+* `isEnabled(config)` -- whether the assault should run for the current mutable configuration.
+* `recordLabel()` -- the label used in the assault history and the Markdown report.
+* `order()` -- the execution position in the chain. Latency (order `10`) runs first; assaults that abort the request run afterwards.
+* `apply(context)` -- perform the assault. Return `AssaultOutcome.CONTINUE` to let the next enabled type run, or `ABORTED` to stop processing. To short-circuit the request call `context.getRequestContext().abortWith(...)`; to throw a simulated failure, throw a `RuntimeException`.
+
+At build time Goblin scans the application index for implementors of `Assault` and registers them as beans, so a custom type provided by your application is picked up automatically. The filter resolves the ordered list of assaults for every request and applies the enabled ones in `order()` sequence.

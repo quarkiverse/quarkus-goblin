@@ -1,0 +1,23 @@
+= Compatibility
+
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+== MicroProfile Fault Tolerance
+
+Goblin is designed to coexist with Fault Tolerance annotations. The typical workflow:
+
+1. Configure chaos on unprotected endpoints (default behavior).
+2. Exclude fault-tolerant endpoints via `quarkus.goblin.target.exclude-annotations`.
+3. Verify that the unprotected endpoints fail as expected.
+4. Remove the exclusion, chaos-test the fault-tolerant endpoints to confirm `@Timeout` and `@Fallback` trigger correctly.
+
+== RESTEasy Reactive vs classic JAX-RS
+
+Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter`, which work with both RESTEasy Reactive and the classic RESTEasy runtime.
+
+== MicroProfile REST Client / Quarkus REST Client
+
+Client-side assaults are implemented as a standard JAX-RS `ClientRequestFilter` registered as a global provider. They apply to any client built with `quarkus-rest-client` (the RESTEasy Reactive-based MicroProfile REST Client implementation). The filter is inert in production builds and, being opt-in, off by default, so it has no effect unless you enable the client-side toggles.
