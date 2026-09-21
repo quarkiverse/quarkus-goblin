@@ -63,6 +63,9 @@ Current status: **preview** (v0.2.0)
 - [ ] **Saved scenarios**
   Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later. Store scenarios in a `.goblin/scenarios/` directory as JSON files.
 
+- [ ] **Post-assault assertions (resilience verification)**
+  Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine + JSON-RPC, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience/resilience testing*.
+
 ---
 
 ## v0.4.0 -- Extensions & Ecosystem
