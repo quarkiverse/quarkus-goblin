@@ -137,6 +137,16 @@ public class AssaultEngine {
         this.mutableConfig = config;
     }
 
+    /**
+     * Installs the observers used by {@link #recordAssault(String, String, long)} and {@link #setActive(boolean)}.
+     * Package-private for unit tests; the production lifecycle relies on CDI injection of the {@code observers} field.
+     *
+     * @param observers the observers to notify
+     */
+    void setObserversForTests(Instance<AssaultObserver> observers) {
+        this.observers = observers;
+    }
+
     public List<AssaultRecord> getHistory() {
         return List.copyOf(history);
     }

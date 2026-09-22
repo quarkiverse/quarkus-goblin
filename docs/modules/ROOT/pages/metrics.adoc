@@ -45,6 +45,8 @@ The module brings in `quarkus-micrometer-registry-prometheus`, so `/q/metrics` i
 |
 |===
 
+NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin.assaults.total`), but the Prometheus export sanitizes them to underscores -- `goblin_assaults_total` in `/q/metrics`. Other backends (JVM, statsd, ...) keep the dotted names, so write PromQL against the underscored form and refer to the dotted names when consuming the tags/names elsewhere.
+
 `source` is derived from the recorded history identifier: server-side assaults (`SampleResource.hello`) are tagged `server`, outgoing REST Client calls tag `rest-client`, and outgoing Vert.x WebClient calls tag `webclient`.
 
 TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (type)`; watch a specific source with `sum(rate(goblin_latency_injected_seconds_count[5m])) by (source)`.
