@@ -1,0 +1,83 @@
+= Metrics (Micrometer / Prometheus)
+
+:page-aliases: metrics
+
+:toc: left
+:toclevels: 3
+
+include::../partials/attributes.adoc[]
+
+Goblin can surface its assault activity as Micrometer metrics, so the chaos you inject shows up in your existing Prometheus / Grafana dashboards alongside your application's regular metrics.
+
+The integration is **optional** and lives in the `quarkus-goblin-metrics` module. Adding it to the classpath is enough: it observes the assaults through the engine's observer SPI and never alters the assault behavior.
+
+== Adding the dependency
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.quarkiverse.goblin</groupId>
+    <artifactId>quarkus-goblin-metrics</artifactId>
+    <version>${goblin.version}</version>
+</dependency>
+----
+
+The module brings in `quarkus-micrometer-registry-prometheus`, so `/q/metrics` is available immediately. Any other Micrometer backend (e.g. a custom `MeterRegistry`) picks up the same meters: the metrics are registered against the application's `MeterRegistry` bean.
+
+== Exposed metrics
+
+[cols="1,2,3"]
+|===
+| Metric
+| Description
+| Tags
+
+| `goblin_assaults_total`
+| Counter of every fired assault, incremented once per assault (including client-side ones).
+| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`) and `source` (`server`, `rest-client`, `webclient`)
+
+| `goblin_latency_injected_seconds`
+| Timer of the delays actually injected (only incremented when latency was really applied). Exposed as a histogram: `_sum` / `_count` plus `_bucket` distribution series. Custom bucket boundaries can be set with `quarkus.micrometer.export.prometheus.prometheus.bucket-boundaries`.
+| `source`
+
+| `goblin_active`
+| Gauge reading `1` while the engine is active (the master toggle), `0` otherwise.
+|
+|===
+
+NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin.assaults.total`), but the Prometheus export sanitizes them to underscores -- `goblin_assaults_total` in `/q/metrics`. Other backends (JVM, statsd, ...) keep the dotted names, so write PromQL against the underscored form and refer to the dotted names when consuming the tags/names elsewhere.
+
+`source` is derived from the recorded history identifier: server-side assaults (`SampleResource.hello`) are tagged `server`, outgoing REST Client calls tag `rest-client`, and outgoing Vert.x WebClient calls tag `webclient`.
+
+TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (type)`; watch a specific source with `sum(rate(goblin_latency_injected_seconds_count[5m])) by (source)`.
+
+== Reading the latency histogram
+
+Micrometer's Prometheus export keeps `_sum` / `_count` **cumulative**, but `_max` (and any quantile you derive from the `_bucket` series) only reflects the **current scrape interval**. When no latency is injected in a given interval, `_max` therefore drops to `0` -- this is the standard Prometheus/Micrometer behavior, identical to Quarkus's own `http_server_requests_seconds_max`, not a broken probe. There is no `_min` line: the histogram replaces it, and a running minimum over the buckets requires PromQL.
+
+Percentile and min/max over a rolling window, e.g. per source:
+
+[source,promql]
+----
+histogram_quantile(0.99, sum(rate(goblin_latency_injected_seconds_bucket[5m])) by (le, source))  # p99 of injected latency
+min_over_time(max_over_time(goblin_latency_injected_seconds_max[10m])[10m:])                   # persistent max if the interval gaps bother you
+----
+
+Because the histogram is enabled by default, on every scrape you get the `_bucket` series (`goblin_latency_injected_seconds_bucket{source="..."}`, with boundaries from ~1 ms up to 30 s), which is also what Grafana heatmaps expect.
+
+== Assault signals for dashboards
+
+Typical alerts:
+
+* `goblin_assaults_total > 0` -- chaos was injected (expect it while testing).
+* `goblin_active == 0` -- the engine is off, none of the other signals are changing.
+* Sudden spikes on `goblin_latency_injected_seconds` -- latency assault is degrading the injected delays.
+
+These metrics are also the foundation for the planned *post-assault assertions* (issue #50): declaring "inject 500 ms latency, expect a fallback to fire" becomes verifiable from the fault-tolerance signals combined with these metrics.
+
+== Internals
+
+The `quarkus-goblin-metrics` module is a plain jar containing one `@ApplicationScoped` bean
+(`io.quarkiverse.goblin.metrics.GoblinMetricsObserver`) that implements the engine's `AssaultObserver` SPI
+(`io.quarkiverse.goblin.AssaultObserver`, default no-op methods). The observer is fed by the engine on every recorded
+assault and on every active-state change, so it has zero coupling to the JAX-RS filters or the client interceptor.

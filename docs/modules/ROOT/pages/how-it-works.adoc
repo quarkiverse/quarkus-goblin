@@ -48,6 +48,17 @@ TIP: Add `.goblin-state.json` to your `.gitignore` to avoid committing local cha
 
 If the state file is corrupted or unreadable, Goblin logs a warning and falls back to the configuration from `application.properties`.
 
+== Observability: the AssaultObserver SPI
+
+Every recorded assault and every active-state change is broadcast to the registered `AssaultObserver` beans
+(`io.quarkiverse.goblin.AssaultObserver`, default no-op methods). Observers run synchronously on the request path:
+the engine calls each bean and skips/logs any failing observer so observability can never break an assault. The engine
+injects `Instance<AssaultObserver>`, so any `@ApplicationScoped` implementation is picked up automatically; outside
+the CDI container (plain unit tests) the notification simply does nothing.
+
+The optional `quarkus-goblin-metrics` module is the first consumer (see xref:metrics.adoc[]); OpenTelemetry tracing
+and post-assault assertions will plug into the same hook.
+
 == Adding your own assault type
 
 Goblin ships with four built-in assault types and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface, annotate the class `@ApplicationScoped`, and it is discovered automatically at build time -- no other wiring required:

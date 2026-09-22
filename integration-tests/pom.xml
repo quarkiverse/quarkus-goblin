@@ -30,6 +30,11 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>io.quarkiverse.goblin</groupId>
+            <artifactId>quarkus-goblin-metrics</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
         </dependency>

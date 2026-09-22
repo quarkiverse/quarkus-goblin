@@ -51,8 +51,8 @@ Current status: **preview** (v0.2.0)
 
 ## v0.3.0 -- Dev UI & Observability
 
-- [ ] **Micrometer/Prometheus metrics**
-  Expose assault counters and latency histograms via Micrometer so they appear in existing Prometheus/Grafana dashboards. Metrics: `goblin_assaults_total` (tagged by type), `goblin_latency_injected_seconds` (histogram), `goblin_active` (gauge).
+- [x] **Micrometer/Prometheus metrics**
+  Expose assault counters and latency histograms via Micrometer so they appear in existing Prometheus/Grafana dashboards. Metrics: `goblin_assaults_total` (tagged by type), `goblin_latency_injected_seconds` (histogram), `goblin_active` (gauge). Delivered as the optional `quarkus-goblin-metrics` module (#46).
 
 - [ ] **OpenTelemetry tracing integration**
   Create an OTel span for each injected assault, with attributes for assault type, target method, and injected value. Link the assault span to the parent request span for end-to-end trace correlation.

@@ -22,6 +22,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Response body injection** -- Truncate or inflate the response entity (`TRUNCATE` keeps the first N%, `INFLATE` pads it) to break strict JSON clients and length-validating consumers
 - **Response header injection** -- Set or remove headers on emitted responses (`SET` forces the value, replacing an existing header or adding it when absent; `REMOVE` deletes it when present)
 - **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`) and Vert.x `WebClient` calls (`GoblinWebClient.enable(...)`, opt-in at client creation)
+- **Metrics** -- Optional `quarkus-goblin-metrics` module exposing assault activity as Micrometer / Prometheus metrics (`goblin_assaults_total`, `goblin_latency_injected_seconds`, `goblin_active`, see the [Metrics guide](docs/modules/ROOT/pages/metrics.adoc))
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
@@ -98,6 +99,25 @@ quarkus.goblin.target.level=100
 # quarkus.goblin.target.exclude-annotations=org.eclipse.microprofile.faulttolerance.Timeout
 ```
 
+## Metrics (optional)
+
+Add the `quarkus-goblin-metrics` module to expose the assault activity through Micrometer, so it shows up in your
+Prometheus / Grafana dashboards:
+
+```xml
+<dependency>
+    <groupId>io.quarkiverse.goblin</groupId>
+    <artifactId>quarkus-goblin-metrics</artifactId>
+    <version>${goblin.version}</version>
+</dependency>
+```
+
+Metrics are scraped at the standard Prometheus endpoint `/q/metrics`:
+
+- `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `rest-client`, `webclient`)
+- `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source` (sum/count/max; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for histogram tuning)
+- `goblin_active` -- gauge, `1` while the engine is active, `0` otherwise
+
 ## Dev UI
 
 The Chaos Dashboard provides:
@@ -124,6 +144,7 @@ All changes apply instantly with WARN logs in the console and are persisted to `
 Each module carries its own README for contributors:
 
 - [runtime](runtime/README.md) -- the assault abstraction and how to add a new assault (the extension SPI)
+- [metrics](metrics/README.md) -- optional Micrometer / Prometheus metrics for assault activity
 - [runtime-dev](runtime-dev/README.md) -- the Dev UI JSON-RPC backend (dev mode only)
 - [deployment](deployment/README.md) -- build steps, bean registration, and Dev UI wiring
 - [integration-tests](integration-tests/README.md) -- the `@QuarkusTest` suite and how to extend it
