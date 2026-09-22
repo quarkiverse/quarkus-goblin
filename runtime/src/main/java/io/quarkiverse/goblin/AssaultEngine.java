@@ -6,9 +6,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
@@ -28,6 +31,9 @@ public class AssaultEngine {
     private final AtomicLong totalAssaultCount = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> assaultCounts = new ConcurrentHashMap<>();
     private volatile long countersSinceEpoch = System.currentTimeMillis();
+
+    @Inject
+    Instance<AssaultObserver> observers;
 
     public static void setStaticConfig(GoblinConfig config) {
         staticConfig = config;
@@ -78,6 +84,7 @@ public class AssaultEngine {
 
     public void setActive(boolean active) {
         this.active = active;
+        notifyObservers(observer -> observer.onActiveChange(active));
     }
 
     public boolean shouldAssault() {
@@ -151,6 +158,28 @@ public class AssaultEngine {
         }
         totalAssaultCount.incrementAndGet();
         assaultCounts.computeIfAbsent(type, k -> new AtomicLong()).incrementAndGet();
+        notifyObservers(observer -> observer.onAssault(record));
+    }
+
+    /**
+     * Notifies every registered {@link AssaultObserver} of an assault or engine state change. Observers run on the
+     * request path, so a failing observer is logged and skipped rather than propagated: observability must never break
+     * an assault. Outside the CDI container (plain unit test, no injected observers) the notification is a no-op.
+     *
+     * @param action the notification to broadcast to each observer
+     */
+    private void notifyObservers(Consumer<AssaultObserver> action) {
+        Instance<AssaultObserver> current = observers;
+        if (current == null) {
+            return;
+        }
+        for (AssaultObserver observer : current) {
+            try {
+                action.accept(observer);
+            } catch (RuntimeException e) {
+                LOG.debugf("Goblin: assault observer ignored the notification: %s", e.getMessage());
+            }
+        }
     }
 
     /**

@@ -18,6 +18,7 @@ REST Client calls with latency and exceptions, and `GoblinWebClientIntegrationTe
 | `GoblinIntegrationTest` | Endpoint basics, each assault type (latency, exception, HTTP status, dependency degradation, response body truncate/inflate, response header set/remove), target-level percentage behavior |
 | `GoblinClientAssaultIntegrationTest` | Client-side latency and exception on outgoing REST Client calls (incl. interplay with the target level and isolation from incoming-request assaults) |
 | `GoblinWebClientIntegrationTest` | Client-side latency and exception on outgoing Vert.x WebClient calls armed with `GoblinWebClient.enable(...)`, against the same 8081 test-port endpoint |
+| `GoblinMetricsIntegrationTest` | The optional `quarkus-goblin-metrics` module end-to-end: meters registered with the expected names/tags on the live Prometheus registry (server, REST Client and WebClient sources), settled-step counter/timer values, and the `goblin.active` gauge |
 | `GoblinJsonRPCServiceTest` | The Dev UI JSON-RPC contract (status, toggles, editors, history, Markdown report, response body and response header config self-service) |
 | `AbstractPackageTargetingTest` + `ExcludePackageTargetingTest`, `IncludeNonMatchingPackageTargetingTest`, `IncludeMatchingPackageTargetingTest`, `ExcludeOverridesIncludeTargetingTest` | Package-based targeting via `include-packages` / `exclude-packages` |
 

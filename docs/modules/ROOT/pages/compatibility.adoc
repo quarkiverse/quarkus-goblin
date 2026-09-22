@@ -25,3 +25,9 @@ Client-side assaults are implemented as a standard JAX-RS `ClientRequestFilter` 
 == Vert.x WebClient
 
 The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClient` calls, but Vert.x 4.x exposes no public interceptor hook on `WebClient`. Goblin therefore attaches its interceptor explicitly, at the point where the application creates its client, via `GoblinWebClient.enable(webClient)`. The interceptor relies on Vert.x's internal `WebClientInternal.addInterceptor` mechanism (the same one used by Vert.x's own `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators), so it works with any client backed by Vert.x's default `WebClientImpl`; a custom decorator that does not extend the base client fails fast with an `IllegalArgumentException`. A plain `WebClient` is protected by Goblin's opt-in default: without `enable(...)` it is never touched.
+
+== Micrometer / Prometheus
+
+Observability is opt-in through the `quarkus-goblin-metrics` module (see xref:metrics.adoc[]). It depends on
+`quarkus-micrometer-registry-prometheus` and exposes the assault metrics on `/q/metrics`; it co-exists with any other
+Micrometer-based monitoring and is inert when absent from the classpath.
