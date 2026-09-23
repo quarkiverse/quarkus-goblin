@@ -72,6 +72,7 @@ You should see a response time well above your normal baseline.
 * xref:dev-ui.adoc[] -- the Chaos Dashboard, the Assault History panel, and the Markdown report export.
 * xref:how-it-works.adoc[] -- JAX-RS filter mechanics, runtime config modification, state persistence, and adding your own assault type.
 * xref:metrics.adoc[] -- optional Micrometer / Prometheus metrics for assault activity (`quarkus-goblin-metrics`).
+* xref:tracing.adoc[] -- optional OpenTelemetry spans for each assault (`quarkus-goblin-opentelemetry`).
 * xref:compatibility.adoc[] -- coexistence with MicroProfile Fault Tolerance and both JAX-RS runtimes.
 * xref:troubleshooting.adoc[] -- common issues and their fixes.
 * xref:end-to-end-example.adoc[] -- prove that your `@Timeout` and `@Fallback` actually work.

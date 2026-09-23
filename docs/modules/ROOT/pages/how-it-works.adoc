@@ -56,8 +56,8 @@ the engine calls each bean and skips/logs any failing observer so observability 
 injects `Instance<AssaultObserver>`, so any `@ApplicationScoped` implementation is picked up automatically; outside
 the CDI container (plain unit tests) the notification simply does nothing.
 
-The optional `quarkus-goblin-metrics` module is the first consumer (see xref:metrics.adoc[]); OpenTelemetry tracing
-and post-assault assertions will plug into the same hook.
+The optional `quarkus-goblin-metrics` and `quarkus-goblin-opentelemetry` modules are the current consumers (see
+xref:metrics.adoc[] and xref:tracing.adoc[]); post-assault assertions will plug into the same hook.
 
 == Adding your own assault type
 

@@ -1,0 +1,85 @@
+= Tracing (OpenTelemetry)
+
+:page-aliases: tracing
+
+:toc: left
+:toclevels: 3
+
+include::../partials/attributes.adoc[]
+
+Goblin can emit its assault activity as OpenTelemetry spans, so the chaos you inject shows up in your existing tracing backend (Jaeger, Tempo, Datadog, ...) alongside your application's regular requests.
+
+The integration is **optional** and lives in the `quarkus-goblin-opentelemetry` module. Adding it to the classpath is enough: it observes the assaults through the engine's observer SPI and never alters the assault behavior.
+
+== Adding the dependency
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.quarkiverse.goblin</groupId>
+    <artifactId>quarkus-goblin-opentelemetry</artifactId>
+    <version>${goblin.version}</version>
+</dependency>
+----
+
+Adding the module pulls in `quarkus-opentelemetry` (with it the OTel tracing SDK is available), but nothing else:
+no own agent, no additional runtime component beyond the module itself. Your application keeps configuring its
+exporters as usual -- follow the link:https://quarkus.io/guides/opentelemetry[Quarkus OpenTelemetry guide] to send
+traces to your collector, or register a `SpanExporter` bean for in-process inspection.
+
+== Span structure
+
+Each assault produces exactly one span named `goblin.assault`, carrying the assault metadata as `goblin.assault.*` attributes:
+
+[cols="1,3"]
+|===
+| Attribute
+| Description
+
+| `goblin.assault.type`
+| The assault type (e.g. `latency`, `exception`, `http-status`, `dependency-degradation`, `response-body-truncate`).
+
+| `goblin.assault.source`
+| `server` for server-side assaults, `rest-client` for outgoing REST Client calls, `webclient` for outgoing Vert.x WebClient calls.
+
+| `goblin.assault.target.method`
+| The recorded method identifier: `SampleResource.hello`, `REST-Client GET http://...`, `WebClient GET http://...`.
+
+| `goblin.assault.latency_ms`
+| The delay actually injected (only present for latency assaults with a non-zero delay).
+
+| `goblin.assault.status_code`
+| The forced HTTP status (only present for `http-status` and `dependency-degradation` assaults).
+
+| `goblin.assault.exception`
+| The configured exception class (only present for `exception` assaults).
+
+| `goblin.assault.config`
+| The whole active configuration snapshot at the moment of the assault.
+|===
+
+The span kind is `INTERNAL` (the OpenTelemetry default) for every assault: the span annotates an in-process moment --
+the application of the injected delay or failure -- and performs no network call of its own. Labelling it `CLIENT` or
+`SERVER` would mislead tracing backends: a `CLIENT` span with no matching remote `SERVER` span would fabricate a
+phantom dependency edge in service graphs, and a `SERVER` span nested inside the request's own `SERVER` span would
+duplicate the client-to-server topology.
+
+== Tracing the injected latency
+
+The span start timestamp is back-dated by the injected delay, so the latency itself is attributed to the span in the trace waterfall -- you see a *slow* span, not a delay followed by an instantaneous replayed call. Non-latency assaults start at the recorded assault moment.
+
+An `exception` assault additionally marks the span as `ERROR` with the injected signal on `goblin.assault.exception`.
+
+== Trace correlation
+
+Assault spans are started from the current tracing context, so they are linked to the request span that triggered
+them whenever an active context is propagating (request threads, Vert.x contexts). A server-side assault is therefore
+a child of the HTTP request span, and an outgoing REST Client assault joins the chain next to the client span the
+REST Client instrumentation already emits; outside a propagating context the assault span is simply a root span.
+
+== Internals
+
+The `quarkus-goblin-opentelemetry` module is a plain jar containing one `@ApplicationScoped` bean
+(`io.quarkiverse.goblin.opentelemetry.GoblinTracingObserver`) that implements the engine's `AssaultObserver` SPI
+(`io.quarkiverse.goblin.AssaultObserver`, default no-op methods). The observer is fed by the engine on every recorded
+assault, so it has zero coupling to the JAX-RS filters or the client interceptor.

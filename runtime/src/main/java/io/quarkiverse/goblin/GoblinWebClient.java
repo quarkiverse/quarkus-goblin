@@ -36,7 +36,10 @@ import io.vertx.ext.web.client.impl.WebClientInternal;
  * The interceptor replays the exact same behavior as {@link GoblinChaosClientFilter}: when the client latency assault
  * is enabled a random delay within the configured latency range is applied before the request is dispatched, and when
  * the client exception assault is enabled the configured exception fails the request before it is sent -- the remote
- * service is never reached. Both assaults are recorded in the assault history with a {@code "WebClient"} prefix.
+ * service is never reached. Both assaults are recorded in the assault history with a {@code "WebClient"} prefix. A
+ * latency assault is recorded once the delay has elapsed (like the server-side and REST Client latency paths), so the
+ * recorded timestamp marks the moment the delay ended -- observers can therefore attribute the whole delay to the
+ * operation by back-dating from it.
  * <p>
  * The delay is applied without blocking the event loop: when the request is dispatched from a Vert.x context a timer
  * is scheduled, and a blocking fallback is only used when no Vert.x context is available (plain worker thread).
@@ -98,8 +101,10 @@ public final class GoblinWebClient {
         if (config.isClientLatencyEnabled()) {
             long delay = ThreadLocalRandom.current().nextLong(config.getLatencyMinMs(), config.getLatencyMaxMs() + 1);
             LOG.debugf("Goblin: injecting WebClient latency (%s ms) on %s", delay, methodName);
-            engine.recordAssault(methodName, "latency", delay);
-            delayThen(context, delay, () -> finishWithExceptionIfEnabled(context, config, methodName));
+            delayThen(context, delay, () -> {
+                engine.recordAssault(methodName, "latency", delay);
+                finishWithExceptionIfEnabled(context, config, methodName);
+            });
             return;
         }
         if (config.isClientExceptionEnabled()) {

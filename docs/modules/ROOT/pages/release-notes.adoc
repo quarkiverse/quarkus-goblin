@@ -16,6 +16,7 @@ include::../partials/attributes.adoc[]
 === New Features
 
 * Assault metrics and latency histograms via Micrometer / Prometheus (https://github.com/quarkiverse/quarkus-goblin/pull/51[#51]).
+* Assault tracing via OpenTelemetry -- one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span (https://github.com/quarkiverse/quarkus-goblin/issues/47[#47]).
 
 [[version-0-2]]
 == 0.2.x
