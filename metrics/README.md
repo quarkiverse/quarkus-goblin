@@ -17,9 +17,9 @@ Micrometer backend receives the same meters.
 ## The AssaultObserver SPI
 
 `io.quarkiverse.goblin.AssaultObserver` (in `runtime`) is the notification hook the engine fires on every recorded
-assault and active-state change. Micrometer metrics is its first consumer; OpenTelemetry tracing and post-assault
-assertions will reuse it. Observers run on the request path -- implementations must not throw, and the engine guards
-against a failing observer without breaking the assault.
+assault and active-state change. Micrometer metrics and OpenTelemetry tracing (`quarkus-goblin-opentelemetry`) both
+consume it; post-assault assertions will reuse it. Observers run on the request path -- implementations must not
+throw, and the engine guards against a failing observer without breaking the assault.
 
 ## Adding a new metric
 

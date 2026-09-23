@@ -31,3 +31,10 @@ The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClie
 Observability is opt-in through the `quarkus-goblin-metrics` module (see xref:metrics.adoc[]). It depends on
 `quarkus-micrometer-registry-prometheus` and exposes the assault metrics on `/q/metrics`; it co-exists with any other
 Micrometer-based monitoring and is inert when absent from the classpath.
+
+== OpenTelemetry
+
+The `quarkus-goblin-opentelemetry` module (see xref:tracing.adoc[]) emits one `goblin.assault` span per assault
+through the same observer SPI, without touching the engine. It brings in `quarkus-opentelemetry` and reuses whatever
+exporter your application already configures, so the assault spans appear in your existing tracing backend; both
+optional modules can be present at the same time and neither interferes with the other.

@@ -23,6 +23,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Response header injection** -- Set or remove headers on emitted responses (`SET` forces the value, replacing an existing header or adding it when absent; `REMOVE` deletes it when present)
 - **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`) and Vert.x `WebClient` calls (`GoblinWebClient.enable(...)`, opt-in at client creation)
 - **Metrics** -- Optional `quarkus-goblin-metrics` module exposing assault activity as Micrometer / Prometheus metrics (`goblin_assaults_total`, `goblin_latency_injected_seconds`, `goblin_active`, see the [Metrics guide](docs/modules/ROOT/pages/metrics.adoc))
+- **Tracing** -- Optional `quarkus-goblin-opentelemetry` module emitting one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span (see the [Tracing guide](docs/modules/ROOT/pages/tracing.adoc))
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
@@ -118,6 +119,25 @@ Metrics are scraped at the standard Prometheus endpoint `/q/metrics`:
 - `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source` (sum/count/max; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for histogram tuning)
 - `goblin_active` -- gauge, `1` while the engine is active, `0` otherwise
 
+## Tracing (optional)
+
+Add the `quarkus-goblin-opentelemetry` module to surface every assault as an OpenTelemetry span in your existing
+tracing backend:
+
+```xml
+<dependency>
+    <groupId>io.quarkiverse.goblin</groupId>
+    <artifactId>quarkus-goblin-opentelemetry</artifactId>
+    <version>${goblin.version}</version>
+</dependency>
+```
+
+Each assault produces one span named `goblin.assault`:
+
+- kind `SERVER` for server-side assaults, `CLIENT` for outgoing REST Client / Vert.x WebClient manipulations
+- attributes `goblin.assault.type`, `.source` (`server`, `rest-client`, `webclient`), `.target.method`, the injected value (`.latency_ms`, `.status_code`, `.exception`) and the `.config` snapshot
+- linked to the parent request span; for latency, the injected delay is back-dated so it is attributed to the span; exception assaults mark the span `ERROR` (see the [guide](docs/modules/ROOT/pages/tracing.adoc))
+
 ## Dev UI
 
 The Chaos Dashboard provides:
@@ -145,6 +165,7 @@ Each module carries its own README for contributors:
 
 - [runtime](runtime/README.md) -- the assault abstraction and how to add a new assault (the extension SPI)
 - [metrics](metrics/README.md) -- optional Micrometer / Prometheus metrics for assault activity
+- [opentelemetry](opentelemetry/README.md) -- optional OpenTelemetry traces for each assault
 - [runtime-dev](runtime-dev/README.md) -- the Dev UI JSON-RPC backend (dev mode only)
 - [deployment](deployment/README.md) -- build steps, bean registration, and Dev UI wiring
 - [integration-tests](integration-tests/README.md) -- the `@QuarkusTest` suite and how to extend it
