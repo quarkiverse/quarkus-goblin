@@ -43,18 +43,10 @@ public class GoblinWebClientIntegrationTest {
     void start() {
         engine.setActive(true);
         MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.resetToDefaults();
         cfg.setLatencyEnabled(false);
-        cfg.setExceptionEnabled(false);
-        cfg.setHttpStatusEnabled(false);
-        cfg.setDependencyDegradationEnabled(false);
-        cfg.setClientLatencyEnabled(false);
-        cfg.setClientExceptionEnabled(false);
-        cfg.setResponseBodyEnabled(false);
-        cfg.setResponseHeaderEnabled(false);
-        cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
-        cfg.setTargetLevel(100);
         engine.clearHistory();
         client = GoblinWebClient.enable(WebClient.create(vertx, new WebClientOptions().setConnectTimeout(5_000)));
     }

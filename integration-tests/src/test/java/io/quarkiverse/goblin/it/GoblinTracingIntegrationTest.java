@@ -45,17 +45,10 @@ public class GoblinTracingIntegrationTest {
     void start() {
         engine.setActive(true);
         MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.resetToDefaults();
         cfg.setLatencyEnabled(false);
-        cfg.setExceptionEnabled(false);
-        cfg.setHttpStatusEnabled(false);
-        cfg.setDependencyDegradationEnabled(false);
-        cfg.setClientLatencyEnabled(false);
-        cfg.setClientExceptionEnabled(false);
-        cfg.setResponseBodyEnabled(false);
-        cfg.setResponseHeaderEnabled(false);
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(100);
-        cfg.setTargetLevel(100);
         engine.clearHistory();
         trace.clear();
     }

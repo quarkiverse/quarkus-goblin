@@ -11,7 +11,7 @@ Goblin operates at the JAX-RS filter layer using a `ContainerRequestFilter` (inc
 * For Vert.x `WebClient` calls the application arms the client once with `GoblinWebClient.enable(webClient)`; the interceptor is then attached through Vert.x's internal `WebClientInternal` mechanism.
 
 1. At build time, the deployment module registers both filters and the `goblin` feature with Quarkus.
-2. At runtime startup, the `AssaultEngine` is initialized: it first checks for a persisted state file (`.goblin-state.json`), then falls back to the configuration from `application.properties`. In dev mode a change listener is registered so that every subsequent config mutation automatically persists the state to disk.
+2. At runtime startup, the `AssaultEngine` is initialized from the configuration in `application.properties`. In dev mode it first restores any persisted state file (`.goblin-state.json`) and registers a change listener so that every subsequent config mutation automatically persists the state to disk.
 3. For every incoming HTTP request, the filter checks whether chaos is active, whether this request should be affected (based on the `level` percentage), and whether the target endpoint is eligible (based on package/annotation filters).
 4. If all conditions are met, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body and response header assaults are applied on the way out, in the `ContainerResponseFilter`, rewriting the entity and its headers before they reach the client (header rules run after the body transformation, so an explicit header change always wins).
 5. An assault record is added to the history buffer (capped at 1000 entries).
@@ -42,7 +42,7 @@ This means your chaos scenario survives restarts -- no need to reconfigure the d
 
 The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, response header rules, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
 
-The persistence listener is only registered in dev mode, so integration or system tests never overwrite the chaos configuration you saved from the Dev UI.
+State persistence is dev-mode only: the change listener is only registered in dev mode, and the state file is only read on a dev-mode startup. Chaos itself only activates in dev or test mode -- a packaged production application always starts with the engine inactive. Integration or system tests always start from `application.properties` and never read nor overwrite the chaos configuration you saved from the Dev UI.
 
 TIP: Add `.goblin-state.json` to your `.gitignore` to avoid committing local chaos state to version control.
 

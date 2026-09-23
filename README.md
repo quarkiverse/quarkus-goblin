@@ -134,7 +134,7 @@ tracing backend:
 
 Each assault produces one span named `goblin.assault`:
 
-- kind `SERVER` for server-side assaults, `CLIENT` for outgoing REST Client / Vert.x WebClient manipulations
+- kind `INTERNAL` (the OpenTelemetry default) for every assault: the span annotates an in-process moment and makes no network call of its own, so `CLIENT`/`SERVER` labels would fabricate phantom dependency edges or duplicate the request topology
 - attributes `goblin.assault.type`, `.source` (`server`, `rest-client`, `webclient`), `.target.method`, the injected value (`.latency_ms`, `.status_code`, `.exception`) and the `.config` snapshot
 - linked to the parent request span; for latency, the injected delay is back-dated so it is attributed to the span; exception assaults mark the span `ERROR` (see the [guide](docs/modules/ROOT/pages/tracing.adoc))
 

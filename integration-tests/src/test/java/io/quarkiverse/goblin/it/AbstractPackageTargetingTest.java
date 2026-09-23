@@ -25,14 +25,11 @@ abstract class AbstractPackageTargetingTest {
     void resetState() {
         engine.setActive(true);
         MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.resetToDefaults();
         cfg.setLatencyEnabled(false);
-        cfg.setExceptionEnabled(false);
         cfg.setHttpStatusEnabled(true);
-        cfg.setDependencyDegradationEnabled(false);
-        cfg.setResponseBodyEnabled(false);
         cfg.setHttpStatusCode(503);
         cfg.setHttpStatusMessage("Service Unavailable (targeting test)");
-        cfg.setTargetLevel(100);
         engine.clearHistory();
     }
 
