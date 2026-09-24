@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseHeaderAction;
 import io.vertx.core.json.Json;
@@ -649,6 +650,27 @@ class GoblinJsonRPCServiceTest {
         assertEquals(1L, counters.getJsonObject("byType").getLong("latency"));
         assertEquals(1L, counters.getJsonObject("byType").getLong("response-body-truncate"));
         assertTrue(counters.containsKey("since"));
+    }
+
+    /**
+     * The counters endpoint also breaks the assaults down by source, so client-side assaults (recorded as plain
+     * {@code latency} / {@code exception} types) are never counted as server-side ones.
+     */
+    @Test
+    void getCountersReportsPerSource() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+        engine.recordAssault("SampleResource.hello", "latency");
+        engine.recordAssault(AssaultSource.REST_CLIENT, "REST-Client GET http://x", "latency", 5);
+        engine.recordAssault(AssaultSource.DATABASE, "Database <default> connection", "exception");
+
+        JsonObject bySource = service.getCounters().getJsonObject("bySource");
+
+        assertEquals(1L, bySource.getLong("server"));
+        assertEquals(1L, bySource.getLong("rest-client"));
+        assertEquals(1L, bySource.getLong("database"));
+
+        service.resetCounters();
+        assertTrue(service.getCounters().getJsonObject("bySource").isEmpty());
     }
 
     /**

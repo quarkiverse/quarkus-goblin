@@ -210,6 +210,11 @@ public class GoblinServiceLayerIntegrationTest {
                         + " ms");
 
         List<AssaultEngine.AssaultRecord> records = engine.getHistory();
+        records.stream()
+                .filter(record -> SAMPLE_SERVICE_TIMED.equals(record.method()) && "latency".equals(record.type()))
+                .forEach(record -> assertTrue(record.latencyMs() < 600,
+                        "the recorded latency must be the delay endured before @Timeout(400ms) cut it, not the drawn "
+                                + "600-700 ms, got " + record.latencyMs()));
         assertTrue(
                 records.stream()
                         .anyMatch(record -> SAMPLE_SERVICE_TIMED.equals(record.method()) && "latency".equals(record.type())),

@@ -28,6 +28,7 @@ class GoblinServiceInterceptorTest {
     static final class FakeEngine extends AssaultEngine {
         final MutableAssaultConfig config = new MutableAssaultConfig();
         final List<String> records = new ArrayList<>();
+        final List<Long> latencies = new ArrayList<>();
         boolean active = true;
         boolean redraw = true;
         int redraws;
@@ -57,6 +58,7 @@ class GoblinServiceInterceptorTest {
         public void recordAssault(AssaultSource source, String method, String type, long latencyMs) {
             assertEquals(AssaultSource.SERVICE, source);
             records.add(type);
+            latencies.add(latencyMs);
         }
     }
 
@@ -205,6 +207,7 @@ class GoblinServiceInterceptorTest {
         assertThrows(InterruptedException.class, () -> interceptor.aroundInvoke(invocation));
         assertTrue(Thread.interrupted(), "the interrupt flag must be restored");
         assertEquals(List.of("latency"), engine.records);
+        assertTrue(engine.latencies.get(0) < 1000, "the endured delay is recorded, not the drawn 1000 ms");
         assertEquals(0, invocation.proceeded);
     }
 

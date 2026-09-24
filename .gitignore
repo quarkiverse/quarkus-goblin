@@ -56,3 +56,6 @@ buildNumber.properties
 
 # macOS
 .DS_Store
+
+# Local Dev UI screenshot tooling (Playwright), not versioned
+docs/screenshots/

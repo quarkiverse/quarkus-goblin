@@ -430,4 +430,33 @@ class GoblinStatePersistenceTest {
         assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), loaded.getLayers());
         assertEquals("chaos", loaded.getResponseHeaders().get("X-Goblin").value());
     }
+
+    @Test
+    void stateFileWrittenByTheLegacyWriterIsStillReadable() throws Exception {
+        // verbatim file written by the hand-rolled writer of earlier versions: the header rules are pretty-printed JSON
+        // embedded in a string with raw, unescaped line breaks
+        try (var legacy = getClass().getResourceAsStream("/legacy-goblin-state.json")) {
+            Files.write(stateFile, legacy.readAllBytes());
+        }
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded, "a state file written by an earlier version must not be discarded");
+        assertTrue(loaded.isExceptionEnabled());
+        assertFalse(loaded.isLatencyEnabled());
+        assertEquals(4000, loaded.getLatencyMaxMs());
+        assertEquals(404, loaded.getHttpStatusCode());
+        assertEquals(Set.of(ChaosLayer.DATABASE), loaded.getLayers());
+        assertEquals("xxxxxxx", loaded.getResponseHeaders().get("X-token").value());
+        assertEquals("Basic xxxxx", loaded.getResponseHeaders().get("Authentication").value());
+    }
+
+    @Test
+    void controlCharactersAreOnlyEscapedInsideStrings() {
+        assertEquals("{\n  \"a\": \"x\\ny\"\n}",
+                GoblinStatePersistence.escapeControlCharactersInStrings("{\n  \"a\": \"x\ny\"\n}"));
+        assertEquals("{\"a\": \"q\\\"\\n\"}",
+                GoblinStatePersistence.escapeControlCharactersInStrings("{\"a\": \"q\\\"\\n\"}"),
+                "escape sequences already present are kept as they are");
+    }
 }

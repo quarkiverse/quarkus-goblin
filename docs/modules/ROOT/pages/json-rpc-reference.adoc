@@ -60,7 +60,7 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Apply a (partial) config object: `profile` is applied first, then any provided field overrides -- omitted fields keep their current value. The optional `headers` object replaces the whole set of response header rules (rules not listed are dropped); the optional `layers` array replaces the armed chaos layers (unknown layer names are skipped and surfaced in `warning`, an empty array restores the default layers). Unknown actions are skipped and surfaced in `warning`. Returns `{ ok, warning }` plus the full config. Used by the dashboard's import, custom-profile and chaos-layer features.
 
 | `getCounters`
-| Return `{ total, since, byType }` with the session assault counters: the total number of assaults since the engine started (or the counters were last reset), the epoch timestamp of that window start (`since`), and a per-type breakdown (`byType`).
+| Return `{ total, since, byType, bySource }` with the session assault counters: the total number of assaults since the engine started (or the counters were last reset), the epoch timestamp of that window start (`since`), a per-type breakdown (`byType`) and a per-source breakdown (`bySource`, keyed by `server`, `service`, `rest-client`, `webclient`, `database`, `messaging`).
 
 | `resetCounters()`
 | Reset the assault counters to zero. Returns `{ ok }`.

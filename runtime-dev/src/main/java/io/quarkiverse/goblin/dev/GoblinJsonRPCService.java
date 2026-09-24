@@ -742,10 +742,13 @@ public class GoblinJsonRPCService {
     public JsonObject getCounters() {
         JsonObject byType = new JsonObject();
         engine.getAssaultCounts().forEach(byType::put);
+        JsonObject bySource = new JsonObject();
+        engine.getAssaultCountsBySource().forEach(bySource::put);
         return new JsonObject()
                 .put("total", engine.getTotalAssaultCount())
                 .put("since", engine.getCountersSinceEpoch())
-                .put("byType", byType);
+                .put("byType", byType)
+                .put("bySource", bySource);
     }
 
     /**

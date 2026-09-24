@@ -1,0 +1,31 @@
+{
+  "profile": "NONE",
+  "latencyEnabled": false,
+  "exceptionEnabled": true,
+  "httpStatusEnabled": false,
+  "dependencyDegradationEnabled": false,
+  "clientLatencyEnabled": false,
+  "clientExceptionEnabled": false,
+  "responseBodyEnabled": false,
+  "responseBodyMode": "TRUNCATE",
+  "responseBodyPercentage": 50,
+  "responseHeaderEnabled": false,
+  "responseHeaders": "{
+  \"X-token\": \"{
+  \\\"action\\\": \\\"SET\\\",
+  \\\"value\\\": \\\"xxxxxxx\\\"
+}\",
+  \"Authentication\": \"{
+  \\\"action\\\": \\\"SET\\\",
+  \\\"value\\\": \\\"Basic xxxxx\\\"
+}\"
+}",
+  "latencyMinMs": 100,
+  "latencyMaxMs": 4000,
+  "exceptionType": "java.lang.RuntimeException",
+  "exceptionMessage": "Goblin chaos: simulated exception",
+  "httpStatusCode": 404,
+  "httpStatusMessage": "Service Unavailable (Goblin chaos)",
+  "targetLevel": 100,
+  "layers": "DATABASE"
+}

@@ -57,6 +57,7 @@ public class AssaultEngine {
     private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
     private final AtomicLong totalAssaultCount = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> assaultCounts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<AssaultSource, AtomicLong> sourceCounts = new ConcurrentHashMap<>();
     private volatile long countersSinceEpoch = System.currentTimeMillis();
 
     @Inject
@@ -383,6 +384,8 @@ public class AssaultEngine {
         }
         totalAssaultCount.incrementAndGet();
         assaultCounts.computeIfAbsent(type, k -> new AtomicLong()).incrementAndGet();
+        sourceCounts.computeIfAbsent(source != null ? source : AssaultSource.SERVER, k -> new AtomicLong())
+                .incrementAndGet();
         notifyObservers(observer -> observer.onAssault(record));
     }
 
@@ -428,6 +431,17 @@ public class AssaultEngine {
     }
 
     /**
+     * Returns the per-source assault counts, keyed by source tag (e.g. {@code "server"}, {@code "rest-client"}).
+     *
+     * @return an unmodifiable snapshot of the per-source counts
+     */
+    public Map<String, Long> getAssaultCountsBySource() {
+        var result = new java.util.HashMap<String, Long>();
+        sourceCounts.forEach((k, v) -> result.put(k.tag(), v.get()));
+        return java.util.Map.copyOf(result);
+    }
+
+    /**
      * Returns the epoch timestamp (ms) when counters were last reset, or when the engine started.
      *
      * @return the counters start time in epoch milliseconds
@@ -442,6 +456,7 @@ public class AssaultEngine {
     public void resetCounters() {
         totalAssaultCount.set(0);
         assaultCounts.clear();
+        sourceCounts.clear();
         countersSinceEpoch = System.currentTimeMillis();
     }
 

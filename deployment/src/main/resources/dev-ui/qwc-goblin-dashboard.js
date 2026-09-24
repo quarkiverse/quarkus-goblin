@@ -326,6 +326,15 @@ export class QwcGoblinDashboard extends LitElement {
 
     static HTTP_PICKS = [500, 503, 429, 404];
 
+    static SOURCES = [
+        {tag: 'server', label: 'REST'},
+        {tag: 'service', label: 'service'},
+        {tag: 'database', label: 'database'},
+        {tag: 'messaging', label: 'messaging'},
+        {tag: 'rest-client', label: 'REST client'},
+        {tag: 'webclient', label: 'WebClient'},
+    ];
+
     static LAYER_ORDER = ['DATABASE', 'MESSAGING', 'SERVICE', 'HTTP_OUT', 'HTTP_IN'];
 
     static LAYERS = [
@@ -1049,20 +1058,11 @@ export class QwcGoblinDashboard extends LitElement {
         return null;
     }
 
-    _counterCount(mode) {
-        const byType = this._counters && this._counters.byType ? this._counters.byType : {};
-        let total = 0;
-        for (const key in byType) {
-            if (mode === 'response' && key.indexOf('response-body') === 0) {
-                total += byType[key];
-            } else if (mode === 'server' && key.indexOf('response-body') !== 0
-                && key.indexOf('client-') !== 0) {
-                total += byType[key];
-            } else if (mode === 'client' && key.indexOf('client-') === 0) {
-                total += byType[key];
-            }
-        }
-        return total;
+    _sourceCounts() {
+        const bySource = this._counters && this._counters.bySource ? this._counters.bySource : {};
+        return QwcGoblinDashboard.SOURCES
+            .map(source => ({label: source.label, count: bySource[source.tag] || 0}))
+            .filter(source => source.count > 0);
     }
 
     // ==================== render ====================
@@ -1096,11 +1096,9 @@ export class QwcGoblinDashboard extends LitElement {
                     <span class="chip"><b>${counters ? counters.total : 0}</b> assaults
                         <button class="btn-text" @click="${this._resetCounters}">reset</button>
                     </span>
-                    ${counters && counters.total ? html`
-                        <span class="chip">server <b>${this._counterCount('server')}</b></span>
-                        <span class="chip">client <b>${this._counterCount('client')}</b></span>
-                        <span class="chip">body <b>${this._counterCount('response')}</b></span>
-                    ` : ''}
+                    ${this._sourceCounts().map(source => html`
+                        <span class="chip">${source.label} <b>${source.count}</b></span>
+                    `)}
                 </div>
                 <button class="toggle-btn" @click="${this._toggleActive}">
                     ${s.active ? 'Deactivate' : 'Activate'}

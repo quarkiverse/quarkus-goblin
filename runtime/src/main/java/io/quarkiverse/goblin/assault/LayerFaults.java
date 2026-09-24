@@ -24,8 +24,9 @@ public final class LayerFaults {
     /**
      * Applies the enabled latency assault, then the enabled exception assault, to the given target.
      * <p>
-     * The latency is recorded once the delay has elapsed (or was interrupted, e.g. by {@code @Timeout}); a latency
-     * skipped on an event-loop thread is not an assault and is not recorded.
+     * The latency is recorded once the delay has elapsed; when it is interrupted (e.g. by {@code @Timeout}) the delay
+     * actually endured is recorded instead of the drawn one. A latency skipped on an event-loop thread is not an assault
+     * and is not recorded.
      *
      * @param engine the engine recording the assaults
      * @param cfg the active configuration
@@ -40,13 +41,16 @@ public final class LayerFaults {
             long latency = LatencySupport.drawDelay(cfg);
             LOG.debugf("Goblin: %s layer (level %d) injecting %d ms latency into %s",
                     ChaosRequestContext.assaultLayer(), cfg.getTargetLevel(), latency, target);
-            boolean applied = true;
+            long start = System.nanoTime();
             try {
-                applied = LatencySupport.sleep(latency, target);
-            } finally {
-                if (applied) {
+                if (LatencySupport.sleep(latency, target)) {
                     engine.recordAssault(source, target, RECORD_LABEL_LATENCY, latency);
                 }
+            } catch (InterruptedException e) {
+                // cut short (typically by @Timeout): record the delay actually endured, not the one drawn
+                long endured = Math.min(latency, (System.nanoTime() - start) / 1_000_000);
+                engine.recordAssault(source, target, RECORD_LABEL_LATENCY, endured);
+                throw e;
             }
         }
 

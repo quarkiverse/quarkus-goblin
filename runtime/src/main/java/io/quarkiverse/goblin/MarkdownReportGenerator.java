@@ -7,12 +7,14 @@ public final class MarkdownReportGenerator {
 
     private static final String CONFIG_TEMPLATE = """
             - Profile: %s
+            - Chaos layers: %s
             - Latency (enabled: %s): %d - %d ms
             - Exception (enabled: %s): %s - "%s"
             - HTTP Status (enabled: %s): %d - "%s"
             - Dependency Degradation (enabled: %s): HTTP 503 with fixed body
             - Response Body (enabled: %s): %s %d%%
             - Response Headers (enabled: %s): %s
+            - Client-side assaults: latency (enabled: %s), exception (enabled: %s)
             """;
 
     private static final String REPORT_TEMPLATE = """
@@ -60,12 +62,14 @@ public final class MarkdownReportGenerator {
         }
         return String.format(CONFIG_TEMPLATE,
                 cfg.getProfile(),
+                cfg.getLayers().stream().map(ChaosLayer::name).collect(java.util.stream.Collectors.joining(", ")),
                 cfg.isLatencyEnabled(), cfg.getLatencyMinMs(), cfg.getLatencyMaxMs(),
                 cfg.isExceptionEnabled(), cfg.getExceptionType(), cfg.getExceptionMessage(),
                 cfg.isHttpStatusEnabled(), cfg.getHttpStatusCode(), cfg.getHttpStatusMessage(),
                 cfg.isDependencyDegradationEnabled(),
                 cfg.isResponseBodyEnabled(), cfg.getResponseBodyMode(), cfg.getResponseBodyPercentage(),
-                cfg.isResponseHeaderEnabled(), cfg.describeResponseHeaders());
+                cfg.isResponseHeaderEnabled(), cfg.describeResponseHeaders(),
+                cfg.isClientLatencyEnabled(), cfg.isClientExceptionEnabled());
     }
 
     private static String formatHistory(List<AssaultEngine.AssaultRecord> history) {
@@ -73,13 +77,14 @@ public final class MarkdownReportGenerator {
             return "No assaults have been recorded yet.";
         }
         StringBuilder sb = new StringBuilder(
-                "| # | Time | Method | Type | Injected Value | Active Config at Time of Assault |\n");
-        sb.append("|---|---|---|---|---|---|\n");
+                "| # | Time | Method | Source | Type | Injected Value | Active Config at Time of Assault |\n");
+        sb.append("|---|---|---|---|---|---|---|\n");
         int i = 1;
         for (AssaultEngine.AssaultRecord record : history) {
             sb.append("| ").append(i).append(" | ")
                     .append(Instant.ofEpochMilli(record.timestamp())).append(" | ")
                     .append(record.method()).append(" | ")
+                    .append(record.sourceTag()).append(" | ")
                     .append(record.type()).append(" | ")
                     .append(injectedValue(record)).append(" | ")
                     .append(record.configSnapshot()).append(" |\n");

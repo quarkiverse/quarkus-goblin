@@ -13,7 +13,7 @@ The Goblin card in the Dev UI extension grid.
 
 == Chaos Dashboard
 
-The dashboard is the main control surface. It exposes the master toggle, per-type toggles, per-type configuration forms, the target level, blast radius controls, quick-pick presets, and live assault counters.
+The dashboard is the main control surface. It exposes the master toggle, the target level, the chaos layers, the profile, per-type toggles and configuration forms, quick picks, and live assault counters.
 
 image::dev-ui-dashboard.png[Goblin Chaos Dashboard,width=720,align=center]
 [.text-center]
@@ -21,18 +21,18 @@ The Chaos Dashboard with latency enabled at 100% target level.
 
 * **Master toggle** -- Activate/deactivate all chaos with a single click. When inactive, the status dot turns red and the `Deactivate` button becomes `Activate`.
 * **Kill switch** -- Turn every assault off at once: deactivates the engine, disables each assault type and client-side assault, and resets the profile to `NONE`.
-* **Auto-off** -- Optionally arm the dashboard to automatically deactivate chaos after a countdown (between 15 and 600 seconds). The remaining time ticks down and a banner appears, and chaos is turned off when the deadline arrives.
-* **Blast radius** -- Set a chaos blast radius (0-100%) next to the master toggle: it maps to the target level with its own inline save input.
-* **Live counters** -- A status-bar widget shows the total number of assaults recorded for the session, how many attackers are live, and the per-type breakdown, refreshed every 2 seconds together with the config.
+* **Auto-off** -- Optionally deactivate chaos automatically after 5, 10, 30 or 60 minutes. A countdown shows the remaining time and can be cancelled; the deadline is kept in the browser, so it survives a page reload.
+* **Blast radius warning** -- A banner warns when chaos is active with two or more server-side assaults at a 100% level: every eligible request is then assaulted.
+* **Live counters** -- The status bar shows the total number of assaults since the last reset (with a `reset` action) and one chip per source that fired (`REST`, `service`, `database`, `messaging`, `REST client`, `WebClient`), refreshed every 2 seconds together with the config.
 * **Profile selector** -- Pick a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) with one click. The active profile is also shown in the status bar. Individual toggles stay overridable on top of the profile.
-* **Custom profiles** -- Save the current configuration under a custom name, and re-apply it later from the profile selector. Custom profiles are stored in the browser and marked with a badge when one is active (a manual override).
+* **Custom profiles** -- Save the current configuration under a custom name (`Save current as profile`), and re-apply it later from the profile selector. Custom profiles are stored in the browser; the active one is named in the status bar, and an `override` marker appears when the toggles no longer match the active profile.
 * **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation, Response Body, Response Header). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color, and each row shows its priority.
  * **Priority ordering** -- Assault types are grouped by execution priority: the server-side assaults and client-side assaults that preempt normal request processing form the *preemptive* group; the terminal response damaging transformations (truncate/inflate body, header rules, HTTP status substitution) form the *final* group.
  * **Client-side assault toggles** -- A dedicated section controls `client latency` and `client exception`, applied to outgoing MicroProfile REST Client and Vert.x WebClient calls. They default to off and reuse the latency range and exception class/message configured above.
- * **Quick picks** -- One-click presets pinned to the top of each assault type section (e.g. latency `100-500` ms, HTTP status `503`, response body `TRUNCATE 50%`, and several verified exception classes), applied immediately with a single action. The exception quick picks are served by the engine and are guaranteed to be throwable -- no fallback.
+ * **Quick picks** -- One-click presets in the Exception section (verified exception classes, served by the engine and guaranteed to be throwable -- no fallback) and in the HTTP Status section (`500`, `503`, `429`, `404`), applied immediately.
  * **Config sections** -- Each assault type has its own configuration section (latency range, exception class/message, HTTP status code/message, response body mode/percentage, response header rules as editable rows with a single `Save headers` action). Sections are always visible but disabled with placeholder text when the type is off. Enable the type to edit its parameters. Every section has its own `Save` button; the button is only enabled when the form is dirty and valid.
 * **Inline validation** -- Entering an out-of-range value disables the `Save` button and shows a warning -- nothing invalid is ever persisted. Validation rules match the startup rules (see xref:configuration-reference.adoc#configuration-validation[Configuration validation]).
-* **Target level** -- Adjust the percentage of affected requests (0-100%) on the fly, saved with its own button.
+* **Target level** -- Adjust the percentage of affected requests (0-100%) on the fly from the status bar, saved with its own button.
 * **Chaos layers** -- One check-box per chaos layer (`DATABASE`, `MESSAGING`, `SERVICE`, `HTTP_OUT`, `HTTP_IN`) shown in ascending order next to the level slider. Only the checked layers are candidates each request; the deepest layer whose probability roll passes wins for that request (see xref:how-it-works.adoc#chaos-layers[Chaos layers]). `DATABASE` (requires a JDBC datasource) and `MESSAGING` (requires `quarkus-messaging`) are displayed as *unavailable* and cannot be checked when the application lacks the matching extension. By default `HTTP_IN` and `HTTP_OUT` are armed, which keeps the pre-layers behaviour.
 * **Danger zone** -- Export the current configuration as a JSON file, import a previously exported one (or any partial config), or reset the whole configuration to its defaults.
 * **All changes apply instantly** -- no restart needed. A WARN log is emitted in the console for every change, and a toast confirms each action in the UI. If a change violates a validation rule (see xref:configuration-reference.adoc#configuration-validation[Configuration validation]), the toast shows the applied correction, e.g. a swapped latency range.
@@ -50,7 +50,7 @@ The Assault History panel showing past triggered assaults.
 Each row shows:
 
 * the **timestamp** of the assault -- millisecond precision, with the full ISO timestamp shown on hover
-* the endpoint **method** targeted
+* the assaulted **target**: the resource method (`SampleResource.hello`), the application bean method (SERVICE), `Database <datasource> connection`, `Messaging <consumer>`, or the outgoing call (`REST-Client GET <url>`, `WebClient GET <url>`)
 * the assault **type** shown as a colored badge -- `Latency`, `Exception`, `HTTP Status`, `Dependency`, and for response body assaults two distinct badges depending on the mode: `Truncate` (`response-body-truncate`) and `Inflate` (`response-body-inflate`). Response header rules are shown as `Header Set: <name>` / `Header Remove: <name>`
 * the actual applied **latency duration** when the assault was a latency injection
 * the active assault configuration **at the time of the assault**, stored compactly in an `Active Config` cell -- click the cell to expand or collapse it
@@ -66,8 +66,8 @@ The history is an in-memory buffer capped at the latest 1000 assaults. Use it to
 The History panel also offers an **Export Markdown** button. Clicking it generates a factual Markdown report of the current Goblin session and displays it in a panel with **Copy** and **Download** actions:
 
 * the current status (active/inactive) and target level
-* the current assault configuration (active profile, latency, exception, HTTP status, dependency degradation, response body toggles and values, response header rules)
-* the full assault history, including the actual latency duration applied for each latency assault and a snapshot of the active configuration at the time of each assault -- so a config change between two calls is clearly visible (e.g. `latency enabled (100 - 500 ms)` vs `latency enabled (1000 - 5000 ms)`)
+* the current assault configuration (active profile, armed chaos layers, latency, exception, HTTP status, dependency degradation, response body toggles and values, response header rules, client-side assault toggles)
+* the full assault history, including the source of each assault (`server`, `service`, `database`, `messaging`, `rest-client`, `webclient`), the actual latency duration applied for each latency assault and a snapshot of the active configuration at the time of each assault -- so a config change between two calls is clearly visible (e.g. `latency enabled (100 - 500 ms)` vs `latency enabled (1000 - 5000 ms)`)
 
 image::dev-ui-history-report.png[Goblin Markdown report export,width=720,align=center]
 [.text-center]

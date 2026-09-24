@@ -144,7 +144,7 @@ public final class GoblinStatePersistence {
      * @throws NumberFormatException when a numeric field cannot be parsed
      */
     static MutableAssaultConfig fromJson(String json) {
-        State state = new State(new JsonObject(json));
+        State state = new State(new JsonObject(escapeControlCharactersInStrings(json)));
         MutableAssaultConfig config = new MutableAssaultConfig();
         config.restoreProfile(state.enumValue("profile", AssaultProfile.class, AssaultProfile.NONE));
         config.setLatencyEnabled(state.bool("latencyEnabled", true));
@@ -170,6 +170,41 @@ public final class GoblinStatePersistence {
             LOG.infof("Restored missing fields from defaults: %s", String.join(", ", state.defaulted));
         }
         return config;
+    }
+
+    /**
+     * Escapes the raw control characters (line feeds, tabs...) found <em>inside</em> JSON string literals. Earlier versions
+     * wrote the response header rules as pretty-printed JSON embedded in a string without escaping its line breaks,
+     * which strict JSON parsers reject; control characters outside strings are whitespace and are kept.
+     *
+     * @param json the persisted text
+     * @return the text with every control character inside a string literal escaped
+     */
+    static String escapeControlCharactersInStrings(String json) {
+        StringBuilder out = new StringBuilder(json.length());
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (inString && !escaped && c < 0x20) {
+                switch (c) {
+                    case '\n' -> out.append("\\n");
+                    case '\r' -> out.append("\\r");
+                    case '\t' -> out.append("\\t");
+                    default -> out.append(String.format("\\u%04x", (int) c));
+                }
+                continue;
+            }
+            out.append(c);
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\' && inString) {
+                escaped = true;
+            } else if (c == '"') {
+                inString = !inString;
+            }
+        }
+        return out.toString();
     }
 
     /**
@@ -315,7 +350,7 @@ public final class GoblinStatePersistence {
         }
         if (value instanceof String text && text.strip().startsWith("{") && text.strip().endsWith("}")) {
             try {
-                return new JsonObject(text);
+                return new JsonObject(escapeControlCharactersInStrings(text));
             } catch (RuntimeException e) {
                 return null;
             }
