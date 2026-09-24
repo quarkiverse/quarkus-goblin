@@ -12,10 +12,10 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Method | Effect
 
 | `getStatus`
-| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, and the target `level`.
+| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), and the target `level`.
 
 | `getConfig`
-| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, response header rules under `headers`, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
+| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, response header rules under `headers`, armed chaos `layers`, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
 
 | `toggleActive` / `setActive(boolean)`
 | Enable/disable chaos entirely. Emits a WARN log. Returns `{ ok, active }`.
@@ -54,10 +54,10 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Kill switch: deactivates the engine, disables every assault type and client-side assault, and resets the profile to `NONE`. Returns `{ ok, active: false }` plus the full config.
 
 | `resetDefaults()`
-| Restore every toggle and parameter to its default value (profile `NONE`, latency `100-5000` ms, HTTP status `503`, body `TRUNCATE 50%`, level `100`). Returns `{ ok }` plus the full config.
+| Restore every toggle and parameter to its default value (profile `NONE`, latency `100-5000` ms, HTTP status `503`, body `TRUNCATE 50%`, layers `{HTTP_IN, HTTP_OUT}`, level `100`). Returns `{ ok }` plus the full config.
 
 | `applyConfig(config)`
-| Apply a (partial) config object: `profile` is applied first, then any provided field overrides -- omitted fields keep their current value. The optional `headers` object replaces the whole set of response header rules (rules not listed are dropped); unknown actions are skipped and surfaced in `warning`. Returns `{ ok, warning }` plus the full config. Used by the dashboard's import and custom-profile features.
+| Apply a (partial) config object: `profile` is applied first, then any provided field overrides -- omitted fields keep their current value. The optional `headers` object replaces the whole set of response header rules (rules not listed are dropped); the optional `layers` array replaces the armed chaos layers (unknown layer names are skipped and surfaced in `warning`, an empty array restores the default layers). Unknown actions are skipped and surfaced in `warning`. Returns `{ ok, warning }` plus the full config. Used by the dashboard's import, custom-profile and chaos-layer features.
 
 | `getCounters`
 | Return `{ total, since, byType }` with the session assault counters: the total number of assaults since the engine started (or the counters were last reset), the epoch timestamp of that window start (`since`), and a per-type breakdown (`byType`).

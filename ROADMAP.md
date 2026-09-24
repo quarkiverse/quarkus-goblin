@@ -2,7 +2,7 @@
 
 > Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application.
 
-Current status: **preview** (v0.2.0)
+Current status: **preview** (v0.3.0 in development)
 
 ---
 
@@ -57,8 +57,9 @@ Current status: **preview** (v0.2.0)
 - [x] **OpenTelemetry tracing integration**
   Create an OTel span for each injected assault, with attributes for assault type, target method, and injected value. Link the assault span to the parent request span for end-to-end trace correlation.
 
-- [ ] **Real-time charts in Dev UI**
-  Add lightweight charts to the dashboard: a histogram of injected latency values and a time-series of assault rate. Use a minimal charting library compatible with Lit web components.
+#### 0.3.0 -- Dev UI & Observability
+
+- [x] **Multi-layer chaos assaults** (#54) -- *Phase 0 (modèle + persistance + Dev UI) et Phase 1 (SERVICE, interceptor CDI @Priority 4100) livrés*. P2 DATABASE et P3 MESSAGING: hooks prévus (élément d'index "soon" + interceptor réservés @Priority 101/201); reste à brancher les extensions fournies Hibernate/Reactive Messaging.
 
 - [ ] **Saved scenarios**
   Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later. Store scenarios in a `.goblin/scenarios/` directory as JSON files.

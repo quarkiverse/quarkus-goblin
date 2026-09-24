@@ -15,8 +15,13 @@ include::../partials/attributes.adoc[]
 
 === New Features
 
+* Multi-layer chaos assaults with per-request layer resolution (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_OUT` → `HTTP_IN`), one check-box per layer in the Dev UI, and service-layer assaults on business beans via a CDI interceptor that runs inside the Fault Tolerance machinery -- so `@Retry`, `@Fallback`, `@Timeout` and `@Bulkhead` are exercised for real (https://github.com/quarkiverse/quarkus-goblin/issues/54[#54]).
 * Assault metrics and latency histograms via Micrometer / Prometheus (https://github.com/quarkiverse/quarkus-goblin/pull/51[#51]).
 * Assault tracing via OpenTelemetry -- one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span (https://github.com/quarkiverse/quarkus-goblin/issues/47[#47]).
+
+=== Improvements
+
+* The assault history now records the actually applied latency duration for latency assaults on **every** layer, including service-layer injections (previously only the HTTP layers recorded the value).
 
 [[version-0-2]]
 == 0.2.x

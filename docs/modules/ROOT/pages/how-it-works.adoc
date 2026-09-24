@@ -5,15 +5,21 @@
 
 include::../partials/attributes.adoc[]
 
-Goblin operates at the JAX-RS filter layer using a `ContainerRequestFilter` (incoming), a `ClientRequestFilter` (outgoing REST Client calls) and, for Vert.x WebClient calls, an opt-in request interceptor attached in application code:
+Goblin operates at three boundaries:
+
+* the **incoming HTTP** boundary, through a JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter` (the HTTP_IN layer);
+* the **outgoing HTTP** boundary, through a `ClientRequestFilter` (outgoing REST Client calls) and, for Vert.x WebClient calls, an opt-in request interceptor attached in application code (the HTTP_OUT layer);
+* the **service** boundary, through a CDI interceptor woven at build time on eligible application bean methods (the SERVICE layer).
+
+For the HTTP boundaries:
 
 * For outbound MicroProfile REST Client calls the `ClientRequestFilter` is registered as a global provider at build time and intercepts every call automatically.
 * For Vert.x `WebClient` calls the application arms the client once with `GoblinWebClient.enable(webClient)`; the interceptor is then attached through Vert.x's internal `WebClientInternal` mechanism.
 
-1. At build time, the deployment module registers both filters and the `goblin` feature with Quarkus.
+1. At build time, the deployment module registers both filters, the service interceptor binding and the `goblin` feature with Quarkus.
 2. At runtime startup, the `AssaultEngine` is initialized from the configuration in `application.properties`. In dev mode it first restores any persisted state file (`.goblin-state.json`) and registers a change listener so that every subsequent config mutation automatically persists the state to disk.
-3. For every incoming HTTP request, the filter checks whether chaos is active, whether this request should be affected (based on the `level` percentage), and whether the target endpoint is eligible (based on package/annotation filters).
-4. If all conditions are met, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body and response header assaults are applied on the way out, in the `ContainerResponseFilter`, rewriting the entity and its headers before they reach the client (header rules run after the body transformation, so an explicit header change always wins).
+3. For every incoming HTTP request, the filter checks whether chaos is active, whether this request should be affected (based on the `level` percentage), and which layer the request resolves to (see xref:how-it-works.adoc#chaos-layers[Chaos layers]). The resolved layer is carried on the request stack for the whole processing chain.
+4. If the HTTP_IN layer won, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body and response header assaults are applied on the way out, in the `ContainerResponseFilter`, rewriting the entity and its headers before they reach the client (header rules run after the body transformation, so an explicit header change always wins).
 5. An assault record is added to the history buffer (capped at 1000 entries).
 
 For every outbound call -- MicroProfile REST Client or Vert.x WebClient -- the same `level` gate and the client-side toggles are checked, then latency and/or exception are applied (the remote service is never reached when the exception assault fires). The REST Client filter runs early in the JAX-RS pipeline, before any endpoint logic executes; the WebClient interceptor runs just after the request is prepared, before it is dispatched over the wire. This means:
@@ -22,6 +28,52 @@ For every outbound call -- MicroProfile REST Client or Vert.x WebClient -- the s
 * Latency assaults add delay **before** processing, simulating network or upstream slowness.
 * Client-side exceptions abort the outbound call **before it is dispatched** -- the downstream service never sees the request.
 * WebClient latency is applied without blocking the event loop: a timer is scheduled on the calling Vert.x context, with a blocking fallback only when no Vert.x context is active.
+
+== Chaos layers
+
+[#chaos-layers]
+Chaos is not tied to a single injection point: you pick which **layers** to arm, and every inbound request resolves to the 
+_deepest armed layer whose probability roll passes_, so a fault rooted at the bottom propagates naturally through the 
+layers above it. The layers, from deepest to shallowest:
+
+. `DATABASE` -- persistence hook (Hibernate/Agroal), not implemented yet
+. `MESSAGING` -- Reactive Messaging / event bus hook, not implemented yet
+. `SERVICE` -- CDI interceptor on targeted beans (Phase 1 of the xref:index.adoc[multi-layer plan])
+. `HTTP_OUT` -- outbound REST Client / Vert.x WebClient calls (existing, opt-in client toggles)
+. `HTTP_IN` -- inbound REST endpoints (existing, default)
+
+Two layers (`{HTTP_IN, HTTP_OUT}`) are armed by default, which reproduces exactly the pre-layers behaviour. For every 
+incoming request the engine walks the enabled layers from the deepest up, re-rolling `nextInt(100) < level` **independently 
+for each layer** -- the roll is never cached. The deepest layer whose roll passes wins and becomes the armed layer for the 
+whole request; the shallower layers pass through unimpeded, and the fault thrown at the bottom then propagates up through 
+the `SERVICE` and `HTTP_IN` machinery. With `level = 100` the deepest enabled layer always wins; with a lower level the 
+distribution is biased toward the bottom.
+
+* `HTTP_IN` armed -- the `ContainerRequestFilter` applies the server-side assaults exactly as before.
+* `HTTP_OUT` armed -- the client filter / `WebClient` interceptor apply latency/exception on outgoing calls.
+* `SERVICE` armed -- the business bean interceptor fires (see below); the HTTP filters stand down.
+* `DATABASE` / `MESSAGING` armed -- reserved; the Dev UI shows them as *soon* until the hooks land (Phase 2 / Phase 3).
+
+== Service-layer assaults
+
+The SERVICE layer injects faults **inside** an application bean, on the CDI invocation itself, before your method runs. 
+At build time a binding is woven onto eligible bean methods; at runtime a CDI interceptor 
+(`GoblinServiceInterceptor`, `@Priority(4100)`) applies the configured `latency` and `exception` assaults when the 
+request resolved to the SERVICE layer.
+
+* **Placement inside Fault Tolerance.** Jakarta interceptors invoke lower priorities first, so `4100` sits *inside* the
+  MicroProfile Fault Tolerance interceptor (`4010`): a thrown exception is observed by `@Retry`, `@CircuitBreaker` and
+  `@Fallback`, and the injected latency is covered by `@Timeout` and `@Bulkhead`.
+* **Eligibility.** A bean method is decorated only when the class belongs to the application root archive and the usual
+  `goblin.target` rules pass (`include-packages` / `exclude-packages` / `exclude-annotations`). JAX-RS resources 
+  (`@Path`), `@Provider`s, interfaces, static and private methods are never decorated -- HTTP endpoints belong to the 
+  HTTP_IN layer and sit *above* the guarded beans. Methods named as the `fallbackMethod` of a `@Fallback` in the same 
+  class are skipped too, so a fallback can answer the original failure instead of being assaulted itself.
+* **Synchronous scope (for now).** Assaults run inside the guarded invocation, so `@Asynchronous` / non-blocking methods
+  are not covered by Phase 1.
+* **History.** Each service assault is recorded like any other, with a `ClassName.method` descriptor -- including the
+  actually applied latency duration for the latency assault. Since the rule falls *inside* FT, a `@Retry`-guarded method
+  produces one record per attempt.
 
 == Runtime config modification
 
@@ -40,7 +92,7 @@ Runtime config changes made through the Dev UI are automatically persisted to a 
 
 This means your chaos scenario survives restarts -- no need to reconfigure the dashboard every time you restart in dev mode.
 
-The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, response header rules, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
+The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, response header rules, armed layers, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
 
 State persistence is dev-mode only: the change listener is only registered in dev mode, and the state file is only read on a dev-mode startup. Chaos itself only activates in dev or test mode -- a packaged production application always starts with the engine inactive. Integration or system tests always start from `application.properties` and never read nor overwrite the chaos configuration you saved from the Dev UI.
 
