@@ -1,40 +1,53 @@
-= End-to-end example: prove your @Timeout works
+= End-to-end example: prove your resilience annotations work
 
 :toc: left
 :toclevels: 2
 
 include::../partials/attributes.adoc[]
 
-This walkthrough exercises a realistic scenario: verifying that a MicroProfile `@Timeout` and `@Fallback` react correctly when a downstream call becomes slow.
+This walkthrough uses the sample application of the `integration-tests` module to verify, for real, that MicroProfile Fault Tolerance annotations react to failures: a `@Timeout` on a slow business method, then a `@Retry` + `@Fallback` on a failing database.
 
-. Start the sample application in dev mode:
-+
+A fault injected at the inbound REST boundary (`HTTP_IN`) hits the request *before* the resource runs, so the Fault Tolerance annotations below it never see it. Both scenarios therefore arm a deeper layer -- `SERVICE` or `DATABASE` -- whose faults are injected inside or below the guarded methods (see xref:how-it-works.adoc#chaos-layers[Chaos layers]).
+
+== Start the sample application
+
 [source,bash]
 ----
 ./mvnw -pl integration-tests quarkus:dev
 ----
 
-. Configure a latency assault that exceeds your `@Timeout` threshold. If the downstream endpoint has a `@Timeout(1000)` (1 second), set a latency range well above it:
-+
-[source,properties]
-----
-quarkus.goblin.enabled=true
-quarkus.goblin.assault.type=LATENCY
-quarkus.goblin.assault.latency.min-milliseconds=2000
-quarkus.goblin.assault.latency.max-milliseconds=4000
-quarkus.goblin.target.level=100
-# Exclude other fault-tolerant endpoints so only the one under test is affected
-----
+Open the Dev UI at `http://localhost:8080/q/dev` and the Goblin *Chaos Dashboard*. The sample application has an in-memory H2 datasource, so every layer is available.
 
-. Open the Dev UI at `http://localhost:8080/q/dev` and confirm latency is enabled in the Chaos Dashboard.
+== Scenario 1: a slow service triggers `@Timeout`
 
-. Call the endpoint under test and observe the response time and whether the fallback was invoked:
+`SampleService.timed()` is guarded by `@Timeout(400ms)`; `GET /api/service/timeout` calls it.
+
+. In *Chaos layers*, check **Service** (the default *Inbound REST* and *Outbound HTTP* can stay checked: the deepest armed layer wins).
+. Enable **Latency** and set the range to `600`-`700` ms, above the 400 ms timeout. Keep the level at `100`.
+. Call the endpoint:
 +
 [source,bash]
 ----
-curl -w "\nstatus=%{http_code} time=%{time_total}s\n" http://localhost:8080/api/hello
+curl -w "\nstatus=%{http_code} time=%{time_total}s\n" http://localhost:8080/api/service/timeout
 ----
+. The call fails after about 0.4 s instead of 0.6 s: `@Timeout` interrupted the injected delay. The *Assault History* shows a `latency` entry on `io.quarkiverse.goblin.it.SampleService.timed`.
 
-. Check the **Assault History** panel to confirm the latency assault was recorded against the expected method.
+== Scenario 2: a failing database triggers `@Retry` then `@Fallback`
 
-. Repeat with `quarkus.goblin.target.level=10` to observe intermittent, non-deterministic failures -- the hardest scenario to get right in production.
+`SampleService.databasePingWithRetry()` is guarded by `@Retry(maxRetries = 2)` and `@Fallback`; it calls `SampleRepository`, which acquires a JDBC connection. `GET /api/db/retry` calls it.
+
+. In *Chaos layers*, check **Database**.
+. Disable **Latency** and enable **Exception** (the default `java.lang.RuntimeException` is fine). Keep the level at `100`.
+. Call the endpoint:
++
+[source,bash]
+----
+curl -w "\nstatus=%{http_code}\n" http://localhost:8080/api/db/retry
+----
+. The response is `200` with `database fallback reply`. The *Assault History* shows three `exception` entries on `Database <default> connection`: the first attempt and the two retries each acquired a connection and failed, then the fallback answered. Compare with `GET /api/db/ping`, which has no Fault Tolerance annotation and fails with a `500`.
+
+== Make it intermittent
+
+Set the level to `30` and call the endpoints repeatedly: some attempts now succeed, so `@Retry` recovers before the fallback, and only part of the calls hit the timeout -- the intermittent, non-deterministic failures that are the hardest to get right in production.
+
+TIP: The same scenarios can run in a `@QuarkusTest`: set `quarkus.goblin.test.enabled=true`, arm the layer and the assault through the injected `AssaultEngine` (`engine.getMutableConfig()`), and assert on the response and on `engine.getHistory()`. See `GoblinServiceLayerIntegrationTest` and `GoblinDatabaseLayerIntegrationTest` in the `integration-tests` module.

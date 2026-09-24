@@ -5,7 +5,7 @@
 
 include::../partials/attributes.adoc[]
 
-Goblin supports five types of server-side chaos assaults, plus client-side assaults for outgoing REST Client and Vert.x WebClient calls, and service-layer assaults on business bean method invocations. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
+Goblin supports six types of server-side chaos assaults on inbound REST requests, plus client-side assaults for outgoing REST Client and Vert.x WebClient calls, and latency / exception assaults below the HTTP boundary (application beans, JDBC connections, message consumers). Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
 
 When multiple types are active, they are applied in order:
 
@@ -111,9 +111,44 @@ The header rules are applied in the response phase, **after** any response body 
 
 NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
 
-== Service-layer assaults (business beans)
+[#assaults-per-layer]
+== Which assaults apply to which layer
+
+The assault types above are applied by the `HTTP_IN` layer. The other layers only inject **latency** and **exception**, re-using the same toggles, latency range and exception class/message; `target.level` applies to every layer. A layer only fires when its check-box is armed in the xref:dev-ui.adoc[Dev UI `Chaos layers`] group (see xref:how-it-works.adoc#chaos-layers[Chaos layers]).
+
+[cols="1,2,2,2"]
+|===
+| Layer | Where the fault is injected | Assaults | History identifier
+
+| `HTTP_IN`
+| Inbound JAX-RS request, before the resource method (response assaults when the response is emitted)
+| latency, exception, HTTP status, dependency degradation, response body, response header
+| `SimpleClassName.method`
+
+| `SERVICE`
+| Application bean method, inside MicroProfile Fault Tolerance
+| latency, exception
+| `fully.qualified.ClassName.method`
+
+| `DATABASE`
+| JDBC connection acquisition (Agroal pool, below Hibernate ORM / Panache / JDBC)
+| latency, exception
+| `Database <datasource> connection`
+
+| `MESSAGING`
+| `@Incoming` consumer invocation, outside Fault Tolerance
+| latency, exception
+| `Messaging fully.qualified.ClassName.method`
+
+| `HTTP_OUT`
+| Outgoing REST Client / Vert.x WebClient call, before dispatch
+| client latency, client exception (dedicated toggles)
+| `REST-Client GET <url>`, `WebClient GET <url>`
+|===
 
 [#service-layer-assaults]
+== Service-layer assaults (business beans)
+
 Beyond the HTTP boundaries, Goblin can inject faults **inside** application beans via the SERVICE layer (see xref:how-it-works.adoc#service-layer-assaults[Service-layer assaults] for the mechanics). When the request resolves to the SERVICE layer, a CDI interceptor applies the same two primitives on the guarded bean method:
 
 * **Service latency** -- waits for a random duration within the configured `latency` range before the method body runs (a `@Timeout` above the range fires; a `@Bulkhead` counts the slot).
@@ -122,6 +157,26 @@ Beyond the HTTP boundaries, Goblin can inject faults **inside** application bean
 Service-layer assaults re-use the same latency range and exception class/message configured for the incoming side, and the same `latency`/`exception` toggles. They fire only when the **SERVICE** check-box is armed in the xref:dev-ui.adoc[Dev UI `Chaos layers`] group.
 
 NOTE: Service assaults apply to *eligible bean methods* (see xref:configuration-reference.adoc[targeting rules]): JAX-RS resources, `@Provider`s, interfaces, static/private methods and `@Fallback` fallback targets are never decorated. Each assault is recorded in the history with a `fully.qualified.ClassName.method` identifier. The interceptor is woven at build time and the crafted binding is inactive outside dev/test builds.
+
+[#database-layer-assaults]
+== Database-layer assaults (JDBC connections)
+
+When the request -- or the consumed message -- resolves to the **DATABASE** layer, the JDBC connection acquisition fails or is delayed, exactly where an unreachable or slow database surfaces (see xref:how-it-works.adoc#database-layer-assaults[Database-layer assaults] for the mechanics):
+
+* **Database latency** -- delays `getConnection()` by a random duration within the configured `latency` range.
+* **Database exception** -- throws the configured exception out of `getConnection()`; the connection is released back to the pool. The repository fails, and the Fault Tolerance annotations of the service calling it (`@Retry`, `@Fallback`, `@CircuitBreaker`...) react to it.
+
+The first acquisition of a request uses the per-request decision; every further acquisition (a `@Retry` attempt opening a new transaction) draws `level` again. Inside a transaction Agroal notifies a single acquisition, so a transaction is assaulted once. The layer is only offered when the application has a JDBC datasource (`quarkus-agroal`, which Hibernate ORM and Panache use); Hibernate Reactive and the reactive SQL clients are not covered. The package / annotation targeting rules do not apply: every datasource is assaulted.
+
+[#messaging-layer-assaults]
+== Messaging-layer assaults (message consumers)
+
+Each message consumed by an `@Incoming` method is its own pseudo-request: it resolves among the `DATABASE`, `MESSAGING` and `SERVICE` layers, so a database or service fault can also surface while a message is processed (see xref:how-it-works.adoc#messaging-layer-assaults[Messaging-layer assaults] for the mechanics). When **MESSAGING** wins:
+
+* **Messaging latency** -- delays the consumer before its body runs (blocking consumers only: on an event-loop thread the delay is skipped rather than blocking the loop).
+* **Messaging exception** -- fails the consumer before its body runs. The interceptor sits outside Fault Tolerance, so the failure is handled by the channel failure strategy (nack, dead-letter queue, `failure-strategy=ignore`...), not by a `@Retry` on the consumer.
+
+The layer is only offered with `quarkus-messaging`; the consumer methods follow the package / annotation targeting rules. Outgoing messages (`Emitter`, `@Outgoing`) are not assaulted.
 
 == Client-side assaults (outgoing REST Client and Vert.x WebClient calls)
 

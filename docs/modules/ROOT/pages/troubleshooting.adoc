@@ -25,6 +25,23 @@ include::../partials/attributes.adoc[]
 * If using EXCEPTION assault, verify the exception class exists and has a `String` constructor.
 * Check the Quarkus dev console for stack traces.
 
+*A chaos layer is shown as unavailable in the Dev UI:*
+
+* `DATABASE` needs a JDBC datasource (`quarkus-agroal`, e.g. through Hibernate ORM or Panache); `MESSAGING` needs `quarkus-messaging`. An unavailable layer is never selected: arming it falls through to the next layer.
+
+*A layer is armed but its assaults never fire:*
+
+* Only `latency` and `exception` apply to the `SERVICE`, `DATABASE` and `MESSAGING` layers: an HTTP status, dependency degradation, response body or response header assault only fires on `HTTP_IN`.
+* `SERVICE`: the method must belong to an application bean of the root archive, be neither static nor private, and pass the targeting rules; JAX-RS resources, `@Provider`s and fallback methods are never assaulted. `@Asynchronous` methods and reactive (`Uni`, `@NonBlocking`) endpoints are not covered.
+* `DATABASE`: only connections acquired while an HTTP request or a consumed message is processed are assaulted (a startup task or a `@Scheduled` job has no resolved layer); Hibernate Reactive and the reactive SQL clients are not covered.
+* `MESSAGING`: only `@Incoming` methods are assaulted, and latency needs a blocking consumer (`@Blocking`, `@RunOnVirtualThread`); for a consumer returning `Uni` / `CompletionStage` only the synchronous part is covered.
+* A deeper armed layer shadows the shallower ones: with `DATABASE` and `SERVICE` armed at level 100, a request that touches the database is always assaulted at the database.
+
+*My `@Retry` / `@Fallback` never reacts:*
+
+* Faults injected by `HTTP_IN` hit the request before the resource runs, so Fault Tolerance annotations below it never see them. Arm the `SERVICE` or `DATABASE` layer instead (see xref:end-to-end-example.adoc[End-to-end example]).
+* A `MESSAGING` fault is handled by the channel failure strategy, not by a `@Retry` on the consumer.
+
 *Targeting filters not working:*
 
 * Package matching uses `startsWith`, so `com.example` matches `com.example.api` and `com.example.internal`.

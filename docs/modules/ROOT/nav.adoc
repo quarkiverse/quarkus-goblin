@@ -6,6 +6,8 @@
 * xref:dev-ui.adoc[Dev UI panel]
 * xref:how-it-works.adoc[How it works]
 * xref:compatibility.adoc[Compatibility]
+* xref:metrics.adoc[Metrics]
+* xref:tracing.adoc[Tracing]
 * xref:troubleshooting.adoc[Troubleshooting]
 * xref:end-to-end-example.adoc[End-to-end example]
 * xref:json-rpc-reference.adoc[JSON-RPC reference]

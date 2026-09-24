@@ -12,10 +12,10 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Method | Effect
 
 | `getStatus`
-| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), and the target `level`.
+| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), the `availableLayers` backed by an installed hook in this application (`SERVICE`, `HTTP_OUT`, `HTTP_IN`, plus `DATABASE` with a JDBC datasource and `MESSAGING` with Quarkus Messaging), and the target `level`.
 
 | `getConfig`
-| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, response header rules under `headers`, armed chaos `layers`, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
+| Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, response header rules under `headers`, armed chaos `layers`, `availableLayers`, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
 
 | `toggleActive` / `setActive(boolean)`
 | Enable/disable chaos entirely. Emits a WARN log. Returns `{ ok, active }`.

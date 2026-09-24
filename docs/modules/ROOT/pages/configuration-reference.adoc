@@ -7,6 +7,8 @@ include::../partials/attributes.adoc[]
 
 All configuration keys are under the `quarkus.goblin` prefix.
 
+NOTE: The chaos layers are not configuration keys: every application starts with `HTTP_IN` and `HTTP_OUT` armed, and the layers are armed at runtime from the xref:dev-ui.adoc[Dev UI] or through JSON-RPC (`applyConfig` with a `layers` array); in dev mode the choice is persisted in `.goblin-state.json`. `DATABASE` requires a JDBC datasource and `MESSAGING` requires `quarkus-messaging`.
+
 Every key is read at runtime and can be overridden when the application starts (environment variable, system
 property, profile), except the three `quarkus.goblin.target.include-packages` / `exclude-packages` /
 `exclude-annotations` targeting rules: they decide at build time which beans receive the service and messaging
@@ -107,6 +109,7 @@ interceptors, so they are *fixed at build time* (a dev-mode live reload rebuilds
 | Exclude methods/classes carrying these annotations (every layer). Fixed at build time.
 |===
 
+[#configuration-validation]
 == Configuration validation
 
 Goblin validates assault parameters at startup and whenever you save a change in the Dev UI. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback, so a misconfiguration cannot silently corrupt your chaos experiments.

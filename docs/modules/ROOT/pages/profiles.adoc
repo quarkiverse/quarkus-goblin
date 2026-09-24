@@ -30,6 +30,8 @@ Available profiles:
 | Fixed `30000` ms (30 s) -- ideal for exercising client-side `@Timeout`
 |===
 
+Profiles only set the assault toggles and parameters: they never arm or disarm a layer, nor touch the client-side toggles. `INTERMITTENT` (HTTP status) only fires on the `HTTP_IN` layer, while the latency and exception of `SLOW_FAILURE` and `TIMEOUT` fire on whichever layer the request resolves to (`HTTP_IN`, `SERVICE`, `DATABASE`, `MESSAGING`).
+
 TIP: Profiles are a **starting point, not a lock-in**. Once a profile is active, each assault toggle stays independently overridable through the Dev UI or JSON-RPC, and those overrides survive restarts like any other Dev UI change.
 
 TIP: At startup, a non-`NONE` profile takes **precedence over the static configuration**: `fromConfig` first copies the static `assault.type` and per-assault parameters, then the profile defaults are applied on top -- so a configured profile overrides the static toggles and parameters at boot. Tune the values afterwards through the Dev UI if needed.

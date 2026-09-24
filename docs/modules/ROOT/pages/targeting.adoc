@@ -5,11 +5,33 @@
 
 include::../partials/attributes.adoc[]
 
-By default, Goblin affects **all REST endpoints** in your application. You can narrow or expand this scope with targeting configuration.
+By default, Goblin targets every eligible part of your application on the armed layers (see xref:how-it-works.adoc#chaos-layers[Chaos layers]). You can narrow this scope with targeting configuration.
+
+[cols="1,3"]
+|===
+| Layer | What the targeting rules select
+
+| `HTTP_IN`
+| Resource methods: the package of the resource class, and the annotations of the resource method and of its class.
+
+| `SERVICE`
+| Application bean methods: the package of the bean class, and the annotations of the method and of its class (applied at build time).
+
+| `MESSAGING`
+| `@Incoming` consumer methods: same rules as `SERVICE` (applied at build time).
+
+| `DATABASE`
+| Not filtered by package nor annotation: every JDBC datasource is assaulted when the request resolves to this layer.
+
+| `HTTP_OUT`
+| Not filtered by package nor annotation: every outgoing REST Client call, and every armed Vert.x `WebClient`.
+|===
+
+`target.level` applies to every layer.
 
 == Percentage-based targeting
 
-Control what fraction of incoming requests are affected (0-100%):
+Control what fraction of requests, consumed messages and outgoing calls are affected (0-100%). Each armed layer draws the level independently, see xref:how-it-works.adoc#chaos-layers[Chaos layers]:
 
 [source,properties]
 ----
@@ -24,8 +46,8 @@ Values outside the `0`-`100` range are clamped (with a `WARN` log) both at start
 == Package filtering
 
 NOTE: The package and annotation rules are fixed at build time -- the service and messaging layers weave their
-interceptors from them -- and applied identically by every layer (HTTP_IN, SERVICE, MESSAGING). `target.level` stays
-a runtime setting.
+interceptors from them -- and one implementation applies them to the `HTTP_IN`, `SERVICE` and `MESSAGING` layers.
+`target.level` stays a runtime setting.
 
 Include only specific packages:
 
@@ -45,7 +67,7 @@ The filter matches on the declaring class's package name using `startsWith`, so 
 
 == Annotation-based exclusion
 
-Exclude methods (or their declaring classes) that carry specific annotations. This is particularly useful for coexisting with MicroProfile Fault Tolerance:
+Exclude methods (or their declaring classes) that carry specific annotations, on the `HTTP_IN`, `SERVICE` and `MESSAGING` layers. On `HTTP_IN` this is useful to leave fault-tolerant endpoints alone:
 
 [source,properties]
 ----
@@ -53,6 +75,6 @@ Exclude methods (or their declaring classes) that carry specific annotations. Th
 quarkus.goblin.target.exclude-annotations=org.eclipse.microprofile.faulttolerance.Timeout,org.eclipse.microprofile.faulttolerance.Fallback
 ----
 
-This prevents double-interception: you can chaos-test your unprotected endpoints while leaving fault-tolerant ones to their own mechanisms.
+This prevents double-interception: you can chaos-test your unprotected endpoints while leaving fault-tolerant ones to their own mechanisms. To exercise the Fault Tolerance annotations themselves, arm the `SERVICE` or `DATABASE` layer instead: their faults are injected below or inside the guarded methods (see xref:end-to-end-example.adoc[End-to-end example]).
 
 NOTE: Exclusion by annotation never requires you to *add* an annotation to your application. Goblin only reacts to annotations that are already present on your endpoints (such as MicroProfile Fault Tolerance types). There is deliberately no Goblin-owned annotation to scatter across your code -- consistent with the *zero code modification* principle.

@@ -40,6 +40,14 @@
             <plugin>
                 <groupId>org.asciidoctor</groupId>
                 <artifactId>asciidoctor-maven-plugin</artifactId>
+                <dependencies>
+                    <!-- JRuby 10 no longer calls the deprecated sun.misc.Unsafe memory API (JDK 24+ warns with 9.4.x) -->
+                    <dependency>
+                        <groupId>org.jruby</groupId>
+                        <artifactId>jruby</artifactId>
+                        <version>10.1.2.0</version>
+                    </dependency>
+                </dependencies>
             </plugin>
         </plugins>
     </build>

@@ -69,6 +69,7 @@ The decision is bound to the thread *and* to the CDI request context that made i
 context is discarded, so a worker thread left with a stale decision (an exception escaped a resource before the response
 filter could clear it) never assaults an unrelated message consumer or scheduled job.
 
+[#service-layer-assaults]
 == Service-layer assaults
 
 The SERVICE layer injects faults **inside** an application bean, on the CDI invocation itself, before your method runs. 
@@ -96,6 +97,7 @@ request resolved to the SERVICE layer.
   actually applied latency duration for the latency assault. Since the rule falls *inside* FT, a `@Retry`-guarded method
   produces one record per attempt.
 
+[#database-layer-assaults]
 == Database-layer assaults
 
 The DATABASE layer injects faults where a slow or unreachable database really surfaces: when a JDBC connection is
@@ -114,6 +116,7 @@ acquired from the Agroal pool. It therefore sits below Hibernate ORM, Panache an
 * **Scope.** Only database access made within an inbound HTTP request or a consumed message is assaulted: a startup
   task or a scheduled job has no resolved layer.
 
+[#messaging-layer-assaults]
 == Messaging-layer assaults
 
 The MESSAGING layer targets the consumer side of Quarkus Messaging: the `@Incoming` methods of the application.

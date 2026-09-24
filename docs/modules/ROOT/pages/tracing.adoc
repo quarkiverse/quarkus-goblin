@@ -43,7 +43,7 @@ Each assault produces exactly one span named `goblin.assault`, carrying the assa
 | `server` for inbound REST assaults, `service` for application bean assaults, `rest-client` for outgoing REST Client calls, `webclient` for outgoing Vert.x WebClient calls, `database` for JDBC connection acquisitions, `messaging` for `@Incoming` consumers.
 
 | `goblin.assault.target.method`
-| The recorded method identifier: `SampleResource.hello`, `REST-Client GET http://...`, `WebClient GET http://...`.
+| The recorded method identifier: `SampleResource.hello`, `com.acme.OrderService.place` (SERVICE), `Database <default> connection`, `Messaging com.acme.OrderConsumer.consume`, `REST-Client GET http://...`, `WebClient GET http://...`.
 
 | `goblin.assault.latency_ms`
 | The delay actually injected (only present for latency assaults with a non-zero delay).
