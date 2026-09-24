@@ -7,6 +7,11 @@ include::../partials/attributes.adoc[]
 
 All configuration keys are under the `quarkus.goblin` prefix.
 
+Every key is read at runtime and can be overridden when the application starts (environment variable, system
+property, profile), except the three `quarkus.goblin.target.include-packages` / `exclude-packages` /
+`exclude-annotations` targeting rules: they decide at build time which beans receive the service and messaging
+interceptors, so they are *fixed at build time* (a dev-mode live reload rebuilds the application and picks them up).
+
 [cols="3,1,1,3"]
 |===
 | Key | Type | Default | Description
@@ -14,7 +19,12 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.enabled`
 | `boolean`
 | `true`
-| Enable/disable the Goblin extension. Only takes effect in dev mode. Never overridden by the persisted state file; disabling this property keeps chaos off even if a previous session left assault toggles enabled.
+| Enable/disable the Goblin extension. Takes effect in dev mode, and in test mode together with `quarkus.goblin.test.enabled`. Never overridden by the persisted state file; disabling this property keeps chaos off even if a previous session left assault toggles enabled.
+
+| `quarkus.goblin.test.enabled`
+| `boolean`
+| `false`
+| Whether chaos is active in test mode (`@QuarkusTest`). Off by default so the extension never slows down nor breaks an application's test suite; the engine still loads its configuration, and a test can switch chaos on with `AssaultEngine.setActive(true)`.
 
 | `quarkus.goblin.assault.type`
 | `AssaultType`
@@ -82,19 +92,19 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | Percentage of requests to affect (0-100; values are clamped with a `WARN` log)
 
 | `quarkus.goblin.target.include-packages`
-| `Optional<String[]>`
+| `Optional<List<String>>`
 | _empty_
-| Packages to include (empty = all packages)
+| Package prefixes to include (empty = all packages). Fixed at build time.
 
 | `quarkus.goblin.target.exclude-packages`
-| `Optional<String[]>`
+| `Optional<List<String>>`
 | _empty_
-| Packages to exclude from chaos
+| Package prefixes to exclude from chaos; an exclusion always wins over an inclusion. Fixed at build time.
 
 | `quarkus.goblin.target.exclude-annotations`
-| `Optional<String[]>`
+| `Optional<List<String>>`
 | _empty_
-| Exclude methods/classes carrying these annotations
+| Exclude methods/classes carrying these annotations (every layer). Fixed at build time.
 |===
 
 == Configuration validation

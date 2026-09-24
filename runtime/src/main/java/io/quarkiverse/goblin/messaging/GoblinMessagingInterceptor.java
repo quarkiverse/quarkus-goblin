@@ -9,6 +9,7 @@ import jakarta.interceptor.InvocationContext;
 import org.jboss.logging.Logger;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -53,7 +54,7 @@ public class GoblinMessagingInterceptor {
      */
     @AroundInvoke
     Object aroundInvoke(InvocationContext context) throws Exception {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfig cfg = engine.configSnapshot();
         if (cfg == null || !engine.isActive() || ChaosRequestContext.assaultLayer() != null) {
             // inactive, or invoked inside an already resolved pseudo-request (e.g. an in-memory channel fed from a
             // REST call): the enclosing decision stays in charge
@@ -69,7 +70,7 @@ public class GoblinMessagingInterceptor {
         try {
             if (layer == ChaosLayer.MESSAGING) {
                 ChaosRequestContext.markFired();
-                LayerFaults.inject(engine, cfg, target);
+                LayerFaults.inject(engine, cfg, AssaultSource.MESSAGING, target);
             }
             return context.proceed();
         } finally {

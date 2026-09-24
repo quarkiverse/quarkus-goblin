@@ -14,7 +14,8 @@ duplicate the request's own `SERVER` span topology.
 Span attributes (prefix `goblin.assault.*`):
 
 - `goblin.assault.type` -- latency / exception / http-status / dependency-degradation / response-body-* / response-header-*.
-- `goblin.assault.source` -- `server`, `rest-client` or `webclient` (derived from the history identifier).
+- `goblin.assault.source` -- `server`, `service`, `rest-client`, `webclient`, `database` or `messaging` (recorded by the
+  engine with each assault).
 - `goblin.assault.target.method` -- the recorded method identifier (e.g. `SampleResource.hello`, `WebClient GET http://...`).
 - `goblin.assault.latency_ms` -- the delay actually injected (latency assaults only).
 - `goblin.assault.status_code` -- the forced status (HTTP status / dependency degradation assaults).

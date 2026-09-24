@@ -97,8 +97,11 @@ Current status: **preview** (v0.3.0 in development)
 - [ ] **Stable public API**
   Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultRecord`) with `@Experimental` annotations removed. Document the API contract and versioning policy for third-party extensions.
 
-- [ ] **Controlled test-mode activation**
-  Allow Goblin to be activated in `@QuarkusTest` with explicit opt-in (`quarkus.goblin.test-mode.enabled=true`). Add safeguards: fail the build if Goblin config is detected in production profiles.
+- [x] **Controlled test-mode activation**
+  Chaos stays off in `@QuarkusTest` unless `quarkus.goblin.test.enabled=true` (or `AssaultEngine.setActive(true)` from a
+  test).
+- [ ] **Production-profile safeguard**
+  Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.
 
 - [ ] **Structured audit trail**
   Replace plain-text `WARN` logs with structured JSON logging for each assault event. Include timestamps, method, type, config snapshot, and request metadata for log aggregation and compliance.

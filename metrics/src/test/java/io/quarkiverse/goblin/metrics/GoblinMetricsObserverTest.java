@@ -12,6 +12,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 
 class GoblinMetricsObserverTest {
 
@@ -53,7 +54,8 @@ class GoblinMetricsObserverTest {
 
     @Test
     void restClientSourceIsDetected() {
-        observer.onAssault(record("REST-Client GET http://localhost:8081/api/hello", "latency", 100));
+        observer.onAssault(
+                record(AssaultSource.REST_CLIENT, "REST-Client GET http://localhost:8081/api/hello", "latency", 100));
 
         assertEquals(1, totalCount("latency", "rest-client"));
         Timer timer = registry.find(GoblinMetricsObserver.LATENCY_METRIC)
@@ -64,7 +66,7 @@ class GoblinMetricsObserverTest {
 
     @Test
     void webClientSourceIsDetected() {
-        observer.onAssault(record("WebClient GET http://localhost:8081/api/hello", "latency", 100));
+        observer.onAssault(record(AssaultSource.WEBCLIENT, "WebClient GET http://localhost:8081/api/hello", "latency", 100));
 
         assertEquals(1, totalCount("latency", "webclient"));
     }
@@ -78,17 +80,22 @@ class GoblinMetricsObserverTest {
     }
 
     @Test
-    void sourceDetectionIsUnitTestable() {
-        assertEquals("server", GoblinMetricsObserver.sourceOf("SampleResource.hello"));
-        assertEquals("server", GoblinMetricsObserver.sourceOf(""));
-        assertEquals("rest-client", GoblinMetricsObserver.sourceOf("REST-Client GET http://x"));
-        assertEquals("webclient", GoblinMetricsObserver.sourceOf("WebClient GET http://x"));
-        assertEquals("database", GoblinMetricsObserver.sourceOf("Database <default> connection"));
-        assertEquals("messaging", GoblinMetricsObserver.sourceOf("Messaging com.acme.OrderConsumer.consume"));
+    void sourceTagComesFromTheRecord() {
+        observer.onAssault(record(AssaultSource.SERVICE, "com.acme.Service.call", "exception", 0));
+        observer.onAssault(record(AssaultSource.DATABASE, "Database <default> connection", "exception", 0));
+        observer.onAssault(record(AssaultSource.MESSAGING, "Messaging com.acme.Consumer.consume", "exception", 0));
+
+        assertEquals(1, totalCount("exception", "service"));
+        assertEquals(1, totalCount("exception", "database"));
+        assertEquals(1, totalCount("exception", "messaging"));
     }
 
     private AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {
         return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot");
+    }
+
+    private AssaultEngine.AssaultRecord record(AssaultSource source, String method, String type, long latencyMs) {
+        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source);
     }
 
     private double totalCount(String type, String source) {

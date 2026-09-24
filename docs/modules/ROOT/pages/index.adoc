@@ -19,7 +19,7 @@ Goblin fills that gap: inject realistic failures at the HTTP layer during develo
 
 Key design decisions:
 
-* **Dev and test only.** Chaos only activates under `quarkus:dev` and `@QuarkusTest`. In a production build the engine stays inactive whatever the configuration, the Dev UI is absent, and no application bean is woven with the service-assault interceptor; only the (inert) runtime classes ship in the extension jar.
+* **Dev by default, tests on opt-in.** Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`, so adding the extension never slows down nor breaks an existing test suite. In a production build the engine stays inactive whatever the configuration, the Dev UI is absent, and no application bean is woven with the service-assault interceptor; only the (inert) runtime classes ship in the extension jar.
 * **Zero code modification.** No `@ChaosLatency` annotations to scatter across your endpoints. Configuration is the only interface.
 * **Non-destructive.** You can target specific packages, exclude annotated methods, and control the percentage of affected requests.
 * **Composable.** Multiple assault types can be active simultaneously on the same request.
@@ -83,7 +83,7 @@ You should see a response time well above your normal baseline.
 
 *Does Goblin run in production?*
 
-No. The chaos implementation is only activated in dev and test mode. The runtime ships in `quarkus-goblin`, while the Dev UI components live in the `runtime-dev` module (`quarkus-goblin-dev`), which is only attached in dev mode.
+No. The chaos implementation is only activated in dev mode and, on opt-in, in test mode. The runtime ships in `quarkus-goblin`, while the Dev UI components live in the `runtime-dev` module (`quarkus-goblin-dev`), which is only attached in dev mode.
 
 *Do I need to annotate my endpoints?*
 

@@ -15,6 +15,7 @@ import org.jboss.logging.Logger;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.ChaosLayer;
+import io.quarkiverse.goblin.Enums;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseBodyMode;
@@ -167,14 +168,8 @@ public class GoblinJsonRPCService {
         if (profile == null || profile.isBlank()) {
             return AssaultProfile.NONE;
         }
-        String normalized = profile.trim().toUpperCase();
-        for (AssaultProfile candidate : AssaultProfile.values()) {
-            if (candidate.name().equals(normalized)) {
-                return candidate;
-            }
-        }
-        throw new IllegalArgumentException(
-                "Unknown assault profile '" + profile + "'. Valid values: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT");
+        return Enums.parse(AssaultProfile.class, profile).orElseThrow(() -> new IllegalArgumentException(
+                "Unknown assault profile '" + profile + "'. Valid values: NONE, SLOW_FAILURE, INTERMITTENT, TIMEOUT"));
     }
 
     public JsonObject toggleActive() {
@@ -341,7 +336,6 @@ public class GoblinJsonRPCService {
     /**
      * Serialises the armed layers for the Dev UI, in ascending declaration order.
      *
-     * @param cfg the current mutable assault configuration
      * @return the armed layer names
      */
     private JsonArray availableLayersJson() {
@@ -365,19 +359,7 @@ public class GoblinJsonRPCService {
      * @return the matching {@link ResponseHeaderAction}, or {@code null} when blank or unknown
      */
     private static ResponseHeaderAction parseHeaderAction(String action) {
-        if (action == null || action.isBlank()) {
-            return null;
-        }
-        String normalized = action.trim().toUpperCase();
-        if ("ADD".equals(normalized) || "OVERRIDE".equals(normalized)) {
-            return ResponseHeaderAction.SET;
-        }
-        for (ResponseHeaderAction candidate : ResponseHeaderAction.values()) {
-            if (candidate.name().equals(normalized)) {
-                return candidate;
-            }
-        }
-        return null;
+        return ResponseHeaderAction.parse(action).orElse(null);
     }
 
     /**
@@ -420,16 +402,7 @@ public class GoblinJsonRPCService {
      * @return the matching {@link ResponseBodyMode}, or {@code null} when blank or unknown
      */
     private static ResponseBodyMode parseBodyMode(String mode) {
-        if (mode == null || mode.isBlank()) {
-            return null;
-        }
-        String normalized = mode.trim().toUpperCase();
-        for (ResponseBodyMode candidate : ResponseBodyMode.values()) {
-            if (candidate.name().equals(normalized)) {
-                return candidate;
-            }
-        }
-        return null;
+        return Enums.parse(ResponseBodyMode.class, mode).orElse(null);
     }
 
     public JsonObject setLatencyRange(long minMs, long maxMs) {
@@ -497,6 +470,7 @@ public class GoblinJsonRPCService {
                     .put("type", record.type())
                     .put("timestamp", record.timestamp())
                     .put("latencyMs", record.latencyMs())
+                    .put("source", record.sourceTag())
                     .put("config", record.configSnapshot()));
         }
         return history;
@@ -706,12 +680,10 @@ public class GoblinJsonRPCService {
         Set<ChaosLayer> parsed = new LinkedHashSet<>();
         for (Object item : items) {
             if (item instanceof String name) {
-                try {
-                    parsed.add(ChaosLayer.valueOf(name.trim().toUpperCase()));
-                } catch (IllegalArgumentException e) {
+                Enums.parse(ChaosLayer.class, name).ifPresentOrElse(parsed::add, () -> {
                     issues.add("Unknown chaos layer '" + name + "'");
                     LOG.warnf("Goblin: skipping layer '%s' from applyConfig", name);
-                }
+                });
             }
         }
         cfg.setLayers(parsed);

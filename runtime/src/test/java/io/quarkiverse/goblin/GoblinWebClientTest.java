@@ -123,7 +123,7 @@ class GoblinWebClientTest {
 
         assertNotNull(failure);
         assertEquals(2, engine.getHistory().size());
-        assertEquals("latency", engine.getHistory().get(0).type());
+        assertEquals("latency", engine.getHistory().getFirst().type());
         assertEquals("exception", engine.getHistory().get(1).type());
         assertTrue(elapsedMs >= 90, "expected delay before the exception, got " + elapsedMs + "ms");
     }

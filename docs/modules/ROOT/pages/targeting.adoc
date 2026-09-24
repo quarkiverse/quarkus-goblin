@@ -23,6 +23,10 @@ Values outside the `0`-`100` range are clamped (with a `WARN` log) both at start
 
 == Package filtering
 
+NOTE: The package and annotation rules are fixed at build time -- the service and messaging layers weave their
+interceptors from them -- and applied identically by every layer (HTTP_IN, SERVICE, MESSAGING). `target.level` stays
+a runtime setting.
+
 Include only specific packages:
 
 [source,properties]

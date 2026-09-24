@@ -13,7 +13,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 class AssaultEngineTest {
@@ -79,7 +78,7 @@ class AssaultEngineTest {
                     for (int i = 0; i < ASSAULTS_PER_THREAD; i++) {
                         List<AssaultEngine.AssaultRecord> snapshot = engine.getHistory();
                         if (!snapshot.isEmpty()) {
-                            snapshot.get(0);
+                            snapshot.getFirst();
                             snapshot.get(snapshot.size() - 1);
                         }
                     }
@@ -109,7 +108,7 @@ class AssaultEngineTest {
 
         List<AssaultEngine.AssaultRecord> history = engine.getHistory();
         assertEquals(1000, history.size());
-        assertEquals(250L, history.get(0).latencyMs());
+        assertEquals(250L, history.getFirst().latencyMs());
         assertEquals(1249L, history.get(history.size() - 1).latencyMs());
     }
 
@@ -352,8 +351,8 @@ class AssaultEngineTest {
         assertEquals(1, engine.getHistory().size(), "the assault must be recorded despite the failing observer");
         assertEquals(1, engine.getTotalAssaultCount(), "the counter must be incremented despite the failing observer");
         assertEquals(1, received.size(), "healthy observers must still be notified alongside the failing one");
-        assertEquals("hello", received.get(0).method());
-        assertEquals(150, received.get(0).latencyMs());
+        assertEquals("hello", received.getFirst().method());
+        assertEquals(150, received.getFirst().latencyMs());
 
         assertDoesNotThrow(() -> engine.setActive(false));
         assertFalse(engine.isActive(), "the state change must apply despite the failing observer");
@@ -392,7 +391,7 @@ class AssaultEngineTest {
 
         @Override
         public AssaultObserver get() {
-            return observers.get(0);
+            return observers.getFirst();
         }
 
         @Override
@@ -426,7 +425,7 @@ class AssaultEngineTest {
 
         @Override
         public Instance.Handle<AssaultObserver> getHandle() {
-            return new FakeHandle(observers.get(0));
+            return new FakeHandle(observers.getFirst());
         }
 
         @Override
@@ -467,13 +466,9 @@ class AssaultEngineTest {
         }
     }
 
-    @AfterEach
-    void resetOptionalHooks() {
-        AssaultEngine.setOptionalHooks(Set.of());
-    }
-
-    private static AssaultEngine engineWithLayers(ChaosLayer... layers) {
+    private static AssaultEngine engineWithLayers(Set<ChaosLayer> hooks, ChaosLayer... layers) {
         AssaultEngine engine = new AssaultEngine();
+        engine.setOptionalHooksForTests(hooks);
         engine.setActive(true);
         MutableAssaultConfig config = new MutableAssaultConfig();
         config.setLayers(List.of(layers));
@@ -490,7 +485,7 @@ class AssaultEngineTest {
         assertFalse(engine.isLayerAvailable(ChaosLayer.MESSAGING));
         assertTrue(engine.isLayerAvailable(ChaosLayer.SERVICE));
 
-        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE));
+        engine.setOptionalHooksForTests(Set.of(ChaosLayer.DATABASE));
 
         assertTrue(engine.isLayerAvailable(ChaosLayer.DATABASE));
         assertFalse(engine.isLayerAvailable(ChaosLayer.MESSAGING));
@@ -500,16 +495,15 @@ class AssaultEngineTest {
 
     @Test
     void databaseWinsAnHttpRequestOnceItsHookIsInstalled() {
-        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE));
-        AssaultEngine engine = engineWithLayers(ChaosLayer.DATABASE, ChaosLayer.SERVICE, ChaosLayer.HTTP_IN);
+        AssaultEngine engine = engineWithLayers(Set.of(ChaosLayer.DATABASE), ChaosLayer.DATABASE, ChaosLayer.SERVICE,
+                ChaosLayer.HTTP_IN);
 
         assertEquals(ChaosLayer.DATABASE, engine.resolveAssaultLayer());
     }
 
     @Test
     void anHttpRequestNeverResolvesToMessaging() {
-        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.MESSAGING));
-        AssaultEngine engine = engineWithLayers(ChaosLayer.MESSAGING, ChaosLayer.HTTP_IN);
+        AssaultEngine engine = engineWithLayers(Set.of(ChaosLayer.MESSAGING), ChaosLayer.MESSAGING, ChaosLayer.HTTP_IN);
 
         assertEquals(ChaosLayer.HTTP_IN, engine.resolveAssaultLayer(),
                 "MESSAGING is a consumer entry point: an HTTP request falls through to the next layer");
@@ -517,20 +511,21 @@ class AssaultEngineTest {
 
     @Test
     void aConsumedMessageResolvesAmongDatabaseMessagingAndService() {
-        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE, ChaosLayer.MESSAGING));
+        Set<ChaosLayer> hooks = Set.of(ChaosLayer.DATABASE, ChaosLayer.MESSAGING);
 
         assertEquals(ChaosLayer.MESSAGING,
-                engineWithLayers(ChaosLayer.MESSAGING, ChaosLayer.SERVICE).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS));
+                engineWithLayers(hooks, ChaosLayer.MESSAGING, ChaosLayer.SERVICE)
+                        .resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS));
         assertEquals(ChaosLayer.DATABASE,
-                engineWithLayers(ChaosLayer.DATABASE, ChaosLayer.MESSAGING).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS));
-        assertNull(engineWithLayers(ChaosLayer.HTTP_IN).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS),
+                engineWithLayers(hooks, ChaosLayer.DATABASE, ChaosLayer.MESSAGING)
+                        .resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS));
+        assertNull(engineWithLayers(hooks, ChaosLayer.HTTP_IN).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS),
                 "HTTP_IN never applies to a consumed message");
     }
 
     @Test
     void optionalLayersOnlyInjectLatencyAndExceptions() {
-        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE));
-        AssaultEngine engine = engineWithLayers(ChaosLayer.DATABASE, ChaosLayer.HTTP_IN);
+        AssaultEngine engine = engineWithLayers(Set.of(ChaosLayer.DATABASE), ChaosLayer.DATABASE, ChaosLayer.HTTP_IN);
         engine.getMutableConfig().setExceptionEnabled(false);
         engine.getMutableConfig().setLatencyEnabled(false);
         engine.getMutableConfig().setHttpStatusEnabled(true);

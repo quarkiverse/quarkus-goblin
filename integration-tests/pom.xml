@@ -100,6 +100,10 @@
                 <artifactId>quarkus-maven-plugin</artifactId>
                 <version>${quarkus.version}</version>
                 <extensions>true</extensions>
+                <configuration>
+                    <!-- quarkus:dev: keep Netty off the deprecated sun.misc.Unsafe memory API (JDK 24+ warns) -->
+                    <jvmArgs>-Dio.netty.noUnsafe=true</jvmArgs>
+                </configuration>
                 <executions>
                     <execution>
                         <id>generate-code</id>

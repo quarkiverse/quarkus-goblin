@@ -53,7 +53,7 @@ public class GoblinChaosClientFilter implements ClientRequestFilter {
             return;
         }
 
-        MutableAssaultConfig config = engine.getMutableConfig();
+        MutableAssaultConfig config = engine.configSnapshot();
         String methodName = describeClientCall(requestContext);
 
         if (config.isClientLatencyEnabled()) {
@@ -67,13 +67,13 @@ public class GoblinChaosClientFilter implements ClientRequestFilter {
                 applied = true;
             }
             if (applied) {
-                engine.recordAssault(methodName, "latency", delay);
+                engine.recordAssault(AssaultSource.REST_CLIENT, methodName, "latency", delay);
             }
         }
 
         if (config.isClientExceptionEnabled()) {
             LOG.debugf("Goblin: injecting client exception on %s", methodName);
-            engine.recordAssault(methodName, "exception");
+            engine.recordAssault(AssaultSource.REST_CLIENT, methodName, "exception");
             throw ExceptionAssault.createException(config);
         }
     }

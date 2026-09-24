@@ -96,6 +96,12 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <!-- keep Netty (Vert.x) off the deprecated sun.misc.Unsafe memory API (JDK 24+ warns) -->
+                            <io.netty.noUnsafe>true</io.netty.noUnsafe>
+                        </systemPropertyVariables>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>

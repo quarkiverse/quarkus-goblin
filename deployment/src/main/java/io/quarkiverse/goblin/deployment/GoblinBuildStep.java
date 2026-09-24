@@ -1,7 +1,8 @@
 package io.quarkiverse.goblin.deployment;
 
 import java.lang.reflect.Modifier;
-import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 
 import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationTransformation;
@@ -12,8 +13,8 @@ import org.jboss.jandex.IndexView;
 import org.jboss.jandex.MethodInfo;
 
 import io.quarkiverse.goblin.GoblinChaosClientFilter;
-import io.quarkiverse.goblin.GoblinConfig;
-import io.quarkiverse.goblin.GoblinRecorder;
+import io.quarkiverse.goblin.GoblinTargetingConfig;
+import io.quarkiverse.goblin.TargetRules;
 import io.quarkiverse.goblin.assault.Assault;
 import io.quarkiverse.goblin.service.GoblinServiceAssault;
 import io.quarkiverse.goblin.service.GoblinServiceInterceptor;
@@ -22,13 +23,9 @@ import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
 import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.annotations.ExecutionTime;
-import io.quarkus.deployment.annotations.Record;
 import io.quarkus.deployment.builditem.ApplicationArchivesBuildItem;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
-import io.quarkus.deployment.builditem.LaunchModeBuildItem;
-import io.quarkus.runtime.LaunchMode;
 
 public class GoblinBuildStep {
 
@@ -111,13 +108,15 @@ public class GoblinBuildStep {
      * @param additionalBeans producer for additional bean registrations
      * @param transformers producer for annotation transformations
      * @param applicationArchives access to the application's root archive index
-     * @param config the build-time Goblin configuration
+     * @param combinedIndex the combined index, used to resolve implemented interfaces
+     * @param targeting the build-time targeting rules
      */
     @BuildStep(onlyIfNot = IsProduction.class)
     void registerServiceInterceptor(BuildProducer<AdditionalBeanBuildItem> additionalBeans,
             BuildProducer<AnnotationsTransformerBuildItem> transformers,
             ApplicationArchivesBuildItem applicationArchives, CombinedIndexBuildItem combinedIndex,
-            GoblinConfig config) {
+            GoblinTargetingConfig targeting) {
+        TargetRules rules = TargetRules.of(targeting);
         additionalBeans.produce(AdditionalBeanBuildItem.builder()
                 .setUnremovable()
                 .addBeanClass(GoblinServiceInterceptor.class)
@@ -129,7 +128,7 @@ public class GoblinBuildStep {
                 .whenMethod(method -> {
                     ClassInfo clazz = method.declaringClass();
                     return applicationIndex.getClassByName(clazz.name()) != null
-                            && isMethodEligible(clazz, method, config, index);
+                            && isMethodEligible(clazz, method, rules, index);
                 })
                 .transform(context -> context.add(GoblinServiceAssault.class));
         transformers.produce(new AnnotationsTransformerBuildItem(transformation));
@@ -156,26 +155,23 @@ public class GoblinBuildStep {
      *
      * @param clazz the declaring class to evaluate
      * @param method the method to evaluate
-     * @param config the build-time Goblin configuration
+     * @param rules the targeting rules
      * @param index the combined index, used to resolve implemented interfaces
      * @return {@code true} when the service assault binding should be added to the method
      */
-    static boolean isMethodEligible(ClassInfo clazz, MethodInfo method, GoblinConfig config, IndexView index) {
-        if (!isServiceEligible(clazz, config, index)) {
+    static boolean isMethodEligible(ClassInfo clazz, MethodInfo method, TargetRules rules, IndexView index) {
+        if (!isServiceEligible(clazz, rules, index)) {
             return false;
         }
         if (Modifier.isStatic(method.flags()) || Modifier.isPrivate(method.flags())
                 || isFallbackTargetMethod(clazz, method.name())) {
             return false;
         }
-        if (config.target().excludeAnnotations().isPresent()) {
-            for (String excluded : config.target().excludeAnnotations().get()) {
-                if (method.hasDeclaredAnnotation(DotName.createSimple(excluded))) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return !rules.isExcludedBy(annotationNames(method.declaredAnnotations()));
+    }
+
+    private static List<String> annotationNames(Collection<AnnotationInstance> annotations) {
+        return annotations.stream().map(annotation -> annotation.name().toString()).toList();
     }
 
     /**
@@ -255,11 +251,11 @@ public class GoblinBuildStep {
      * </ul>
      *
      * @param clazz the class to evaluate
-     * @param config the build-time Goblin configuration
+     * @param rules the targeting rules
      * @param index the combined index, used to resolve implemented interfaces
      * @return {@code true} when the service assault binding can be added to methods of the class
      */
-    private static boolean isServiceEligible(ClassInfo clazz, GoblinConfig config, IndexView index) {
+    private static boolean isServiceEligible(ClassInfo clazz, TargetRules rules, IndexView index) {
         String name = clazz.name().toString();
         if (name.lastIndexOf('.') < 0) {
             return false;
@@ -278,21 +274,7 @@ public class GoblinBuildStep {
         if (isInternalPackage(packageName)) {
             return false;
         }
-        if (matchesAnyPrefix(packageName, config.target().excludePackages())) {
-            return false;
-        }
-        if (config.target().includePackages().isPresent() && config.target().includePackages().get().length > 0
-                && !matchesAnyPrefix(packageName, config.target().includePackages())) {
-            return false;
-        }
-        if (config.target().excludeAnnotations().isPresent()) {
-            for (String excluded : config.target().excludeAnnotations().get()) {
-                if (clazz.declaredAnnotation(DotName.createSimple(excluded)) != null) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return rules.isPackageTargeted(packageName) && !rules.isExcludedBy(annotationNames(clazz.declaredAnnotations()));
     }
 
     private static boolean isInternalPackage(String packageName) {
@@ -305,26 +287,5 @@ public class GoblinBuildStep {
             }
         }
         return false;
-    }
-
-    private static boolean matchesAnyPrefix(String packageName, Optional<String[]> prefixes) {
-        if (prefixes.isEmpty()) {
-            return false;
-        }
-        for (String prefix : prefixes.get()) {
-            if (packageName.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @BuildStep
-    @Record(ExecutionTime.RUNTIME_INIT)
-    void activateChaos(GoblinRecorder recorder, GoblinConfig config, LaunchModeBuildItem launchMode) {
-        if (launchMode.getLaunchMode() == LaunchMode.DEVELOPMENT
-                || launchMode.getLaunchMode() == LaunchMode.TEST) {
-            recorder.activate(config);
-        }
     }
 }

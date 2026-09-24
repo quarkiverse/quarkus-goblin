@@ -6,7 +6,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import jakarta.enterprise.inject.Instance;
@@ -43,7 +45,7 @@ class GoblinChaosFilterResponseBodyTest {
         inject(engine, "mutableConfig", config);
         inject(filter, "engine", engine);
         inject(filter, "resourceInfo", resourceInfo());
-        inject(filter, "config", noFilteringConfig());
+        inject(filter, "targeting", noFilteringConfig());
         inject(filter, "assaults", emptyAssaults());
     }
 
@@ -62,8 +64,8 @@ class GoblinChaosFilterResponseBodyTest {
         assertEquals("13", response.header("Content-Length"),
                 "TRUNCATE keeps the response well-framed: the declared length matches the truncated payload");
         assertEquals(1, engine.getHistory().size());
-        assertEquals("response-body-truncate", engine.getHistory().get(0).type());
-        assertEquals(TestResource.class.getSimpleName() + ".hello", engine.getHistory().get(0).method());
+        assertEquals("response-body-truncate", engine.getHistory().getFirst().type());
+        assertEquals(TestResource.class.getSimpleName() + ".hello", engine.getHistory().getFirst().method());
     }
 
     @Test
@@ -83,7 +85,7 @@ class GoblinChaosFilterResponseBodyTest {
         assertEquals("26", response.header("Content-Length"),
                 "INFLATE advertises the original, smaller length so the header and the emitted payload diverge");
         assertEquals(1, engine.getHistory().size());
-        assertEquals("response-body-inflate", engine.getHistory().get(0).type());
+        assertEquals("response-body-inflate", engine.getHistory().getFirst().type());
     }
 
     @Test
@@ -220,41 +222,21 @@ class GoblinChaosFilterResponseBodyTest {
                 new Class<?>[] { ResourceInfo.class }, handler);
     }
 
-    private static GoblinConfig noFilteringConfig() {
-        return new GoblinConfig() {
+    private static GoblinTargetingConfig noFilteringConfig() {
+        return new GoblinTargetingConfig() {
             @Override
-            public boolean enabled() {
-                return true;
+            public Optional<List<String>> includePackages() {
+                return Optional.empty();
             }
 
             @Override
-            public AssaultConfig assault() {
-                throw new UnsupportedOperationException();
+            public Optional<List<String>> excludePackages() {
+                return Optional.empty();
             }
 
             @Override
-            public TargetConfig target() {
-                return new TargetConfig() {
-                    @Override
-                    public int level() {
-                        return 100;
-                    }
-
-                    @Override
-                    public java.util.Optional<String[]> includePackages() {
-                        return java.util.Optional.empty();
-                    }
-
-                    @Override
-                    public java.util.Optional<String[]> excludePackages() {
-                        return java.util.Optional.empty();
-                    }
-
-                    @Override
-                    public java.util.Optional<String[]> excludeAnnotations() {
-                        return java.util.Optional.empty();
-                    }
-                };
+            public Optional<List<String>> excludeAnnotations() {
+                return Optional.empty();
             }
         };
     }

@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -654,6 +653,11 @@ class MutableAssaultConfigTest {
             }
 
             @Override
+            public TestConfig test() {
+                return () -> true;
+            }
+
+            @Override
             public AssaultConfig assault() {
                 return new AssaultConfig() {
                     @Override
@@ -741,20 +745,6 @@ class MutableAssaultConfigTest {
                         return 100;
                     }
 
-                    @Override
-                    public Optional<String[]> includePackages() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String[]> excludePackages() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String[]> excludeAnnotations() {
-                        return Optional.empty();
-                    }
                 };
             }
         };
@@ -766,6 +756,11 @@ class MutableAssaultConfigTest {
             @Override
             public boolean enabled() {
                 return true;
+            }
+
+            @Override
+            public TestConfig test() {
+                return () -> true;
             }
 
             @Override
@@ -856,20 +851,6 @@ class MutableAssaultConfigTest {
                         return targetLevel;
                     }
 
-                    @Override
-                    public Optional<String[]> includePackages() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String[]> excludePackages() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String[]> excludeAnnotations() {
-                        return Optional.empty();
-                    }
                 };
             }
         };
@@ -934,5 +915,61 @@ class MutableAssaultConfigTest {
         assertThrows(IllegalArgumentException.class,
                 () -> config.setResponseHeader("X-Bad:", ResponseHeaderAction.SET, "v"));
         assertDoesNotThrow(() -> config.setResponseHeader("X-Goblin_Test.1", ResponseHeaderAction.SET, "v"));
+    }
+
+    @Test
+    void snapshotIsFrozenOnTheStateItWasTakenFrom() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setTargetLevel(42);
+        MutableAssaultConfig snapshot = config.snapshot();
+
+        config.setTargetLevel(7);
+        config.setProfile(AssaultProfile.TIMEOUT);
+
+        assertEquals(42, snapshot.getTargetLevel());
+        assertEquals(AssaultProfile.NONE, snapshot.getProfile());
+        assertEquals(7, config.getTargetLevel());
+    }
+
+    @Test
+    void snapshotIsReadOnly() {
+        MutableAssaultConfig snapshot = new MutableAssaultConfig().snapshot();
+
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.setLatencyEnabled(false));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.setProfile(AssaultProfile.TIMEOUT));
+        assertSame(snapshot, snapshot.snapshot(), "a snapshot of a snapshot is itself");
+    }
+
+    @Test
+    void readersNeverObserveAHalfAppliedProfile() throws Exception {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        AtomicInteger inconsistencies = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean running = new java.util.concurrent.atomic.AtomicBoolean(true);
+
+        Thread writer = new Thread(() -> {
+            for (int i = 0; i < 20_000; i++) {
+                config.setProfile(i % 2 == 0 ? AssaultProfile.TIMEOUT : AssaultProfile.SLOW_FAILURE);
+            }
+            running.set(false);
+        });
+        Thread reader = new Thread(() -> {
+            while (running.get()) {
+                MutableAssaultConfig s = config.snapshot();
+                boolean timeout = s.getProfile() == AssaultProfile.TIMEOUT
+                        && s.getLatencyMinMs() == 30000 && !s.isExceptionEnabled();
+                boolean slowFailure = s.getProfile() == AssaultProfile.SLOW_FAILURE
+                        && s.getLatencyMinMs() == 100 && s.isExceptionEnabled();
+                if (!timeout && !slowFailure) {
+                    inconsistencies.incrementAndGet();
+                }
+            }
+        });
+        reader.start();
+        writer.start();
+        writer.join();
+        reader.join();
+
+        assertEquals(0, inconsistencies.get(), "a snapshot must always hold a fully applied profile");
     }
 }

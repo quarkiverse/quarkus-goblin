@@ -26,7 +26,6 @@ public class AssaultEngine {
 
     private static final Logger LOG = Logger.getLogger(AssaultEngine.class);
     static final int MAX_HISTORY = 1000;
-    private static volatile GoblinConfig staticConfig;
 
     /**
      * Layers whose assault hook is always part of the extension.
@@ -49,10 +48,9 @@ public class AssaultEngine {
 
     /**
      * Optional hooks installed at build time because the application has the matching extension (Agroal for
-     * {@link ChaosLayer#DATABASE}, Quarkus Messaging for {@link ChaosLayer#MESSAGING}). Reset on every start by the
-     * recorder.
+     * {@link ChaosLayer#DATABASE}, Quarkus Messaging for {@link ChaosLayer#MESSAGING}), resolved on startup.
      */
-    private static volatile Set<ChaosLayer> optionalHooks = Collections.emptySet();
+    private volatile Set<ChaosLayer> optionalHooks = Collections.emptySet();
 
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
@@ -64,18 +62,20 @@ public class AssaultEngine {
     @Inject
     Instance<AssaultObserver> observers;
 
-    public static void setStaticConfig(GoblinConfig config) {
-        staticConfig = config;
-    }
+    @Inject
+    GoblinConfig config;
+
+    @Inject
+    Instance<GoblinLayerHooks> layerHooks;
 
     /**
-     * Declares the optional layer hooks installed for this application. Called by the recorder on every start.
+     * Declares the optional layer hooks installed for this application. Package-private for unit tests; the production
+     * lifecycle resolves them from the {@link GoblinLayerHooks} synthetic bean on startup.
      *
      * @param layers the layers whose hook is installed, never {@code null}
      */
-    public static void setOptionalHooks(Set<ChaosLayer> layers) {
-        optionalHooks = layers.isEmpty() ? Collections.emptySet()
-                : Collections.unmodifiableSet(EnumSet.copyOf(layers));
+    void setOptionalHooksForTests(Set<ChaosLayer> layers) {
+        optionalHooks = new GoblinLayerHooks(layers).layers();
     }
 
     /**
@@ -108,12 +108,13 @@ public class AssaultEngine {
      * Initialises the engine for the given launch mode.
      * <p>
      * Chaos only ever activates in dev or test mode: in any other launch mode -- notably a packaged production
-     * application -- the engine stays inactive and neither the persisted state file nor the static configuration is
-     * consulted. In dev mode a previously persisted state file (assault toggles and parameters only -- the
-     * enabled/active flag is never persisted and always comes from {@code quarkus.goblin.enabled}) is restored when
-     * present, otherwise the mutable config is built from the static configuration. In test mode the state file is
-     * deliberately ignored so integration tests always start from {@code application.properties} and can never be
-     * contaminated by local Dev UI state. Package-private for unit tests.
+     * application -- the engine stays inactive and neither the persisted state file nor the configuration is consulted.
+     * In dev mode a previously persisted state file (assault toggles and parameters only -- the enabled/active flag is
+     * never persisted and always comes from {@code quarkus.goblin.enabled}) is restored when present, otherwise the
+     * mutable config is built from the {@link GoblinConfig} configuration. In test mode the state file is deliberately
+     * ignored so tests always start from {@code application.properties} and can never be contaminated by local Dev UI
+     * state, and chaos is only active when {@code quarkus.goblin.test.enabled} opts in: an application's test suite is
+     * never assaulted just because the extension is on the classpath. Package-private for unit tests.
      *
      * @param mode the launch mode the application started under
      */
@@ -122,22 +123,32 @@ public class AssaultEngine {
             this.active = false;
             return;
         }
+        if (layerHooks != null && layerHooks.isResolvable()) {
+            this.optionalHooks = layerHooks.get().layers();
+        }
         MutableAssaultConfig persisted = mode == LaunchMode.DEVELOPMENT ? GoblinStatePersistence.load() : null;
         if (persisted != null) {
             this.mutableConfig = persisted;
             LOG.info("Loaded previous Goblin state from .goblin-state.json");
-        } else if (staticConfig != null) {
-            this.mutableConfig = MutableAssaultConfig.fromConfig(staticConfig);
+        } else if (config != null) {
+            this.mutableConfig = MutableAssaultConfig.fromConfig(config);
         } else {
-            // no recorded configuration (engine started outside the extension's build steps): built-in defaults
+            // no configuration injected (plain unit test): built-in defaults
             this.mutableConfig = new MutableAssaultConfig();
         }
-        this.active = staticConfig == null || staticConfig.enabled();
+        boolean enabled = config == null || config.enabled();
+        boolean testOptIn = mode != LaunchMode.TEST || config == null || config.test().enabled();
+        this.active = enabled && testOptIn;
+        if (enabled && !testOptIn) {
+            LOG.info("Goblin chaos is inactive in test mode: set quarkus.goblin.test.enabled=true to assault the tests, "
+                    + "or switch it on from a test with AssaultEngine.setActive(true)");
+        }
         this.mutableConfig.validateAndFix();
         if (mode == LaunchMode.DEVELOPMENT) {
             this.mutableConfig.setOnChange(this::persistConfig);
         }
         if (active) {
+            MutableAssaultConfig mutableConfig = this.mutableConfig.snapshot();
             LOG.warnf(
                     "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s, responseBody=%s)",
                     mutableConfig.getTargetLevel(),
@@ -166,10 +177,11 @@ public class AssaultEngine {
     }
 
     public boolean shouldAssault() {
-        if (!active || mutableConfig == null || !mutableConfig.hasAnyAssaultEnabled()) {
+        MutableAssaultConfig cfg = configSnapshot();
+        if (!active || cfg == null || !cfg.hasAnyAssaultEnabled()) {
             return false;
         }
-        return levelGate();
+        return levelGate(cfg);
     }
 
     /**
@@ -199,14 +211,15 @@ public class AssaultEngine {
      * @return the armed layer, or {@code null} when no armed layer passed its draw
      */
     public ChaosLayer resolveAssaultLayer(Set<ChaosLayer> candidates) {
-        if (!active || mutableConfig == null || !mutableConfig.hasAnyAssaultEnabled()) {
+        MutableAssaultConfig cfg = configSnapshot();
+        if (!active || cfg == null || !cfg.hasAnyAssaultEnabled()) {
             return null;
         }
         for (ChaosLayer layer : ChaosLayer.values()) {
-            if (!candidates.contains(layer) || !isLayerAvailable(layer) || !isLayerActionable(layer, mutableConfig)) {
+            if (!candidates.contains(layer) || !isLayerAvailable(layer) || !isLayerActionable(layer, cfg)) {
                 continue;
             }
-            if (levelGate()) {
+            if (levelGate(cfg)) {
                 return layer;
             }
         }
@@ -244,11 +257,11 @@ public class AssaultEngine {
      * @return {@code true} when the outbound call is eligible for a client-side assault
      */
     public boolean shouldAssaultClient() {
-        if (!active || mutableConfig == null || !mutableConfig.isLayerEnabled(ChaosLayer.HTTP_OUT)
-                || !mutableConfig.hasAnyClientAssaultEnabled()) {
+        MutableAssaultConfig cfg = configSnapshot();
+        if (!active || cfg == null || !cfg.isLayerEnabled(ChaosLayer.HTTP_OUT) || !cfg.hasAnyClientAssaultEnabled()) {
             return false;
         }
-        return levelGate();
+        return levelGate(cfg);
     }
 
     /**
@@ -258,11 +271,12 @@ public class AssaultEngine {
      * @return {@code true} when the draw passes the configured target level
      */
     public boolean drawLevelGate() {
-        return mutableConfig != null && levelGate();
+        MutableAssaultConfig cfg = mutableConfig;
+        return cfg != null && levelGate(cfg);
     }
 
-    private boolean levelGate() {
-        int level = mutableConfig.getTargetLevel();
+    private static boolean levelGate(MutableAssaultConfig cfg) {
+        int level = cfg.getTargetLevel();
         if (level <= 0) {
             return false;
         }
@@ -270,6 +284,17 @@ public class AssaultEngine {
             return true;
         }
         return ThreadLocalRandom.current().nextInt(100) < level;
+    }
+
+    /**
+     * Returns a read-only snapshot of the current configuration, for hooks that read several values for one request or
+     * call: all reads of the snapshot come from the same state, whatever the Dev UI changes meanwhile.
+     *
+     * @return the frozen configuration, or {@code null} while the engine is not initialised
+     */
+    public MutableAssaultConfig configSnapshot() {
+        MutableAssaultConfig current = mutableConfig;
+        return current != null ? current.snapshot() : null;
     }
 
     public MutableAssaultConfig getMutableConfig() {
@@ -288,7 +313,8 @@ public class AssaultEngine {
     }
 
     /**
-     * Installs the observers used by {@link #recordAssault(String, String, long)} and {@link #setActive(boolean)}.
+     * Installs the observers used by {@link #recordAssault(AssaultSource, String, String, long)} and
+     * {@link #setActive(boolean)}.
      * Package-private for unit tests; the production lifecycle relies on CDI injection of the {@code observers} field.
      *
      * @param observers the observers to notify
@@ -305,13 +331,51 @@ public class AssaultEngine {
         history.clear();
     }
 
+    /**
+     * Records an assault injected at the inbound REST boundary ({@link AssaultSource#SERVER}).
+     *
+     * @param method the history identifier of the assaulted target
+     * @param type the assault label, e.g. {@code "exception"}
+     */
     public void recordAssault(String method, String type) {
-        recordAssault(method, type, 0);
+        recordAssault(AssaultSource.SERVER, method, type, 0);
     }
 
+    /**
+     * Records an assault injected at the inbound REST boundary ({@link AssaultSource#SERVER}).
+     *
+     * @param method the history identifier of the assaulted target
+     * @param type the assault label, e.g. {@code "latency"}
+     * @param latencyMs the injected latency, {@code 0} when not applicable
+     */
     public void recordAssault(String method, String type, long latencyMs) {
+        recordAssault(AssaultSource.SERVER, method, type, latencyMs);
+    }
+
+    /**
+     * Records an assault injected at the given source.
+     *
+     * @param source where the assault was injected
+     * @param method the history identifier of the assaulted target
+     * @param type the assault label, e.g. {@code "exception"}
+     */
+    public void recordAssault(AssaultSource source, String method, String type) {
+        recordAssault(source, method, type, 0);
+    }
+
+    /**
+     * Records an assault injected at the given source, appends it to the bounded history, updates the counters and
+     * notifies the observers.
+     *
+     * @param source where the assault was injected
+     * @param method the history identifier of the assaulted target
+     * @param type the assault label, e.g. {@code "latency"}
+     * @param latencyMs the injected latency, {@code 0} when not applicable
+     */
+    public void recordAssault(AssaultSource source, String method, String type, long latencyMs) {
         String configSnapshot = mutableConfig != null ? mutableConfig.describeAssaults() : "no assault enabled";
-        AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, configSnapshot);
+        AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, configSnapshot,
+                source);
         LOG.debugf("Goblin: history += %s type=%s latencyMs=%d (%s)", method, type, latencyMs, configSnapshot);
         history.addLast(record);
         while (history.size() > MAX_HISTORY) {
@@ -381,6 +445,37 @@ public class AssaultEngine {
         countersSinceEpoch = System.currentTimeMillis();
     }
 
-    public record AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot) {
+    /**
+     * One recorded assault.
+     *
+     * @param method the history identifier of the assaulted target
+     * @param type the assault label, e.g. {@code "latency"}
+     * @param timestamp the epoch time (ms) the assault was recorded
+     * @param latencyMs the injected latency, {@code 0} when not applicable
+     * @param configSnapshot a description of the enabled assaults at that time
+     * @param source where the assault was injected
+     */
+    public record AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot,
+            AssaultSource source) {
+
+        /**
+         * Builds a record injected at the inbound REST boundary ({@link AssaultSource#SERVER}).
+         *
+         * @param method the history identifier of the assaulted target
+         * @param type the assault label
+         * @param timestamp the epoch time (ms) the assault was recorded
+         * @param latencyMs the injected latency, {@code 0} when not applicable
+         * @param configSnapshot a description of the enabled assaults at that time
+         */
+        public AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot) {
+            this(method, type, timestamp, latencyMs, configSnapshot, AssaultSource.SERVER);
+        }
+
+        /**
+         * @return the metric tag / span attribute value of the source, {@code "server"} when no source was recorded
+         */
+        public String sourceTag() {
+            return (source != null ? source : AssaultSource.SERVER).tag();
+        }
     }
 }

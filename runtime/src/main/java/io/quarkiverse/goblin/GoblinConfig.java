@@ -1,7 +1,6 @@
 package io.quarkiverse.goblin;
 
 import java.util.Map;
-import java.util.Optional;
 
 import io.quarkus.runtime.annotations.ConfigGroup;
 import io.quarkus.runtime.annotations.ConfigPhase;
@@ -10,18 +9,42 @@ import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 
 /**
- * Goblin chaos engineering configuration.
+ * Goblin chaos engineering configuration, read at runtime: every value can be overridden when the application starts
+ * (environment variable, system property, profile...). The targeting rules, which decide at build time which beans are
+ * woven, live in {@link GoblinTargetingConfig}.
  */
-@ConfigRoot(phase = ConfigPhase.BUILD_AND_RUN_TIME_FIXED)
+@ConfigRoot(phase = ConfigPhase.RUN_TIME)
 @ConfigMapping(prefix = "quarkus.goblin")
 public interface GoblinConfig {
 
     /**
-     * Whether the Goblin chaos engineering extension is enabled. Chaos only ever activates in dev and test mode; in a
-     * production build the engine stays inactive whatever this value.
+     * Whether the Goblin chaos engineering extension is enabled. Chaos only ever activates in dev mode, and in test mode
+     * when {@code quarkus.goblin.test.enabled} is set; in a production build the engine stays inactive whatever this
+     * value.
      */
     @WithDefault("true")
     boolean enabled();
+
+    /**
+     * Test mode configuration.
+     */
+    TestConfig test();
+
+    /**
+     * Test mode configuration group.
+     */
+    @ConfigGroup
+    interface TestConfig {
+
+        /**
+         * Whether chaos is active when the application runs in test mode ({@code @QuarkusTest}). Off by default, so adding
+         * the extension never slows down nor breaks an application's test suite: set it to {@code true} to exercise
+         * resilience in tests. When off, the engine still loads its configuration and a test can switch chaos on with
+         * {@code AssaultEngine.setActive(true)}.
+         */
+        @WithDefault("false")
+        boolean enabled();
+    }
 
     /**
      * Assault configuration.
@@ -184,7 +207,8 @@ public interface GoblinConfig {
     }
 
     /**
-     * Targeting configuration for selecting which endpoints are affected.
+     * Targeting configuration: how many requests are affected. Which classes are eligible is decided at build time, see
+     * {@link GoblinTargetingConfig}.
      */
     @ConfigGroup
     interface TargetConfig {
@@ -194,21 +218,5 @@ public interface GoblinConfig {
          */
         @WithDefault("100")
         int level();
-
-        /**
-         * Packages to include (empty means all).
-         */
-        Optional<String[]> includePackages();
-
-        /**
-         * Packages to exclude.
-         */
-        Optional<String[]> excludePackages();
-
-        /**
-         * Annotations to exclude: methods carrying one of these annotations, or declared in a class carrying one, are never
-         * assaulted (HTTP_IN and SERVICE layers alike).
-         */
-        Optional<String[]> excludeAnnotations();
     }
 }

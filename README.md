@@ -30,7 +30,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`)
 - **Markdown report export** -- Generate a factual report of config + assault history, ready to hand to an LLM for resilience review
 - **Multi-layer chaos** -- Arm the `DATABASE`, `MESSAGING`, `SERVICE`, `HTTP_OUT` and `HTTP_IN` layers independently (Dev UI check-boxes): `DATABASE` fails or delays JDBC connection acquisition (Agroal, below Hibernate / Panache), `MESSAGING` faults `@Incoming` consumers, and `SERVICE` injects latency/exceptions on business beans *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real
-- **Dev and test only** -- Chaos activates under `quarkus:dev` and `@QuarkusTest`; in a production build the engine stays inactive and no bean is woven with the service interceptor
+- **Dev by default, tests on opt-in** -- Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`; in a production build the engine stays inactive and no bean is woven with the service interceptor
 
 ## Quick start
 
@@ -55,8 +55,11 @@ Open the Dev UI at `http://localhost:8080/q/dev` and look for the Goblin card.
 ## Configuration
 
 ```properties
-# Enable/disable (default: true, only ever active in dev and test mode)
+# Enable/disable (default: true, only ever active in dev mode and, on opt-in, in test mode)
 quarkus.goblin.enabled=true
+
+# Opt in to chaos in @QuarkusTest (default: false, so adding the extension never slows down nor breaks your tests)
+# quarkus.goblin.test.enabled=true
 
 # Assault type enabled at startup (can be changed at runtime via Dev UI)
 quarkus.goblin.assault.type=LATENCY
@@ -117,7 +120,7 @@ Prometheus / Grafana dashboards:
 The module depends on the Micrometer API only: add the registry you use, e.g.
 `io.quarkus:quarkus-micrometer-registry-prometheus`, whose `/q/metrics` endpoint then exposes:
 
-- `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `rest-client`, `webclient`, `database`, `messaging`)
+- `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
 - `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source` (sum/count/max; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for histogram tuning)
 - `goblin_active` -- gauge, `1` while the engine is active, `0` otherwise
 
@@ -137,7 +140,7 @@ tracing backend:
 Each assault produces one span named `goblin.assault`:
 
 - kind `INTERNAL` (the OpenTelemetry default) for every assault: the span annotates an in-process moment and makes no network call of its own, so `CLIENT`/`SERVER` labels would fabricate phantom dependency edges or duplicate the request topology
-- attributes `goblin.assault.type`, `.source` (`server`, `rest-client`, `webclient`, `database`, `messaging`), `.target.method`, the injected value (`.latency_ms`, `.status_code`, `.exception`) and the `.config` snapshot
+- attributes `goblin.assault.type`, `.source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), `.target.method`, the injected value (`.latency_ms`, `.status_code`, `.exception`) and the `.config` snapshot
 - linked to the parent request span; for latency, the injected delay is back-dated so it is attributed to the span; exception assaults mark the span `ERROR` (see the [guide](docs/modules/ROOT/pages/tracing.adoc))
 
 ## Dev UI
@@ -157,7 +160,7 @@ All changes apply instantly with WARN logs in the console and are persisted to `
 
 ## Safety
 
-- **Dev and test only** -- Chaos only activates in `quarkus:dev` and `@QuarkusTest`. Note that with the defaults (`enabled=true`, latency, level 100) every `@QuarkusTest` request is delayed: set `quarkus.goblin.enabled=false` (or `%test.quarkus.goblin.target.level=0`) in the test profile when you do not want chaos in your tests.
+- **Dev by default, tests on opt-in** -- Chaos activates in `quarkus:dev`. In `@QuarkusTest` it stays off unless `quarkus.goblin.test.enabled=true`, so adding the extension never slows down nor breaks an existing test suite; a single test can also switch it on with `AssaultEngine.setActive(true)`.
 - **Zero code modification** -- No annotations needed for the server-side and REST Client assaults; Vert.x `WebClient` instances are armed with one `GoblinWebClient.enable(...)` call.
 - **Explicit logging** -- WARN log emitted when chaos is active.
 

@@ -20,7 +20,8 @@ import io.quarkus.runtime.StartupEvent;
  * {@code quarkus-goblin-metrics} dependency is present:
  * <ul>
  * <li>{@code goblin.assaults.total} -- counter of every fired assault, tagged with its {@code type} and {@code source}
- * ({@code server}, {@code rest-client}, {@code webclient}, {@code database}, {@code messaging});</li>
+ * ({@code server}, {@code service}, {@code rest-client}, {@code webclient}, {@code database}, {@code messaging}, as
+ * recorded by the engine);</li>
  * <li>{@code goblin.latency.injected.seconds} -- timer of the delays actually injected, tagged with {@code source};</li>
  * <li>{@code goblin.active} -- gauge that lazily mirrors {@link AssaultEngine#isActive()} (1 when active, 0 otherwise).</li>
  * </ul>
@@ -35,11 +36,6 @@ public class GoblinMetricsObserver implements AssaultObserver {
     public static final String ACTIVE_METRIC = "goblin.active";
     public static final String TAG_TYPE = "type";
     public static final String TAG_SOURCE = "source";
-    static final String SOURCE_SERVER = "server";
-    static final String SOURCE_REST_CLIENT = "rest-client";
-    static final String SOURCE_WEB_CLIENT = "webclient";
-    static final String SOURCE_DATABASE = "database";
-    static final String SOURCE_MESSAGING = "messaging";
 
     private final MeterRegistry registry;
     private final AssaultEngine engine;
@@ -69,7 +65,7 @@ public class GoblinMetricsObserver implements AssaultObserver {
 
     @Override
     public void onAssault(AssaultEngine.AssaultRecord record) {
-        String source = sourceOf(record.method());
+        String source = record.sourceTag();
         Counter.builder(TOTAL_METRIC)
                 .tags(TAG_TYPE, record.type(), TAG_SOURCE, source)
                 .register(registry)
@@ -81,30 +77,5 @@ public class GoblinMetricsObserver implements AssaultObserver {
                     .register(registry)
                     .record(record.latencyMs(), TimeUnit.MILLISECONDS);
         }
-    }
-
-    /**
-     * Derives the assault source tag from the history identifier produced by the engine.
-     *
-     * @param method the history identifier (e.g. {@code "SampleResource.hello"}, {@code "REST-Client GET ..."},
-     *        {@code "WebClient GET ..."}, {@code "Database <default> connection"}, {@code "Messaging ..."})
-     * @return the source tag value
-     */
-    static String sourceOf(String method) {
-        if (method != null) {
-            if (method.startsWith("REST-Client ")) {
-                return SOURCE_REST_CLIENT;
-            }
-            if (method.startsWith("WebClient ")) {
-                return SOURCE_WEB_CLIENT;
-            }
-            if (method.startsWith("Database ")) {
-                return SOURCE_DATABASE;
-            }
-            if (method.startsWith("Messaging ")) {
-                return SOURCE_MESSAGING;
-            }
-        }
-        return SOURCE_SERVER;
     }
 }

@@ -25,9 +25,8 @@ import io.quarkus.runtime.StartupEvent;
  * <ul>
  * <li>{@code goblin.assault.type} -- the assault type (e.g. {@code latency}, {@code exception},
  * {@code http-status}, {@code response-body-truncate});</li>
- * <li>{@code goblin.assault.source} -- {@code server}, {@code rest-client}, {@code webclient}, {@code database} or
- * {@code messaging}, derived from the
- * history identifier;</li>
+ * <li>{@code goblin.assault.source} -- {@code server}, {@code service}, {@code rest-client}, {@code webclient},
+ * {@code database} or {@code messaging}, as recorded by the engine;</li>
  * <li>{@code goblin.assault.target.method} -- the recorded method identifier (e.g. {@code SampleResource.hello},
  * {@code REST-Client GET http://...}, {@code WebClient GET http://...});</li>
  * <li>the injected value per type: {@code goblin.assault.latency_ms}, {@code goblin.assault.status_code},
@@ -62,11 +61,6 @@ public class GoblinTracingObserver implements AssaultObserver {
     public static final String ATTR_STATUS_CODE = "goblin.assault.status_code";
     public static final String ATTR_EXCEPTION = "goblin.assault.exception";
     public static final String ATTR_CONFIG = "goblin.assault.config";
-    static final String SOURCE_SERVER = "server";
-    static final String SOURCE_REST_CLIENT = "rest-client";
-    static final String SOURCE_WEB_CLIENT = "webclient";
-    static final String SOURCE_DATABASE = "database";
-    static final String SOURCE_MESSAGING = "messaging";
 
     private static final long DEPENDENCY_DEGRADATION_STATUS = 503L;
 
@@ -97,7 +91,7 @@ public class GoblinTracingObserver implements AssaultObserver {
 
     @Override
     public void onAssault(AssaultEngine.AssaultRecord record) {
-        String source = sourceOf(record.method());
+        String source = record.sourceTag();
         SpanBuilder builder = tracer.spanBuilder(SPAN_NAME)
                 .setParent(Context.current());
         long latencyMs = record.latencyMs();
@@ -141,30 +135,5 @@ public class GoblinTracingObserver implements AssaultObserver {
         } else if ("dependency-degradation".equals(type)) {
             span.setAttribute(ATTR_STATUS_CODE, DEPENDENCY_DEGRADATION_STATUS);
         }
-    }
-
-    /**
-     * Derives the assault source from the history identifier produced by the engine.
-     *
-     * @param method the history identifier (e.g. {@code "SampleResource.hello"}, {@code "REST-Client GET ..."},
-     *        {@code "WebClient GET ..."}, {@code "Database <default> connection"}, {@code "Messaging ..."})
-     * @return the source tag value
-     */
-    static String sourceOf(String method) {
-        if (method != null) {
-            if (method.startsWith("REST-Client ")) {
-                return SOURCE_REST_CLIENT;
-            }
-            if (method.startsWith("WebClient ")) {
-                return SOURCE_WEB_CLIENT;
-            }
-            if (method.startsWith("Database ")) {
-                return SOURCE_DATABASE;
-            }
-            if (method.startsWith("Messaging ")) {
-                return SOURCE_MESSAGING;
-            }
-        }
-        return SOURCE_SERVER;
     }
 }

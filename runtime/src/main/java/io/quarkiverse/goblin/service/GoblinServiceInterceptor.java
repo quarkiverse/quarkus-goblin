@@ -7,6 +7,7 @@ import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.assault.LayerFaults;
@@ -51,14 +52,14 @@ public class GoblinServiceInterceptor {
      */
     @AroundInvoke
     Object aroundInvoke(InvocationContext context) throws Exception {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfig cfg = engine.configSnapshot();
         if (!ChaosRequestContext.isServiceArmed() || cfg == null || !engine.isActive()) {
             return context.proceed();
         }
         boolean outermost = ChaosRequestContext.enterService();
         try {
             if (outermost && LayerFaults.shouldFire(engine)) {
-                LayerFaults.inject(engine, cfg, describe(context));
+                LayerFaults.inject(engine, cfg, AssaultSource.SERVICE, describe(context));
             }
             return context.proceed();
         } finally {

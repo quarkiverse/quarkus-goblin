@@ -101,13 +101,13 @@ public final class GoblinWebClient {
             context.next();
             return;
         }
-        MutableAssaultConfig config = engine.getMutableConfig();
+        MutableAssaultConfig config = engine.configSnapshot();
         String methodName = describeCall(context);
         if (config.isClientLatencyEnabled()) {
             long delay = LatencySupport.drawDelay(config);
             LOG.debugf("Goblin: injecting WebClient latency (%s ms) on %s", delay, methodName);
             delayThen(context, delay, () -> {
-                engine.recordAssault(methodName, "latency", delay);
+                engine.recordAssault(AssaultSource.WEBCLIENT, methodName, "latency", delay);
                 finishWithExceptionIfEnabled(context, config, methodName);
             });
             return;
@@ -144,7 +144,7 @@ public final class GoblinWebClient {
      */
     private static void failWithException(HttpContext<?> context, MutableAssaultConfig config, String methodName) {
         LOG.debugf("Goblin: injecting WebClient exception on %s", methodName);
-        engine().recordAssault(methodName, "exception");
+        engine().recordAssault(AssaultSource.WEBCLIENT, methodName, "exception");
         context.fail(ExceptionAssault.createException(config));
     }
 

@@ -1,8 +1,7 @@
 package io.quarkiverse.goblin.deployment;
 
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import jakarta.enterprise.inject.Default;
 import jakarta.inject.Singleton;
@@ -14,8 +13,10 @@ import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 
 import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.GoblinConfig;
-import io.quarkiverse.goblin.GoblinRecorder;
+import io.quarkiverse.goblin.GoblinLayerHooks;
+import io.quarkiverse.goblin.GoblinLayerHooksCreator;
+import io.quarkiverse.goblin.GoblinTargetingConfig;
+import io.quarkiverse.goblin.TargetRules;
 import io.quarkiverse.goblin.database.GoblinAgroalPoolInterceptorCreator;
 import io.quarkiverse.goblin.messaging.GoblinMessagingAssault;
 import io.quarkiverse.goblin.messaging.GoblinMessagingInterceptor;
@@ -28,8 +29,6 @@ import io.quarkus.deployment.Capability;
 import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.annotations.ExecutionTime;
-import io.quarkus.deployment.annotations.Record;
 import io.quarkus.deployment.builditem.ApplicationArchivesBuildItem;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 
@@ -94,12 +93,13 @@ public class GoblinLayerHooksProcessor {
      * @param transformers producer for the annotation transformation
      * @param applicationArchives access to the application's root archive index
      * @param combinedIndex the combined index, used to resolve implemented interfaces
-     * @param config the build-time Goblin configuration
+     * @param targeting the build-time targeting rules
      */
     @BuildStep(onlyIfNot = IsProduction.class)
     void registerMessagingHook(Capabilities capabilities, BuildProducer<AdditionalBeanBuildItem> additionalBeans,
             BuildProducer<AnnotationsTransformerBuildItem> transformers, ApplicationArchivesBuildItem applicationArchives,
-            CombinedIndexBuildItem combinedIndex, GoblinConfig config) {
+            CombinedIndexBuildItem combinedIndex, GoblinTargetingConfig targeting) {
+        TargetRules rules = TargetRules.of(targeting);
         if (!capabilities.isPresent(Capability.MESSAGING)) {
             return;
         }
@@ -115,31 +115,35 @@ public class GoblinLayerHooksProcessor {
                     ClassInfo clazz = method.declaringClass();
                     return (method.hasDeclaredAnnotation(INCOMING) || method.hasDeclaredAnnotation(INCOMINGS))
                             && applicationIndex.getClassByName(clazz.name()) != null
-                            && GoblinBuildStep.isMethodEligible(clazz, method, config, index);
+                            && GoblinBuildStep.isMethodEligible(clazz, method, rules, index);
                 })
                 .transform(context -> context.add(GoblinMessagingAssault.class));
         transformers.produce(new AnnotationsTransformerBuildItem(transformation));
     }
 
     /**
-     * Tells the runtime engine which optional layers are backed by an installed hook, so the Dev UI can offer them and
-     * the per-request resolution never selects a layer that cannot fire.
+     * Exposes which optional layers are backed by an installed hook as the {@link GoblinLayerHooks} synthetic bean, so
+     * the Dev UI can offer them and the per-request resolution never selects a layer that cannot fire.
      *
-     * @param recorder the Goblin recorder
      * @param capabilities the application capabilities
      * @param dataSources the JDBC datasources of the application
+     * @param syntheticBeans producer for the synthetic bean
      */
     @BuildStep(onlyIfNot = IsProduction.class)
-    @Record(ExecutionTime.RUNTIME_INIT)
-    void declareOptionalHooks(GoblinRecorder recorder, Capabilities capabilities,
-            List<JdbcDataSourceBuildItem> dataSources) {
-        Set<String> hooks = new HashSet<>();
+    void declareOptionalHooks(Capabilities capabilities, List<JdbcDataSourceBuildItem> dataSources,
+            BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
+        List<String> hooks = new ArrayList<>();
         if (capabilities.isPresent(Capability.AGROAL) && !dataSources.isEmpty()) {
             hooks.add(ChaosLayer.DATABASE.name());
         }
         if (capabilities.isPresent(Capability.MESSAGING)) {
             hooks.add(ChaosLayer.MESSAGING.name());
         }
-        recorder.registerOptionalHooks(hooks);
+        syntheticBeans.produce(SyntheticBeanBuildItem.configure(GoblinLayerHooks.class)
+                .scope(Singleton.class)
+                .unremovable()
+                .param(GoblinLayerHooksCreator.PARAM_LAYERS, hooks.toArray(String[]::new))
+                .creator(GoblinLayerHooksCreator.class)
+                .done());
     }
 }
