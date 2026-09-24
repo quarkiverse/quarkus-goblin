@@ -5,7 +5,7 @@
 
 include::../partials/attributes.adoc[]
 
-Goblin supports five types of server-side chaos assaults, plus client-side assaults for outgoing REST Client and Vert.x WebClient calls. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
+Goblin supports five types of server-side chaos assaults, plus client-side assaults for outgoing REST Client and Vert.x WebClient calls, and service-layer assaults on business bean method invocations. Each type has its own **boolean toggle** -- you can enable multiple types simultaneously on the same request.
 
 When multiple types are active, they are applied in order:
 
@@ -110,6 +110,18 @@ Each header rule is configured under `quarkus.goblin.assault.headers.<header-nam
 The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Blank header names are rejected; an invalid `action` is rejected too -- the rule is skipped with a `WARN` log and never implicitly becomes `SET`.
 
 NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
+
+== Service-layer assaults (business beans)
+
+[#service-layer-assaults]
+Beyond the HTTP boundaries, Goblin can inject faults **inside** application beans via the SERVICE layer (see xref:how-it-works.adoc#service-layer-assaults[Service-layer assaults] for the mechanics). When the request resolves to the SERVICE layer, a CDI interceptor applies the same two primitives on the guarded bean method:
+
+* **Service latency** -- waits for a random duration within the configured `latency` range before the method body runs (a `@Timeout` above the range fires; a `@Bulkhead` counts the slot).
+* **Service exception** -- throws the configured exception instead of running the method body (a `@Retry` re-invokes the boundary, a `@CircuitBreaker` opens, a `@Fallback` answers -- the fallback method itself is never assaulted).
+
+Service-layer assaults re-use the same latency range and exception class/message configured for the incoming side, and the same `latency`/`exception` toggles. They fire only when the **SERVICE** check-box is armed in the xref:dev-ui.adoc[Dev UI `Chaos layers`] group.
+
+NOTE: Service assaults apply to *eligible bean methods* (see xref:configuration-reference.adoc[targeting rules]): JAX-RS resources, `@Provider`s, interfaces, static/private methods and `@Fallback` fallback targets are never decorated. Each assault is recorded in the history with a `fully.qualified.ClassName.method` identifier. The interceptor is woven at build time and the crafted binding is inactive outside dev/test builds.
 
 == Client-side assaults (outgoing REST Client and Vert.x WebClient calls)
 

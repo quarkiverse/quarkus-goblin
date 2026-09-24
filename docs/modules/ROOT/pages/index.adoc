@@ -7,7 +7,7 @@ include::../partials/attributes.adoc[]
 
 Goblin is a chaos engineering extension for Quarkus that lets you inject latency, exceptions, HTTP failures, and dependency degradation into your running application -- without touching a single line of source code.
 
-It is designed for one specific purpose: **verifying that your resilience mechanisms actually work**. You declared `@Timeout`, `@Fallback`, `@Retry`, health probes, or circuit breakers? Goblin gives you the tool to prove they hold under real failure conditions.
+It is designed for one specific purpose: **verifying that your resilience mechanisms actually work**. You declared `@Timeout`, `@Fallback`, `@Retry`, health probes, or circuit breakers? Goblin gives you the tool to prove they hold under real failure conditions -- at the HTTP boundary, on outgoing HTTP calls, and directly inside your business beans through a service-layer interceptor that runs *with* Fault Tolerance.
 
 TIP: Think of Goblin as https://github.com/codecentric/chaos-monkey-spring-boot[Chaos Monkey] for the Quarkus ecosystem -- but with stronger safety guarantees.
 
@@ -19,10 +19,11 @@ Goblin fills that gap: inject realistic failures at the HTTP layer during develo
 
 Key design decisions:
 
-* **Dev mode only.** Chaos artifacts are physically absent from production builds. Not disabled -- absent. There is no toggle to forget to switch off.
+* **Dev and test only.** Chaos only activates under `quarkus:dev` and `@QuarkusTest`. In a production build the engine stays inactive whatever the configuration, the Dev UI is absent, and no application bean is woven with the service-assault interceptor; only the (inert) runtime classes ship in the extension jar.
 * **Zero code modification.** No `@ChaosLatency` annotations to scatter across your endpoints. Configuration is the only interface.
 * **Non-destructive.** You can target specific packages, exclude annotated methods, and control the percentage of affected requests.
 * **Composable.** Multiple assault types can be active simultaneously on the same request.
+* **Multi-layer.** Chaos resolves per request (or per consumed message) against the armed layers (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_IN`, with `HTTP_OUT` rolled per outgoing call), so a fault injected deepest propagates up through the resilience mechanisms above it.
 * **Persistent state.** Dev UI config changes survive restarts via automatic disk persistence (`.goblin-state.json`).
 
 == Quick start
@@ -65,7 +66,7 @@ You should see a response time well above your normal baseline.
 
 == Explore the documentation
 
-* xref:assault-types.adoc[] -- the six server-side chaos assaults (latency, exception, HTTP status, dependency degradation, response body, response header) plus client-side assaults for outgoing REST Client and Vert.x WebClient calls.
+* xref:assault-types.adoc[] -- the six server-side chaos assaults (latency, exception, HTTP status, dependency degradation, response body, response header), service-layer assaults on business beans, plus client-side assaults for outgoing REST Client and Vert.x WebClient calls.
 * xref:profiles.adoc[] -- bundle common effects into `SLOW_FAILURE`, `INTERMITTENT` or `TIMEOUT`.
 * xref:targeting.adoc[] -- blast radius, package and annotation filters.
 * xref:configuration-reference.adoc[] -- every configuration key and the startup/Dev UI validation rules.
@@ -73,7 +74,7 @@ You should see a response time well above your normal baseline.
 * xref:how-it-works.adoc[] -- JAX-RS filter mechanics, runtime config modification, state persistence, and adding your own assault type.
 * xref:metrics.adoc[] -- optional Micrometer / Prometheus metrics for assault activity (`quarkus-goblin-metrics`).
 * xref:tracing.adoc[] -- optional OpenTelemetry spans for each assault (`quarkus-goblin-opentelemetry`).
-* xref:compatibility.adoc[] -- coexistence with MicroProfile Fault Tolerance and both JAX-RS runtimes.
+* xref:compatibility.adoc[] -- coexistence with MicroProfile Fault Tolerance (service-layer interceptor placement) and both JAX-RS runtimes.
 * xref:troubleshooting.adoc[] -- common issues and their fixes.
 * xref:end-to-end-example.adoc[] -- prove that your `@Timeout` and `@Fallback` actually work.
 * xref:json-rpc-reference.adoc[] -- the JSON-RPC API used by the Dev UI, for scripting and CI validation.

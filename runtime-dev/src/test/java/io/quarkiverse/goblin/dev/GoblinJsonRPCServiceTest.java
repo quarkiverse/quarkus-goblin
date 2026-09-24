@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -108,6 +109,19 @@ class GoblinJsonRPCServiceTest {
         JsonObject status = service.getStatus();
         assertTrue(status.containsKey("clientLatencyEnabled"));
         assertTrue(status.containsKey("clientExceptionEnabled"));
+    }
+
+    /**
+     * The layers backed by an installed hook are exposed so the Dev UI can disable the others; without a datasource or
+     * messaging only the built-in layers are offered.
+     */
+    @Test
+    void availableLayersExposedInConfigAndStatus() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        List<Object> expected = List.of("SERVICE", "HTTP_OUT", "HTTP_IN");
+        assertEquals(expected, service.getConfig().getJsonArray("availableLayers").getList());
+        assertEquals(expected, service.getStatus().getJsonArray("availableLayers").getList());
     }
 
     /**

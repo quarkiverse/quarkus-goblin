@@ -1,7 +1,5 @@
 package io.quarkiverse.goblin.assault;
 
-import java.util.concurrent.ThreadLocalRandom;
-
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.jboss.logging.Logger;
@@ -13,7 +11,8 @@ import io.quarkiverse.goblin.MutableAssaultConfig;
  * Chaos assault that injects a random delay before the request reaches the endpoint.
  * <p>
  * The delay is drawn uniformly between the configured minimum and maximum milliseconds, inclusive, and applied via
- * {@link Thread#sleep(long)}. The applied value is recorded in the assault history.
+ * {@link Thread#sleep(long)}. The applied value is recorded in the assault history. On a Vert.x event-loop thread
+ * (non-blocking endpoint) the delay is skipped instead of blocking the loop, see {@link LatencySupport}.
  */
 @ApplicationScoped
 public class LatencyAssault implements Assault {
@@ -72,15 +71,15 @@ public class LatencyAssault implements Assault {
     public AssaultOutcome apply(AssaultContext context) {
         MutableAssaultConfig config = context.getConfig();
         LOG.debugf("Goblin: injecting latency on %s", context.getMethodName());
-        long min = config.getLatencyMinMs();
-        long max = config.getLatencyMaxMs();
-        long delay = ThreadLocalRandom.current().nextLong(min, max + 1);
+        long delay = LatencySupport.drawDelay(config);
         try {
-            Thread.sleep(delay);
+            if (LatencySupport.sleep(delay, context.getMethodName())) {
+                context.getEngine().recordAssault(context.getMethodName(), recordLabel(), delay);
+            }
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            // interrupt flag restored by LatencySupport: let the request proceed without the remaining delay
+            context.getEngine().recordAssault(context.getMethodName(), recordLabel(), delay);
         }
-        context.getEngine().recordAssault(context.getMethodName(), recordLabel(), delay);
         return AssaultOutcome.CONTINUE;
     }
 }

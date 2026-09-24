@@ -3,6 +3,7 @@ package io.quarkiverse.goblin;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -41,17 +42,33 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     @Inject
     GoblinConfig config;
 
+    /**
+     * The assault chain sorted by {@link Assault#order()}. The set of assault beans is fixed at build time, so it is
+     * sorted once, lazily, instead of on every request.
+     */
+    private volatile List<Assault> sortedAssaults;
+
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
+        // never let a decision left over on this pooled thread (e.g. a response filter that never ran) leak into this
+        // request, even when chaos is currently inactive
+        ChaosRequestContext.clear();
         if (!engine.isActive()) {
             return;
         }
-        boolean gated = engine.shouldAssault();
-        requestContext.setProperty(GATED_PROPERTY, gated);
-        if (!gated) {
+        ChaosLayer assaultLayer = engine.resolveAssaultLayer();
+        requestContext.setProperty(GATED_PROPERTY, assaultLayer == ChaosLayer.HTTP_IN);
+        ChaosRequestContext.setAssaultLayer(assaultLayer);
+        if (LOG.isDebugEnabled()) {
+            MutableAssaultConfig cfg = engine.getMutableConfig();
+            if (cfg != null) {
+                LOG.debugf("Goblin: request resolved to %s layer (level %d) for %s",
+                        assaultLayer, cfg.getTargetLevel(), describeMethod());
+            }
+        }
+        if (assaultLayer != ChaosLayer.HTTP_IN) {
             return;
         }
-
         if (!isTargetEligible()) {
             return;
         }
@@ -60,9 +77,7 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         MutableAssaultConfig cfg = engine.getMutableConfig();
         AssaultContext context = new AssaultContext(requestContext, cfg, engine, methodName);
 
-        for (Assault assault : assaults.stream()
-                .sorted(Comparator.comparingInt(Assault::order))
-                .toList()) {
+        for (Assault assault : sortedAssaults()) {
             if (!assault.isEnabled(cfg)) {
                 continue;
             }
@@ -75,6 +90,7 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
             throws IOException {
+        ChaosRequestContext.clear();
         if (!engine.isActive()) {
             return;
         }
@@ -200,6 +216,15 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
      */
     private static void setEntity(ContainerResponseContext responseContext, byte[] bytes) {
         responseContext.setEntity(bytes, null, responseContext.getMediaType());
+    }
+
+    private List<Assault> sortedAssaults() {
+        List<Assault> current = sortedAssaults;
+        if (current == null) {
+            current = assaults.stream().sorted(Comparator.comparingInt(Assault::order)).toList();
+            sortedAssaults = current;
+        }
+        return current;
     }
 
     private boolean isTargetEligible() {

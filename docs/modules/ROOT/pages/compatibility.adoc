@@ -7,12 +7,46 @@ include::../partials/attributes.adoc[]
 
 == MicroProfile Fault Tolerance
 
-Goblin is designed to coexist with Fault Tolerance annotations. The typical workflow:
+Goblin is designed to work *with* Fault Tolerance, not against it, at every layer:
 
-1. Configure chaos on unprotected endpoints (default behavior).
-2. Exclude fault-tolerant endpoints via `quarkus.goblin.target.exclude-annotations`.
-3. Verify that the unprotected endpoints fail as expected.
-4. Remove the exclusion, chaos-test the fault-tolerant endpoints to confirm `@Timeout` and `@Fallback` trigger correctly.
+* **Service layer (SERVICE)** -- the interceptor runs at `@Priority(4100)`, *inside* the SmallRye Fault Tolerance
+  interceptor (`4010`), so the injected fault is what your `@Retry`, `@CircuitBreaker`, `@Timeout`, `@Bulkhead` and
+  `@Fallback` annotations are supposed to absorb. A latency within the armed range exercises `@Timeout`/`@Bulkhead`; a
+  thrown exception makes `@Retry` re-invoke the boundary or `@Fallback` answer. The first attempt uses the per-request
+  decision; each further attempt draws `level` again, so at `level = 100` every attempt fails (and `@Fallback` answers)
+  while a lower level lets some retries recover. Only the outermost intercepted call is assaulted: a bean calling
+  another bean never multiplies the fault.
+* **HTTP layer (HTTP_IN)** -- endpoint-level assaults apply to the JAX-RS boundary of unprotected endpoints only;
+  fault-tolerant resources are hit before their annotations can react, which is the wrong place to validate them. The
+  classic workflow below remains the recommended approach for HTTP_IN.
+* **Outgoing layer (HTTP_OUT)** -- client-side latency/exceptions simulate a *downstream* service failing, the usual
+  trigger for `@Retry`/`@Fallback` on data-source calls.
+
+The classic HTTP-level workflow:
+
+. Configure chaos on unprotected endpoints (default behavior).
+. Exclude fault-tolerant endpoints via `quarkus.goblin.target.exclude-annotations`.
+. Verify that the unprotected endpoints fail as expected.
+. Remove the exclusion, chaos-test the fault-tolerant endpoints to confirm `@Timeout` and `@Fallback` trigger correctly.
+
+TIP: To exercise the resilience chain end-to-end today, arm the **SERVICE** layer and clear the `HTTP_IN` / `HTTP_OUT`
+check-boxes: the fault is then injected directly on the business bean and propagates through the fault-tolerance
+machinery, while the `HTTP_IN` filter stands down. The service decision is bound to the request thread: `@Asynchronous`
+methods, `ManagedExecutor` tasks and reactive (`Uni` / `@NonBlocking`) endpoints are not covered yet. On a Vert.x
+event-loop thread every latency assault is skipped (a WARN is logged once) rather than blocking the loop.
+
+== Agroal / Hibernate ORM / Panache
+
+The `DATABASE` layer is an Agroal pool interceptor, installed on every JDBC datasource when `quarkus-agroal` is present
+(which Hibernate ORM and Panache use). It is not registered in production builds, and applications without a datasource
+never load the Agroal API. Hibernate Reactive and the reactive SQL clients are not covered.
+
+== Quarkus Messaging
+
+The `MESSAGING` layer is a CDI interceptor woven on `@Incoming` consumer methods when `quarkus-messaging` is present,
+whatever the connector (Kafka, AMQP, in-memory...). It relies on no messaging API at runtime. Only the synchronous part
+of a consumer is covered, and latency requires a blocking consumer. Outgoing messages (`Emitter`, `@Outgoing`) are not
+assaulted.
 
 == RESTEasy Reactive vs classic JAX-RS
 
@@ -29,7 +63,8 @@ The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClie
 == Micrometer / Prometheus
 
 Observability is opt-in through the `quarkus-goblin-metrics` module (see xref:metrics.adoc[]). It depends on
-`quarkus-micrometer-registry-prometheus` and exposes the assault metrics on `/q/metrics`; it co-exists with any other
+`quarkus-micrometer` (API only) and registers the assault metrics against the application's `MeterRegistry`: add the
+registry of your choice (e.g. `quarkus-micrometer-registry-prometheus` for `/q/metrics`). It co-exists with any other
 Micrometer-based monitoring and is inert when absent from the classpath.
 
 == OpenTelemetry

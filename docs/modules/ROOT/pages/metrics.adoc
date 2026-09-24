@@ -22,7 +22,7 @@ The integration is **optional** and lives in the `quarkus-goblin-metrics` module
 </dependency>
 ----
 
-The module brings in `quarkus-micrometer-registry-prometheus`, so `/q/metrics` is available immediately. Any other Micrometer backend (e.g. a custom `MeterRegistry`) picks up the same meters: the metrics are registered against the application's `MeterRegistry` bean.
+The module only brings in the Micrometer API (`quarkus-micrometer`), so it never adds a registry nor an endpoint to your application on its own. Add the registry you use -- for Prometheus, `io.quarkus:quarkus-micrometer-registry-prometheus`, which exposes `/q/metrics`. Any other Micrometer backend (e.g. a custom `MeterRegistry`) picks up the same meters: the metrics are registered against the application's `MeterRegistry` bean.
 
 == Exposed metrics
 
@@ -34,7 +34,7 @@ The module brings in `quarkus-micrometer-registry-prometheus`, so `/q/metrics` i
 
 | `goblin_assaults_total`
 | Counter of every fired assault, incremented once per assault (including client-side ones).
-| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`) and `source` (`server`, `rest-client`, `webclient`)
+| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`) and `source` (`server`, `rest-client`, `webclient`, `database`, `messaging`)
 
 | `goblin_latency_injected_seconds`
 | Timer of the delays actually injected (only incremented when latency was really applied). Exposed as a histogram: `_sum` / `_count` plus `_bucket` distribution series. Custom bucket boundaries can be set with `quarkus.micrometer.export.prometheus.prometheus.bucket-boundaries`.
@@ -47,7 +47,7 @@ The module brings in `quarkus-micrometer-registry-prometheus`, so `/q/metrics` i
 
 NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin.assaults.total`), but the Prometheus export sanitizes them to underscores -- `goblin_assaults_total` in `/q/metrics`. Other backends (JVM, statsd, ...) keep the dotted names, so write PromQL against the underscored form and refer to the dotted names when consuming the tags/names elsewhere.
 
-`source` is derived from the recorded history identifier: server-side assaults (`SampleResource.hello`) are tagged `server`, outgoing REST Client calls tag `rest-client`, and outgoing Vert.x WebClient calls tag `webclient`.
+`source` is derived from the recorded history identifier: server-side assaults (`SampleResource.hello`) are tagged `server`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
 
 TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (type)`; watch a specific source with `sum(rate(goblin_latency_injected_seconds_count[5m])) by (source)`.
 

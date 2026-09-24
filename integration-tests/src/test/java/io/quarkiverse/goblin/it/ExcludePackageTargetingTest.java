@@ -33,6 +33,14 @@ class ExcludePackageTargetingTest extends AbstractPackageTargetingTest {
     }
 
     /**
+     * The SERVICE layer honours the same package rules at build time as the HTTP_IN layer at runtime.
+     */
+    @Test
+    void serviceLayerHonoursThePackageRules() {
+        assertServiceLayerAssaulted(false);
+    }
+
+    /**
      * Test profile excluding the integration test package from chaos.
      */
     public static class ExcludePackageProfile implements QuarkusTestProfile {

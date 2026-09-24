@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,6 +88,56 @@ class GoblinStatePersistenceTest {
 
         MutableAssaultConfig config = new MutableAssaultConfig();
         assertDoesNotThrow(() -> GoblinStatePersistence.save(config));
+    }
+
+    @Test
+    void saveAndLoadPreservesLayers() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN));
+
+        GoblinStatePersistence.save(config);
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), loaded.getLayers());
+        assertFalse(loaded.isLayerEnabled(ChaosLayer.HTTP_OUT), "HTTP_OUT must not be re-armed by the save/load round-trip");
+    }
+
+    @Test
+    void fromJsonRestoresLayers() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"layers\": \"SERVICE,HTTP_IN\"}");
+
+        assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), config.getLayers());
+    }
+
+    @Test
+    void fromJsonDefaultsLayersWhenMissing() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"latencyEnabled\": false}");
+
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+    }
+
+    @Test
+    void fromJsonSkipsUnknownLayerLabels() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"layers\": \"DATABASE,BOGUS,HTTP_IN\"}");
+
+        assertTrue(config.isLayerEnabled(ChaosLayer.DATABASE));
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_IN));
+        assertFalse(config.isLayerEnabled(ChaosLayer.HTTP_OUT));
+    }
+
+    @Test
+    void fromJsonToleratesLayerLabelCaseAndWhitespace() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"layers\": \" service , HTTP_IN \"}");
+
+        assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), config.getLayers());
+    }
+
+    @Test
+    void fromJsonDefaultsLayersWhenOnlyUnknownLabels() {
+        MutableAssaultConfig config = GoblinStatePersistence.fromJson("{\"layers\": \"BOGUS,WHATEVER\"}");
+
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
     }
 
     @Test
@@ -337,5 +389,23 @@ class GoblinStatePersistenceTest {
 
         assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Added").action());
         assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Override").action());
+    }
+
+    @Test
+    void loadFallsBackWhenAValueIsNotNumeric() throws IOException {
+        Files.writeString(stateFile, "{\"latencyMinMs\":\"abc\",\"targetLevel\":\"high\"}");
+
+        assertDoesNotThrow(GoblinStatePersistence::load);
+        assertNull(GoblinStatePersistence.load(), "an unreadable state must fall back to the static configuration");
+    }
+
+    @Test
+    void saveLeavesNoTemporaryFileBehind() throws IOException {
+        GoblinStatePersistence.save(new MutableAssaultConfig());
+
+        assertTrue(Files.exists(stateFile));
+        try (var files = Files.list(tempDir)) {
+            assertEquals(1, files.count(), "only the state file must remain");
+        }
     }
 }

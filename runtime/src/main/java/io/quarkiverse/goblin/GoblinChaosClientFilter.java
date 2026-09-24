@@ -2,7 +2,6 @@ package io.quarkiverse.goblin;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -13,6 +12,7 @@ import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
 
 import io.quarkiverse.goblin.assault.ExceptionAssault;
+import io.quarkiverse.goblin.assault.LatencySupport;
 
 /**
  * JAX-RS client filter that injects latency and exceptions on <em>outgoing</em> calls made with MicroProfile REST
@@ -24,7 +24,8 @@ import io.quarkiverse.goblin.assault.ExceptionAssault;
  * server-side response manipulations and are never applied here.
  * <p>
  * The remote service is never reached nor modified: latency is applied via {@link Thread#sleep(long)} before the
- * request is dispatched, and exceptions are thrown before the request is sent. Every fired assault is recorded in the
+ * request is dispatched (skipped on a Vert.x event-loop thread, which must never block), and exceptions are thrown before the
+ * request is sent. Every fired assault is recorded in the
  * assault history and reported like a server-side assault.
  */
 @Provider
@@ -56,16 +57,18 @@ public class GoblinChaosClientFilter implements ClientRequestFilter {
         String methodName = describeClientCall(requestContext);
 
         if (config.isClientLatencyEnabled()) {
-            long min = config.getLatencyMinMs();
-            long max = config.getLatencyMaxMs();
-            long delay = ThreadLocalRandom.current().nextLong(min, max + 1);
+            long delay = LatencySupport.drawDelay(config);
             LOG.debugf("Goblin: injecting client latency on %s", methodName);
+            boolean applied;
             try {
-                Thread.sleep(delay);
+                applied = LatencySupport.sleep(delay, methodName);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                // interrupt flag restored by LatencySupport: the client call observes it
+                applied = true;
             }
-            engine.recordAssault(methodName, "latency", delay);
+            if (applied) {
+                engine.recordAssault(methodName, "latency", delay);
+            }
         }
 
         if (config.isClientExceptionEnabled()) {
@@ -77,12 +80,42 @@ public class GoblinChaosClientFilter implements ClientRequestFilter {
 
     /**
      * Produces the history identifier for an outbound call, e.g. {@code "REST-Client GET http://localhost:8081/api/hello"}.
+     * The query string, fragment and user info are stripped: they routinely carry tokens or credentials that must not
+     * end up in the history, the traces or the logs.
      *
      * @param requestContext the outbound JAX-RS client request context
      * @return a human-readable identifier combining the HTTP method and the request URI
      */
     private static String describeClientCall(ClientRequestContext requestContext) {
         URI uri = requestContext.getUri();
-        return "REST-Client " + requestContext.getMethod() + " " + (uri != null ? uri : "<unknown>");
+        return "REST-Client " + requestContext.getMethod() + " " + sanitize(uri);
+    }
+
+    /**
+     * Reduces a URI to {@code scheme://host[:port]/path}, dropping user info, query and fragment.
+     *
+     * @param uri the request URI, possibly {@code null}
+     * @return the sanitised URI, or {@code "<unknown>"} when absent
+     */
+    static String sanitize(URI uri) {
+        if (uri == null) {
+            return "<unknown>";
+        }
+        if (uri.getHost() == null) {
+            String path = uri.getRawPath();
+            return path != null ? path : "<unknown>";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (uri.getScheme() != null) {
+            sb.append(uri.getScheme()).append("://");
+        }
+        sb.append(uri.getHost());
+        if (uri.getPort() >= 0) {
+            sb.append(':').append(uri.getPort());
+        }
+        if (uri.getRawPath() != null) {
+            sb.append(uri.getRawPath());
+        }
+        return sb.toString();
     }
 }

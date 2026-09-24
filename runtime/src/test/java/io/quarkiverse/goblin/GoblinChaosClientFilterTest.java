@@ -170,4 +170,13 @@ class GoblinChaosClientFilterTest {
         }
         return null;
     }
+
+    @Test
+    void historyIdentifierDropsQueryUserInfoAndFragment() {
+        assertEquals("https://api.example.com:8443/v1/items",
+                GoblinChaosClientFilter.sanitize(
+                        java.net.URI.create("https://user:secret@api.example.com:8443/v1/items?token=abc#frag")));
+        assertEquals("http://localhost/x", GoblinChaosClientFilter.sanitize(java.net.URI.create("http://localhost/x")));
+        assertEquals("<unknown>", GoblinChaosClientFilter.sanitize(null));
+    }
 }

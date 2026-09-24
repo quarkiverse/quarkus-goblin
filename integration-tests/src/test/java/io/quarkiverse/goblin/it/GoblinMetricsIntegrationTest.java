@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultEngine.AssaultRecord;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -41,9 +40,6 @@ public class GoblinMetricsIntegrationTest {
 
     @Inject
     MeterRegistry registry;
-
-    @Inject
-    PrometheusMeterRegistry prometheusRegistry;
 
     @BeforeEach
     void start() {
@@ -135,7 +131,7 @@ public class GoblinMetricsIntegrationTest {
         assertTrue(scrape.contains("goblin_latency_injected_seconds_count{source=\"server\""),
                 "expected a cumulative count line in the scrape: " + scrape);
         var infBucket = java.util.regex.Pattern
-                .compile("goblin_latency_injected_seconds_bucket\\{source=\"server\",le=\"\\+Inf\",} ([0-9.]+)")
+                .compile("goblin_latency_injected_seconds_bucket\\{source=\"server\",le=\"\\+Inf\",?} ([0-9.]+)")
                 .matcher(scrape);
         assertTrue(infBucket.find() && Double.parseDouble(infBucket.group(1)) >= 1,
                 "expected at least one record in the +Inf bucket of the server latency histogram: " + scrape);
@@ -211,7 +207,9 @@ public class GoblinMetricsIntegrationTest {
     private String awaitScrapeContaining(String fragment) {
         long deadline = System.currentTimeMillis() + 5_000;
         while (System.currentTimeMillis() < deadline) {
-            String scrape = prometheusRegistry.scrape();
+            // read through the /q/metrics endpoint (a Vert.x route, never assaulted) rather than the deprecated
+            // simpleclient-based PrometheusMeterRegistry type
+            String scrape = RestAssured.given().get("/q/metrics").then().statusCode(200).extract().asString();
             if (scrape.contains(fragment)) {
                 return scrape;
             }

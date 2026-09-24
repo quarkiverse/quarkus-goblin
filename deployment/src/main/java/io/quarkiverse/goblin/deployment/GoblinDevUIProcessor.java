@@ -2,6 +2,7 @@ package io.quarkiverse.goblin.deployment;
 
 import io.quarkiverse.goblin.dev.GoblinJsonRPCService;
 import io.quarkus.deployment.IsLocalDevelopment;
+import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.devui.spi.JsonRPCProvidersBuildItem;
@@ -10,7 +11,7 @@ import io.quarkus.devui.spi.page.Page;
 
 public class GoblinDevUIProcessor {
 
-    @BuildStep
+    @BuildStep(onlyIfNot = IsProduction.class)
     JsonRPCProvidersBuildItem registerJsonRPCService() {
         return new JsonRPCProvidersBuildItem(GoblinJsonRPCService.class);
     }

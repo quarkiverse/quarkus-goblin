@@ -17,7 +17,8 @@ import io.smallrye.config.WithDefault;
 public interface GoblinConfig {
 
     /**
-     * Whether the Goblin chaos engineering extension is enabled. Only active in dev mode.
+     * Whether the Goblin chaos engineering extension is enabled. Chaos only ever activates in dev and test mode; in a
+     * production build the engine stays inactive whatever this value.
      */
     @WithDefault("true")
     boolean enabled();
@@ -130,13 +131,13 @@ public interface GoblinConfig {
 
         /**
          * Minimum latency in milliseconds. Must be lower than or equal to max-milliseconds; inverted values are swapped with a
-         * WARN log at startup.
+         * WARN log at startup. Values outside {@code 0}-{@code 300000} are clamped with a WARN log.
          */
         @WithDefault("100")
         long minMilliseconds();
 
         /**
-         * Maximum latency in milliseconds.
+         * Maximum latency in milliseconds. Values outside {@code 0}-{@code 300000} are clamped with a WARN log.
          */
         @WithDefault("5000")
         long maxMilliseconds();
@@ -149,8 +150,8 @@ public interface GoblinConfig {
     interface ExceptionConfig {
 
         /**
-         * The exception class to throw. Must have a String constructor; otherwise the engine falls back to RuntimeException
-         * with an ERROR log at startup.
+         * The exception class to throw. Must extend {@link RuntimeException} and have a public String constructor; otherwise
+         * the engine falls back to RuntimeException with an ERROR log at startup.
          */
         @WithDefault("java.lang.RuntimeException")
         String type();
@@ -176,7 +177,7 @@ public interface GoblinConfig {
         int code();
 
         /**
-         * The HTTP status reason phrase.
+         * The HTTP response body sent with the status code.
          */
         @WithDefault("Service Unavailable (Goblin chaos)")
         String message();
@@ -205,7 +206,8 @@ public interface GoblinConfig {
         Optional<String[]> excludePackages();
 
         /**
-         * Annotations to exclude (methods with these annotations are skipped).
+         * Annotations to exclude: methods carrying one of these annotations, or declared in a class carrying one, are never
+         * assaulted (HTTP_IN and SERVICE layers alike).
          */
         Optional<String[]> excludeAnnotations();
     }

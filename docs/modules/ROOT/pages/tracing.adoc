@@ -40,7 +40,7 @@ Each assault produces exactly one span named `goblin.assault`, carrying the assa
 | The assault type (e.g. `latency`, `exception`, `http-status`, `dependency-degradation`, `response-body-truncate`).
 
 | `goblin.assault.source`
-| `server` for server-side assaults, `rest-client` for outgoing REST Client calls, `webclient` for outgoing Vert.x WebClient calls.
+| `server` for server-side assaults, `rest-client` for outgoing REST Client calls, `webclient` for outgoing Vert.x WebClient calls, `database` for JDBC connection acquisitions, `messaging` for `@Incoming` consumers.
 
 | `goblin.assault.target.method`
 | The recorded method identifier: `SampleResource.hello`, `REST-Client GET http://...`, `WebClient GET http://...`.

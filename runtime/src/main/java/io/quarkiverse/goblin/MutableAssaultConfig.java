@@ -1,8 +1,11 @@
 package io.quarkiverse.goblin;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.jboss.logging.Logger;
@@ -28,7 +31,14 @@ public class MutableAssaultConfig {
 
     private Runnable onChange;
 
+    /**
+     * Upper bound accepted for any latency value: a larger delay would pin a worker thread for longer than any realistic
+     * resilience scenario needs and can starve the worker pool.
+     */
+    public static final long MAX_LATENCY_MS = 300_000;
+
     private final Object profileLock = new Object();
+    private final Object latencyLock = new Object();
     private final Object responseHeadersLock = new Object();
     private volatile AssaultProfile profile = AssaultProfile.NONE;
     private volatile boolean latencyEnabled = true;
@@ -60,6 +70,11 @@ public class MutableAssaultConfig {
     private final Map<String, HeaderRule> responseHeaders = new ConcurrentHashMap<>();
 
     /**
+     * The layers armed for assault, defaulting to the legacy behaviour: inbound REST endpoints plus outbound HTTP calls.
+     */
+    private volatile Set<ChaosLayer> layers = EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT);
+
+    /**
      * Builds a mutable copy of the configuration from the static {@link GoblinConfig}, applying profile defaults when a
      * non-{@code NONE} profile is selected.
      *
@@ -75,8 +90,8 @@ public class MutableAssaultConfig {
         mutable.dependencyDegradationEnabled = (type == AssaultType.DEPENDENCY_DEGRADATION);
         mutable.responseBodyEnabled = (type == AssaultType.RESPONSE_BODY);
         mutable.responseHeaderEnabled = (type == AssaultType.RESPONSE_HEADER);
-        mutable.latencyMinMs = config.assault().latency().minMilliseconds();
-        mutable.latencyMaxMs = config.assault().latency().maxMilliseconds();
+        mutable.writeLatency(config.assault().latency().minMilliseconds(),
+                config.assault().latency().maxMilliseconds());
         mutable.exceptionType = config.assault().exception().type();
         mutable.exceptionMessage = config.assault().exception().message();
         mutable.httpStatusCode = config.assault().httpStatus().code();
@@ -103,14 +118,27 @@ public class MutableAssaultConfig {
 
     public List<String> validateAndFix() {
         List<String> issues = new ArrayList<>();
-        if (latencyMinMs > latencyMaxMs) {
-            String message = "Invalid latency range: min-milliseconds (" + latencyMinMs
-                    + ") is greater than max-milliseconds (" + latencyMaxMs + "). Swapping values.";
-            LOG.warnf("%s", message);
-            issues.add(message);
-            long tmp = latencyMinMs;
-            latencyMinMs = latencyMaxMs;
-            latencyMaxMs = tmp;
+        synchronized (latencyLock) {
+            long min = clampLatency(latencyMinMs);
+            long max = clampLatency(latencyMaxMs);
+            if (min != latencyMinMs || max != latencyMaxMs) {
+                String message = "Invalid latency range: " + latencyMinMs + " - " + latencyMaxMs
+                        + " ms is outside the valid range 0-" + MAX_LATENCY_MS + " ms. Clamping to " + min + " - " + max
+                        + " ms.";
+                LOG.warnf("%s", message);
+                issues.add(message);
+            }
+            if (min > max) {
+                String message = "Invalid latency range: min-milliseconds (" + min
+                        + ") is greater than max-milliseconds (" + max + "). Swapping values.";
+                LOG.warnf("%s", message);
+                issues.add(message);
+                long tmp = min;
+                min = max;
+                max = tmp;
+            }
+            latencyMinMs = min;
+            latencyMaxMs = max;
         }
         if (httpStatusCode < 100 || httpStatusCode > 599) {
             String message = "Invalid HTTP status code: " + httpStatusCode
@@ -153,12 +181,25 @@ public class MutableAssaultConfig {
     }
 
     private static String exceptionClassError(String className) {
-        return EXCEPTION_CLASS_ERRORS.computeIfAbsent(className, MutableAssaultConfig::checkExceptionClass);
+        if (className == null || className.isBlank()) {
+            return "Configured exception class is blank. The engine will fall back to RuntimeException.";
+        }
+        String cached = EXCEPTION_CLASS_ERRORS.get(className);
+        if (cached != null) {
+            return cached;
+        }
+        String error = checkExceptionClass(className);
+        // only failures are cached, and the cache is bounded: a class that becomes loadable later (dev-mode reload) is
+        // re-checked, and arbitrary names typed in the Dev UI can never grow the map without limit
+        if (error != null && EXCEPTION_CLASS_ERRORS.size() < 256) {
+            EXCEPTION_CLASS_ERRORS.put(className, error);
+        }
+        return error;
     }
 
     private static String checkExceptionClass(String className) {
         try {
-            Class<?> clazz = Class.forName(className);
+            Class<?> clazz = loadClass(className);
             clazz.getConstructor(String.class);
             if (!RuntimeException.class.isAssignableFrom(clazz)) {
                 return "Configured exception class '" + className
@@ -171,6 +212,45 @@ public class MutableAssaultConfig {
         } catch (NoSuchMethodException e) {
             return "Configured exception class '" + className
                     + "' has no String constructor. The engine will fall back to RuntimeException.";
+        }
+    }
+
+    /**
+     * Loads a class by name <em>without initialising it</em>, resolving application classes through the thread context
+     * class loader first (in dev mode the extension runtime lives in the base class loader, which cannot see
+     * application classes), then the extension's own class loader.
+     *
+     * @param className the fully qualified class name
+     * @return the loaded, uninitialised class
+     * @throws ClassNotFoundException when no class loader can load the class
+     */
+    public static Class<?> loadClass(String className) throws ClassNotFoundException {
+        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+        if (tccl != null) {
+            try {
+                return Class.forName(className, false, tccl);
+            } catch (ClassNotFoundException e) {
+                // fall back to the extension class loader
+            }
+        }
+        return Class.forName(className, false, MutableAssaultConfig.class.getClassLoader());
+    }
+
+    private static long clampLatency(long value) {
+        return Math.max(0, Math.min(MAX_LATENCY_MS, value));
+    }
+
+    /**
+     * Writes both latency bounds under the latency lock, so {@link #getLatencyRange()} never observes a half-applied
+     * range. No validation: callers run {@link #validateAndFix()} when they need the range normalised.
+     *
+     * @param min the lower bound in milliseconds
+     * @param max the upper bound in milliseconds
+     */
+    private void writeLatency(long min, long max) {
+        synchronized (latencyLock) {
+            latencyMinMs = min;
+            latencyMaxMs = max;
         }
     }
 
@@ -351,6 +431,10 @@ public class MutableAssaultConfig {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Response header name must not be blank");
         }
+        if (!isValidResponseHeaderName(name)) {
+            throw new IllegalArgumentException("Response header name '" + name
+                    + "' is not a valid HTTP token (RFC 9110: letters, digits and !#$%&'*+-.^_`|~ only)");
+        }
         if (action == null) {
             throw new IllegalArgumentException("Response header action must not be null");
         }
@@ -375,6 +459,28 @@ public class MutableAssaultConfig {
      * @param value the header value, may be {@code null}
      * @return {@code true} when the value is safe to emit
      */
+    /**
+     * Checks that a header name is a valid HTTP {@code token} (RFC 9110 section 5.1), so no control character, space or
+     * separator can reach the response.
+     *
+     * @param name the header name
+     * @return {@code true} when the name is a non-empty token
+     */
+    public static boolean isValidResponseHeaderName(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            boolean token = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+                    || "!#$%&'*+-.^_`|~".indexOf(c) >= 0;
+            if (!token) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static boolean isValidResponseHeaderValue(String value) {
         if (value == null) {
             return true;
@@ -494,8 +600,7 @@ public class MutableAssaultConfig {
             case SLOW_FAILURE -> {
                 latencyEnabled = true;
                 exceptionEnabled = true;
-                latencyMinMs = 100;
-                latencyMaxMs = 5000;
+                writeLatency(100, 5000);
                 exceptionType = "java.lang.RuntimeException";
             }
             case INTERMITTENT -> {
@@ -504,8 +609,7 @@ public class MutableAssaultConfig {
             }
             case TIMEOUT -> {
                 latencyEnabled = true;
-                latencyMinMs = 30000;
-                latencyMaxMs = 30000;
+                writeLatency(30000, 30000);
             }
             case NONE -> {
             }
@@ -560,25 +664,60 @@ public class MutableAssaultConfig {
         return latencyMinMs;
     }
 
+    /**
+     * Sets the lower latency bound, clamped to {@code 0}-{@value #MAX_LATENCY_MS} ms. The bounds are deliberately not
+     * reordered here so that updating min then max in two calls never swaps an intermediate state; the latency draw
+     * tolerates a reversed range.
+     *
+     * @param latencyMinMs the lower bound in milliseconds
+     */
     public void setLatencyMinMs(long latencyMinMs) {
-        this.latencyMinMs = latencyMinMs;
+        long clamped = clampLatency(latencyMinMs);
+        if (clamped != latencyMinMs) {
+            LOG.warnf("Invalid latency min-milliseconds %d, clamping to %d", latencyMinMs, clamped);
+        }
+        synchronized (latencyLock) {
+            this.latencyMinMs = clamped;
+        }
         notifyChange();
     }
 
     public List<String> setLatencyRange(long latencyMinMs, long latencyMaxMs) {
-        this.latencyMinMs = latencyMinMs;
-        this.latencyMaxMs = latencyMaxMs;
+        writeLatency(latencyMinMs, latencyMaxMs);
         List<String> issues = validateAndFix();
         notifyChange();
         return issues;
+    }
+
+    /**
+     * Returns a consistent snapshot of the latency range, read under the latency lock.
+     *
+     * @return a two-element array {@code [min, max]} in milliseconds
+     */
+    public long[] getLatencyRange() {
+        synchronized (latencyLock) {
+            return new long[] { latencyMinMs, latencyMaxMs };
+        }
     }
 
     public long getLatencyMaxMs() {
         return latencyMaxMs;
     }
 
+    /**
+     * Sets the upper latency bound, clamped to {@code 0}-{@value #MAX_LATENCY_MS} ms. See
+     * {@link #setLatencyMinMs(long)} for why the bounds are not reordered.
+     *
+     * @param latencyMaxMs the upper bound in milliseconds
+     */
     public void setLatencyMaxMs(long latencyMaxMs) {
-        this.latencyMaxMs = latencyMaxMs;
+        long clamped = clampLatency(latencyMaxMs);
+        if (clamped != latencyMaxMs) {
+            LOG.warnf("Invalid latency max-milliseconds %d, clamping to %d", latencyMaxMs, clamped);
+        }
+        synchronized (latencyLock) {
+            this.latencyMaxMs = clamped;
+        }
         notifyChange();
     }
 
@@ -587,7 +726,12 @@ public class MutableAssaultConfig {
     }
 
     public List<String> setExceptionType(String exceptionType) {
-        this.exceptionType = exceptionType;
+        if (exceptionType == null || exceptionType.isBlank()) {
+            String message = "Exception type must not be blank. Keeping '" + this.exceptionType + "'.";
+            LOG.warnf("%s", message);
+            return List.of(message);
+        }
+        this.exceptionType = exceptionType.trim();
         List<String> issues = validateAndFix();
         notifyChange();
         return issues;
@@ -626,6 +770,54 @@ public class MutableAssaultConfig {
         return targetLevel;
     }
 
+    /**
+     * @return an unmodifiable snapshot of the armed layers
+     */
+    public Set<ChaosLayer> getLayers() {
+        return EnumSet.copyOf(layers);
+    }
+
+    /**
+     * Replaces the armed layer set. A {@code null} or empty collection restores the legacy default of inbound and
+     * outbound HTTP.
+     *
+     * @param layers the layers to arm, or {@code null} to restore the default
+     */
+    public void setLayers(Collection<ChaosLayer> layers) {
+        this.layers = layers == null || layers.isEmpty()
+                ? EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT)
+                : EnumSet.copyOf(layers);
+        notifyChange();
+    }
+
+    /**
+     * Arms or disarms a single layer, leaving the others untouched.
+     *
+     * @param layer the layer to toggle
+     * @param enabled {@code true} to arm the layer, {@code false} to disarm it
+     */
+    public void setLayerEnabled(ChaosLayer layer, boolean enabled) {
+        if (layer == null) {
+            return;
+        }
+        Set<ChaosLayer> updated = EnumSet.copyOf(layers);
+        if (enabled) {
+            updated.add(layer);
+        } else {
+            updated.remove(layer);
+        }
+        this.layers = updated;
+        notifyChange();
+    }
+
+    /**
+     * @param layer the layer to test
+     * @return whether the given layer is armed
+     */
+    public boolean isLayerEnabled(ChaosLayer layer) {
+        return layer != null && layers.contains(layer);
+    }
+
     public List<String> setTargetLevel(int targetLevel) {
         this.targetLevel = targetLevel;
         List<String> issues = validateAndFix();
@@ -660,8 +852,7 @@ public class MutableAssaultConfig {
             synchronized (responseHeadersLock) {
                 responseHeaders.clear();
             }
-            latencyMinMs = 100;
-            latencyMaxMs = 5000;
+            writeLatency(100, 5000);
             exceptionType = "java.lang.RuntimeException";
             exceptionMessage = "Goblin chaos: simulated exception";
             httpStatusCode = 503;
@@ -669,6 +860,7 @@ public class MutableAssaultConfig {
             responseBodyMode = ResponseBodyMode.TRUNCATE;
             responseBodyPercentage = 50;
             targetLevel = 100;
+            layers = EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT);
         }
         List<String> issues = validateAndFix();
         notifyChange();

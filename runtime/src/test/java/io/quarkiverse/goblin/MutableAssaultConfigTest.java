@@ -2,8 +2,10 @@ package io.quarkiverse.goblin;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -332,6 +334,68 @@ class MutableAssaultConfigTest {
         config.setClientLatencyEnabled(true);
 
         assertFalse(config.hasAnyAssaultEnabled(), "client toggles must not count towards server assault check");
+    }
+
+    @Test
+    void layersDefaultToHttpInAndHttpOut() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_IN));
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_OUT));
+        assertFalse(config.isLayerEnabled(ChaosLayer.SERVICE));
+    }
+
+    @Test
+    void setLayersReplacesTheArmedSet() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN));
+        assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), config.getLayers());
+    }
+
+    @Test
+    void setLayersRestoresDefaultWhenNullOrEmpty() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(ChaosLayer.SERVICE));
+
+        config.setLayers(List.of());
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setLayers(null);
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+    }
+
+    @Test
+    void getLayersReturnsAnIsolatedSnapshot() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.getLayers().add(ChaosLayer.SERVICE);
+        assertFalse(config.isLayerEnabled(ChaosLayer.SERVICE),
+                "mutating the returned set must not affect the configuration");
+    }
+
+    @Test
+    void setLayerEnabledTogglesASingleLayer() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        assertTrue(config.isLayerEnabled(ChaosLayer.SERVICE));
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_IN), "other layers must stay armed");
+
+        config.setLayerEnabled(ChaosLayer.HTTP_IN, false);
+        assertFalse(config.isLayerEnabled(ChaosLayer.HTTP_IN));
+
+        config.setLayerEnabled(ChaosLayer.SERVICE, false);
+        assertFalse(config.isLayerEnabled(ChaosLayer.SERVICE));
+        assertFalse(config.isLayerEnabled(null));
+    }
+
+    @Test
+    void resetToDefaultsRestoresHttpInAndHttpOutLayers() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setLayerEnabled(ChaosLayer.HTTP_IN, false);
+        config.setLayerEnabled(ChaosLayer.HTTP_OUT, false);
+        config.resetToDefaults();
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
     }
 
     @Test
@@ -809,5 +873,66 @@ class MutableAssaultConfigTest {
                 };
             }
         };
+    }
+
+    @Test
+    void latencySettersClampNegativeAndExcessiveValues() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyMinMs(-5);
+        config.setLatencyMaxMs(Long.MAX_VALUE);
+        assertEquals(0, config.getLatencyMinMs());
+        assertEquals(MutableAssaultConfig.MAX_LATENCY_MS, config.getLatencyMaxMs());
+    }
+
+    @Test
+    void latencySettersNeverReorderAnIntermediateState() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyRange(100, 150);
+        config.setLatencyMinMs(600);
+        config.setLatencyMaxMs(700);
+        assertEquals(600, config.getLatencyMinMs());
+        assertEquals(700, config.getLatencyMaxMs());
+    }
+
+    @Test
+    void setLatencyRangeClampsAndReportsNegativeValues() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        List<String> issues = config.setLatencyRange(-100, 50);
+        assertEquals(0, config.getLatencyMinMs());
+        assertEquals(50, config.getLatencyMaxMs());
+        assertFalse(issues.isEmpty());
+    }
+
+    @Test
+    void getLatencyRangeReturnsBothBounds() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyRange(12, 34);
+        assertArrayEquals(new long[] { 12, 34 }, config.getLatencyRange());
+    }
+
+    @Test
+    void setExceptionTypeKeepsThePreviousValueWhenBlank() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setExceptionType("java.lang.IllegalStateException");
+
+        List<String> nullIssues = config.setExceptionType(null);
+        List<String> blankIssues = config.setExceptionType("  ");
+
+        assertEquals("java.lang.IllegalStateException", config.getExceptionType());
+        assertFalse(nullIssues.isEmpty());
+        assertFalse(blankIssues.isEmpty());
+        assertDoesNotThrow(() -> config.setTargetLevel(50), "later setters must keep working");
+    }
+
+    @Test
+    void setResponseHeaderRejectsNamesThatAreNotHttpTokens() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Bad\r\nInjected", ResponseHeaderAction.SET, "v"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X Bad", ResponseHeaderAction.SET, "v"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Bad:", ResponseHeaderAction.SET, "v"));
+        assertDoesNotThrow(() -> config.setResponseHeader("X-Goblin_Test.1", ResponseHeaderAction.SET, "v"));
     }
 }

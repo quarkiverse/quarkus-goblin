@@ -25,7 +25,8 @@ import io.quarkus.runtime.StartupEvent;
  * <ul>
  * <li>{@code goblin.assault.type} -- the assault type (e.g. {@code latency}, {@code exception},
  * {@code http-status}, {@code response-body-truncate});</li>
- * <li>{@code goblin.assault.source} -- {@code server}, {@code rest-client} or {@code webclient}, derived from the
+ * <li>{@code goblin.assault.source} -- {@code server}, {@code rest-client}, {@code webclient}, {@code database} or
+ * {@code messaging}, derived from the
  * history identifier;</li>
  * <li>{@code goblin.assault.target.method} -- the recorded method identifier (e.g. {@code SampleResource.hello},
  * {@code REST-Client GET http://...}, {@code WebClient GET http://...});</li>
@@ -64,6 +65,8 @@ public class GoblinTracingObserver implements AssaultObserver {
     static final String SOURCE_SERVER = "server";
     static final String SOURCE_REST_CLIENT = "rest-client";
     static final String SOURCE_WEB_CLIENT = "webclient";
+    static final String SOURCE_DATABASE = "database";
+    static final String SOURCE_MESSAGING = "messaging";
 
     private static final long DEPENDENCY_DEGRADATION_STATUS = 503L;
 
@@ -144,7 +147,7 @@ public class GoblinTracingObserver implements AssaultObserver {
      * Derives the assault source from the history identifier produced by the engine.
      *
      * @param method the history identifier (e.g. {@code "SampleResource.hello"}, {@code "REST-Client GET ..."},
-     *        {@code "WebClient GET ..."})
+     *        {@code "WebClient GET ..."}, {@code "Database <default> connection"}, {@code "Messaging ..."})
      * @return the source tag value
      */
     static String sourceOf(String method) {
@@ -154,6 +157,12 @@ public class GoblinTracingObserver implements AssaultObserver {
             }
             if (method.startsWith("WebClient ")) {
                 return SOURCE_WEB_CLIENT;
+            }
+            if (method.startsWith("Database ")) {
+                return SOURCE_DATABASE;
+            }
+            if (method.startsWith("Messaging ")) {
+                return SOURCE_MESSAGING;
             }
         }
         return SOURCE_SERVER;

@@ -32,6 +32,14 @@ class IncludeMatchingPackageTargetingTest extends AbstractPackageTargetingTest {
     }
 
     /**
+     * The SERVICE layer honours the same package rules at build time as the HTTP_IN layer at runtime.
+     */
+    @Test
+    void serviceLayerHonoursThePackageRules() {
+        assertServiceLayerAssaulted(true);
+    }
+
+    /**
      * Test profile that includes the integration test package.
      */
     public static class IncludeMatchingProfile implements QuarkusTestProfile {

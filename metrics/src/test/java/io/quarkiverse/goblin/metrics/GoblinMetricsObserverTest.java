@@ -83,6 +83,8 @@ class GoblinMetricsObserverTest {
         assertEquals("server", GoblinMetricsObserver.sourceOf(""));
         assertEquals("rest-client", GoblinMetricsObserver.sourceOf("REST-Client GET http://x"));
         assertEquals("webclient", GoblinMetricsObserver.sourceOf("WebClient GET http://x"));
+        assertEquals("database", GoblinMetricsObserver.sourceOf("Database <default> connection"));
+        assertEquals("messaging", GoblinMetricsObserver.sourceOf("Messaging com.acme.OrderConsumer.consume"));
     }
 
     private AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {
