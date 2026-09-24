@@ -1,10 +1,13 @@
 package io.quarkiverse.goblin.it;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.BeforeEach;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.restassured.RestAssured;
 
@@ -43,5 +46,32 @@ abstract class AbstractPackageTargetingTest {
                 .get("/api/hello")
                 .then()
                 .statusCode(expected);
+    }
+
+    /**
+     * Arms the SERVICE layer with the exception assault (HTTP_IN disarmed), performs a {@code GET /api/service/hello} and
+     * asserts whether the service bean -- whose package is subject to the same build-time targeting rules -- was
+     * assaulted.
+     *
+     * @param expectAssaulted whether the {@code SampleService} bean is expected to be eligible
+     */
+    protected void assertServiceLayerAssaulted(boolean expectAssaulted) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setHttpStatusEnabled(false);
+        cfg.setExceptionEnabled(true);
+        cfg.setLayerEnabled(ChaosLayer.HTTP_IN, false);
+        cfg.setLayerEnabled(ChaosLayer.SERVICE, true);
+        cfg.setTargetLevel(100);
+
+        RestAssured.given()
+                .get("/api/service/hello")
+                .then()
+                .statusCode(expectAssaulted ? 500 : 200);
+
+        long serviceAssaults = engine.getHistory().stream()
+                .filter(record -> "io.quarkiverse.goblin.it.SampleService.hello".equals(record.method()))
+                .count();
+        assertEquals(expectAssaulted ? 1 : 0, serviceAssaults,
+                "unexpected service-layer assaults, history: " + engine.getHistory());
     }
 }

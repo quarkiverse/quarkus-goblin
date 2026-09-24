@@ -12,7 +12,10 @@ Goblin is designed to work *with* Fault Tolerance, not against it, at every laye
 * **Service layer (SERVICE)** -- the interceptor runs at `@Priority(4100)`, *inside* the SmallRye Fault Tolerance
   interceptor (`4010`), so the injected fault is what your `@Retry`, `@CircuitBreaker`, `@Timeout`, `@Bulkhead` and
   `@Fallback` annotations are supposed to absorb. A latency within the armed range exercises `@Timeout`/`@Bulkhead`; a
-  thrown exception makes `@Retry` re-invoke the boundary (each attempt is a fresh assault roll) or `@Fallback` answer.
+  thrown exception makes `@Retry` re-invoke the boundary or `@Fallback` answer. The first attempt uses the per-request
+  decision; each further attempt draws `level` again, so at `level = 100` every attempt fails (and `@Fallback` answers)
+  while a lower level lets some retries recover. Only the outermost intercepted call is assaulted: a bean calling
+  another bean never multiplies the fault.
 * **HTTP layer (HTTP_IN)** -- endpoint-level assaults apply to the JAX-RS boundary of unprotected endpoints only;
   fault-tolerant resources are hit before their annotations can react, which is the wrong place to validate them. The
   classic workflow below remains the recommended approach for HTTP_IN.
@@ -28,8 +31,9 @@ The classic HTTP-level workflow:
 
 TIP: To exercise the resilience chain end-to-end today, arm the **SERVICE** layer and clear the `HTTP_IN` / `HTTP_OUT`
 check-boxes: the fault is then injected directly on the business bean and propagates through the fault-tolerance
-machinery, while the HTTP layers stand down. `@Asynchronous` methods are not covered yet (the assault runs inside the
-guarded synchronous scope).
+machinery, while the `HTTP_IN` filter stands down. The service decision is bound to the request thread: `@Asynchronous`
+methods, `ManagedExecutor` tasks and reactive (`Uni` / `@NonBlocking`) endpoints are not covered yet. On a Vert.x
+event-loop thread every latency assault is skipped (a WARN is logged once) rather than blocking the loop.
 
 == RESTEasy Reactive vs classic JAX-RS
 
@@ -46,7 +50,8 @@ The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClie
 == Micrometer / Prometheus
 
 Observability is opt-in through the `quarkus-goblin-metrics` module (see xref:metrics.adoc[]). It depends on
-`quarkus-micrometer-registry-prometheus` and exposes the assault metrics on `/q/metrics`; it co-exists with any other
+`quarkus-micrometer` (API only) and registers the assault metrics against the application's `MeterRegistry`: add the
+registry of your choice (e.g. `quarkus-micrometer-registry-prometheus` for `/q/metrics`). It co-exists with any other
 Micrometer-based monitoring and is inert when absent from the classpath.
 
 == OpenTelemetry

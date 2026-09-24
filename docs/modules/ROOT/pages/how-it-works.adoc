@@ -29,9 +29,9 @@ For every outbound call -- MicroProfile REST Client or Vert.x WebClient -- the s
 * Client-side exceptions abort the outbound call **before it is dispatched** -- the downstream service never sees the request.
 * WebClient latency is applied without blocking the event loop: a timer is scheduled on the calling Vert.x context, with a blocking fallback only when no Vert.x context is active.
 
+[#chaos-layers]
 == Chaos layers
 
-[#chaos-layers]
 Chaos is not tied to a single injection point: you pick which **layers** to arm, and every inbound request resolves to the 
 _deepest armed layer whose probability roll passes_, so a fault rooted at the bottom propagates naturally through the 
 layers above it. The layers, from deepest to shallowest:
@@ -51,7 +51,9 @@ distribution is biased toward the bottom.
 
 * `HTTP_IN` armed -- the `ContainerRequestFilter` applies the server-side assaults exactly as before.
 * `HTTP_OUT` armed -- the client filter / `WebClient` interceptor apply latency/exception on outgoing calls.
-* `SERVICE` armed -- the business bean interceptor fires (see below); the HTTP filters stand down.
+  `HTTP_OUT` is *not* part of the per-request resolution: every outgoing call rolls its own gate, independently of
+  the layer the inbound request resolved to, so an outbound fault can add up with a `SERVICE` or `HTTP_IN` one.
+* `SERVICE` armed -- the business bean interceptor fires (see below); the `HTTP_IN` filter stands down.
 * `DATABASE` / `MESSAGING` armed -- reserved; the Dev UI shows them as *soon* until the hooks land (Phase 2 / Phase 3).
 
 == Service-layer assaults
@@ -67,10 +69,16 @@ request resolved to the SERVICE layer.
 * **Eligibility.** A bean method is decorated only when the class belongs to the application root archive and the usual
   `goblin.target` rules pass (`include-packages` / `exclude-packages` / `exclude-annotations`). JAX-RS resources 
   (`@Path`), `@Provider`s, interfaces, static and private methods are never decorated -- HTTP endpoints belong to the 
-  HTTP_IN layer and sit *above* the guarded beans. Methods named as the `fallbackMethod` of a `@Fallback` in the same 
-  class are skipped too, so a fallback can answer the original failure instead of being assaulted itself.
-* **Synchronous scope (for now).** Assaults run inside the guarded invocation, so `@Asynchronous` / non-blocking methods
-  are not covered by Phase 1.
+  HTTP_IN layer and sit *above* the guarded beans (a `@Path` declared on an implemented interface counts too). Methods
+  named as the `fallbackMethod` of a `@Fallback` (on a method or on the class) in the same class, and `FallbackHandler`
+  implementations, are skipped too, so a fallback can answer the original failure instead of being assaulted itself.
+  The service-assault binding is only woven in dev and test builds, never in a production build.
+* **One fault per call chain.** Only the outermost intercepted call of a request is assaulted: when a decorated bean
+  calls another decorated bean, the inner call runs untouched. Each further outermost call of the same request (a
+  `@Retry` attempt, or a second bean called by the resource) draws `level` again.
+* **Synchronous scope (for now).** The decision is bound to the request thread, so `@Asynchronous` / non-blocking methods
+  are not covered by Phase 1. On a Vert.x event-loop thread latency assaults are skipped (WARN logged once) instead of
+  blocking the loop.
 * **History.** Each service assault is recorded like any other, with a `ClassName.method` descriptor -- including the
   actually applied latency duration for the latency assault. Since the rule falls *inside* FT, a `@Retry`-guarded method
   produces one record per attempt.
@@ -113,9 +121,11 @@ xref:metrics.adoc[] and xref:tracing.adoc[]); post-assault assertions will plug 
 
 == Adding your own assault type
 
-Goblin ships with four built-in assault types and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface, annotate the class `@ApplicationScoped`, and it is discovered automatically at build time -- no other wiring required:
+Goblin ships with six built-in assault types (latency, exception, HTTP status, dependency degradation, response body and response headers) and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface, annotate the class `@ApplicationScoped`, and it is discovered automatically at build time -- no other wiring required:
 
-* `type()` -- the `AssaultType` this assault represents.
+* `type()` -- the `AssaultType` this assault represents. `AssaultType` is a closed enum: a custom assault reuses one of
+  the existing constants. Note that the per-request gate only opens when at least one of the built-in toggles is
+  enabled, so a custom assault must be paired with (or guarded by) one of them.
 * `isEnabled(config)` -- whether the assault should run for the current mutable configuration.
 * `recordLabel()` -- the label used in the assault history and the Markdown report.
 * `order()` -- the execution position in the chain. Latency (order `10`) runs first; assaults that abort the request run afterwards.

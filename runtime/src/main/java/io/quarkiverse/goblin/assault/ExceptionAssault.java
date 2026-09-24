@@ -90,9 +90,13 @@ public class ExceptionAssault implements Assault {
         String type = config.getExceptionType();
         String message = config.getExceptionMessage();
         try {
-            Class<?> clazz = Class.forName(type);
-            var ctor = clazz.getConstructor(String.class);
-            return (RuntimeException) ctor.newInstance(message);
+            Class<?> clazz = MutableAssaultConfig.loadClass(type);
+            // check the type before instantiating: an arbitrary class must never be initialised or constructed
+            if (!RuntimeException.class.isAssignableFrom(clazz)) {
+                throw new ClassCastException(type);
+            }
+            var ctor = clazz.asSubclass(RuntimeException.class).getConstructor(String.class);
+            return ctor.newInstance(message);
         } catch (Exception e) {
             LOG.warnf("Goblin: failed to instantiate exception type '%s' (%s), falling back to RuntimeException", type,
                     failureReason(type, e));

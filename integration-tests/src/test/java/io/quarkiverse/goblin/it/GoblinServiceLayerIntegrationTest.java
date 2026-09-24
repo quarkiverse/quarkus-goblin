@@ -31,6 +31,9 @@ public class GoblinServiceLayerIntegrationTest {
     private static final String SAMPLE_SERVICE_FALLBACKABLE = "io.quarkiverse.goblin.it.SampleService.fallbackable";
     private static final String SAMPLE_SERVICE_RETRY_FALLBACK = "io.quarkiverse.goblin.it.SampleService.retryThenFallback";
     private static final String SAMPLE_SERVICE_TIMED = "io.quarkiverse.goblin.it.SampleService.timed";
+    private static final String SAMPLE_SERVICE_GUARDED = "io.quarkiverse.goblin.it.SampleService.guarded";
+    private static final String SAMPLE_SERVICE_NESTED = "io.quarkiverse.goblin.it.SampleService.nested";
+    private static final String SAMPLE_DELEGATE = "io.quarkiverse.goblin.it.SampleDelegate";
 
     @Inject
     AssaultEngine engine;
@@ -56,6 +59,8 @@ public class GoblinServiceLayerIntegrationTest {
     @Test
     public void serviceLayerInertWhenNotArmed() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
+        // an assault is live (latency) but only the default HTTP_IN / HTTP_OUT layers are armed
+        cfg.setLatencyEnabled(true);
         cfg.setTargetLevel(100);
 
         RestAssured.given()
@@ -64,8 +69,12 @@ public class GoblinServiceLayerIntegrationTest {
                 .statusCode(200)
                 .body(org.hamcrest.Matchers.equalTo("hello from Goblin SampleService"));
 
-        assertTrue(engine.getHistory().isEmpty(),
-                "no assault must fire when the SERVICE layer is not armed, even with HTTP_IN armed");
+        List<AssaultEngine.AssaultRecord> records = engine.getHistory();
+        assertTrue(records.stream().noneMatch(record -> SAMPLE_SERVICE_HELLO.equals(record.method())),
+                "no service-layer assault must fire when the SERVICE layer is not armed, got: " + records);
+        assertTrue(records.stream().anyMatch(record -> "SampleResource.serviceHello".equals(record.method())
+                && "latency".equals(record.type())),
+                "the armed HTTP_IN layer must have assaulted the resource instead, got: " + records);
     }
 
     @Test
@@ -91,11 +100,12 @@ public class GoblinServiceLayerIntegrationTest {
                 records.stream()
                         .anyMatch(record -> SAMPLE_SERVICE_HELLO.equals(record.method()) && "latency".equals(record.type())),
                 "a latency assault must be recorded on the service bean, got: " + records);
-        records.stream()
+        AssaultEngine.AssaultRecord latencyRecord = records.stream()
                 .filter(record -> SAMPLE_SERVICE_HELLO.equals(record.method()) && "latency".equals(record.type()))
                 .findFirst()
-                .ifPresent(record -> assertTrue(record.latencyMs() >= 100 && record.latencyMs() <= 150,
-                        "the recorded service latency must match the armed 100-150 ms range, got: " + record.latencyMs()));
+                .orElseThrow();
+        assertTrue(latencyRecord.latencyMs() >= 100 && latencyRecord.latencyMs() <= 150,
+                "the recorded service latency must match the armed 100-150 ms range, got: " + latencyRecord.latencyMs());
         assertTrue(records.stream().noneMatch(record -> record.method().contains("SampleResource")),
                 "the JAX-RS resource must never be service-assaulted, got: " + records);
     }
@@ -188,10 +198,16 @@ public class GoblinServiceLayerIntegrationTest {
         cfg.setLatencyMaxMs(700);
         cfg.setTargetLevel(100);
 
+        long start = System.nanoTime();
         RestAssured.given()
                 .get("/api/service/timeout")
                 .then()
                 .statusCode(org.hamcrest.Matchers.greaterThanOrEqualTo(500));
+        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+        assertTrue(elapsedMs < 600,
+                "@Timeout(400ms) must abort the call before the 600-700 ms injected latency elapses, took " + elapsedMs
+                        + " ms");
 
         List<AssaultEngine.AssaultRecord> records = engine.getHistory();
         assertTrue(
@@ -199,5 +215,47 @@ public class GoblinServiceLayerIntegrationTest {
                         .anyMatch(record -> SAMPLE_SERVICE_TIMED.equals(record.method()) && "latency".equals(record.type())),
                 "the injected latency (600-700 ms) must have been recorded before the @Timeout(400ms) aborted the call, got: "
                         + records);
+    }
+
+    @Test
+    public void nestedBeanCallsAreAssaultedOnlyOnce() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLayerEnabled(ChaosLayer.SERVICE, true);
+        cfg.setLatencyEnabled(true);
+        cfg.setTargetLevel(100);
+
+        RestAssured.given()
+                .get("/api/service/nested")
+                .then()
+                .statusCode(200)
+                .body(org.hamcrest.Matchers.equalTo("nested: inner reply"));
+
+        List<AssaultEngine.AssaultRecord> records = engine.getHistory();
+        assertEquals(1, records.stream().filter(record -> SAMPLE_SERVICE_NESTED.equals(record.method())).count(),
+                "the outermost bean call must be assaulted exactly once, got: " + records);
+        assertTrue(records.stream().noneMatch(record -> record.method().startsWith(SAMPLE_DELEGATE)),
+                "the nested bean call must not be assaulted a second time, got: " + records);
+    }
+
+    @Test
+    public void circuitBreakerOpensAfterServiceLayerFaults() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLayerEnabled(ChaosLayer.SERVICE, true);
+        cfg.setExceptionEnabled(true);
+        cfg.setTargetLevel(100);
+
+        for (int i = 0; i < 3; i++) {
+            RestAssured.given()
+                    .get("/api/service/guarded")
+                    .then()
+                    .statusCode(500);
+        }
+
+        long assaults = engine.getHistory().stream()
+                .filter(record -> SAMPLE_SERVICE_GUARDED.equals(record.method()) && "exception".equals(record.type()))
+                .count();
+        assertEquals(2, assaults,
+                "@CircuitBreaker(requestVolumeThreshold=2) must open after two Goblin faults: the third call is rejected "
+                        + "by the breaker before reaching the bean, got " + assaults);
     }
 }

@@ -80,4 +80,11 @@ class ResponseBodyTransformerTest {
         assertArrayEquals(body, ResponseBodyTransformer.transform(body, ResponseBodyMode.TRUNCATE, 50));
         assertArrayEquals(body, ResponseBodyTransformer.transform(body, ResponseBodyMode.INFLATE, 200));
     }
+
+    @Test
+    void inflateAddsAtMostTheConfiguredPadding() {
+        byte[] body = new byte[4 * 1024 * 1024];
+        byte[] inflated = ResponseBodyTransformer.transform(body, ResponseBodyMode.INFLATE, 1000);
+        assertEquals(body.length + ResponseBodyTransformer.MAX_INFLATION_BYTES, inflated.length);
+    }
 }

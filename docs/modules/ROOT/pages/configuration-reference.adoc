@@ -39,7 +39,7 @@ All configuration keys are under the `quarkus.goblin` prefix.
 | `quarkus.goblin.assault.exception.type`
 | `String`
 | `java.lang.RuntimeException`
-| Fully qualified exception class name. Must have a `String` constructor; otherwise the engine falls back to RuntimeException with an `ERROR` log
+| Fully qualified exception class name. Must extend `RuntimeException` and have a public `String` constructor; otherwise the engine falls back to RuntimeException with an `ERROR` log
 
 | `quarkus.goblin.assault.exception.message`
 | `String`
@@ -104,9 +104,9 @@ Goblin validates assault parameters at startup and whenever you save a change in
 [cols="3,4,3"]
 |===
 | Parameter | Rule | What happens
-| `assault.latency.min-milliseconds` / `assault.latency.max-milliseconds` | `min` must be lower than or equal to `max` | Values are swapped and a `WARN` is logged
+| `assault.latency.min-milliseconds` / `assault.latency.max-milliseconds` | `min` must be lower than or equal to `max`, both within `0`-`300000` | Out-of-range values are clamped, inverted values are swapped, and a `WARN` is logged
 | `assault.http-status.code` | Must be in the `100`-`599` range | Defaults to `503` and an `ERROR` is logged
-| `assault.exception.type` | Class must exist and expose a `String` constructor | Falls back to `RuntimeException` and an `ERROR` is logged
+| `assault.exception.type` | Class must exist, extend `RuntimeException` and expose a `String` constructor | Falls back to `RuntimeException` and an `ERROR` is logged
 | `assault.body.percentage` | Must be in `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE` | Clamped to the valid range and a `WARN` is logged
 | `target.level` | Must be in the `0`-`100` range | Clamped and a `WARN` is logged
 |===

@@ -123,4 +123,25 @@ class AssaultTest {
         assertInstanceOf(IllegalStateException.class, thrown);
         assertEquals("shared boom", thrown.getMessage());
     }
+
+    // set by NotAnException's static initializer; kept outside that class so reading it never initialises it
+    static volatile boolean notAnExceptionInitialised;
+
+    /** Not a RuntimeException: must never be initialised nor constructed by the exception assault. */
+    public static class NotAnException {
+        static {
+            notAnExceptionInitialised = true;
+        }
+
+        public NotAnException(String message) {
+        }
+    }
+
+    @Test
+    void exceptionTypeThatIsNotARuntimeExceptionIsNeverInitialised() {
+        config.setExceptionType(NotAnException.class.getName());
+        RuntimeException thrown = ExceptionAssault.createException(config);
+        assertEquals(RuntimeException.class, thrown.getClass());
+        assertFalse(notAnExceptionInitialised, "the class static initializer must not run");
+    }
 }

@@ -1,8 +1,10 @@
 package io.quarkiverse.goblin;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -40,11 +42,29 @@ public final class GoblinStatePersistence {
         stateFile = path != null ? path : STATE_FILE;
     }
 
-    public static void save(MutableAssaultConfig config) {
+    /**
+     * Persists the configuration. The JSON is written to a temporary sibling file then moved over the state file, so
+     * a crash or a concurrent save never leaves a truncated file behind; concurrent saves are serialised.
+     *
+     * @param config the configuration to persist
+     */
+    public static synchronized void save(MutableAssaultConfig config) {
+        Path target = Path.of(stateFile).toAbsolutePath();
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
-            Files.writeString(Path.of(stateFile), toJson(config));
+            Files.writeString(tmp, toJson(config));
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             LOG.warnf("Failed to persist %s: %s", stateFile, e.getMessage());
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+                // best effort: a leftover temporary file is overwritten by the next save
+            }
         }
     }
 
@@ -55,7 +75,9 @@ public final class GoblinStatePersistence {
         }
         try {
             return fromJson(Files.readString(path));
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // a corrupted or hand-edited file (e.g. a non-numeric latency) must never prevent the application from
+            // starting: fall back to the static configuration
             LOG.warnf("Failed to load %s, falling back to application.properties: %s",
                     stateFile, e.getMessage());
             return null;

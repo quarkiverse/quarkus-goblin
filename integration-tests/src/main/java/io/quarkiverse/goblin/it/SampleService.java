@@ -3,7 +3,9 @@ package io.quarkiverse.goblin.it;
 import java.time.temporal.ChronoUnit;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
+import org.eclipse.microprofile.faulttolerance.CircuitBreaker;
 import org.eclipse.microprofile.faulttolerance.Fallback;
 import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.faulttolerance.Timeout;
@@ -16,12 +18,16 @@ import org.jboss.logging.Logger;
  * assault, then the MicroProfile Fault Tolerance behaviour and the outcome.
  * <p>
  * Methods without annotations have no resilience wrapper, so a Goblin-injected exception surfaces straight to the caller.
- * The others exercise {@code @Retry}, {@code @Fallback}, both combined, and {@code @Timeout}.
+ * The others exercise {@code @Retry}, {@code @Fallback}, both combined, {@code @Timeout} and {@code @CircuitBreaker}, and a
+ * nested bean-to-bean call.
  */
 @ApplicationScoped
 public class SampleService {
 
     private static final Logger LOG = Logger.getLogger(SampleService.class);
+
+    @Inject
+    SampleDelegate delegate;
 
     public String hello() {
         LOG.debugf("SampleService.hello() executing - no fault tolerance: an injected exception surfaces directly");
@@ -57,6 +63,17 @@ public class SampleService {
     public String timed() {
         LOG.debugf("SampleService.timed() executing - @Timeout(400ms): an injected delay above the threshold is aborted");
         return "timed reply";
+    }
+
+    @CircuitBreaker(requestVolumeThreshold = 2, failureRatio = 1.0, delay = 60, delayUnit = ChronoUnit.SECONDS)
+    public String guarded() {
+        LOG.debugf("SampleService.guarded() executing - @CircuitBreaker(2 calls, 100%%): opens after two Goblin faults");
+        return "guarded reply";
+    }
+
+    public String nested() {
+        LOG.debugf("SampleService.nested() executing - calls SampleDelegate.inner() through its CDI proxy");
+        return "nested: " + delegate.inner();
     }
 
     String serviceFallback(Throwable cause) {

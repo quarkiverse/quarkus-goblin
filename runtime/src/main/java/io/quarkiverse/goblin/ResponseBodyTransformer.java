@@ -8,9 +8,15 @@ import java.nio.charset.StandardCharsets;
  * The body is treated as bytes; {@link #transform(byte[], ResponseBodyMode, int)} returns a new array whose size is the
  * requested percentage of the original, rounded down. {@link ResponseBodyMode#TRUNCATE} keeps only the first
  * {@code percentage}% bytes, {@link ResponseBodyMode#INFLATE} pads the body with a fixed marker up to
- * {@code percentage}% of the original size.
+ * {@code percentage}% of the original size, adding at most {@value #MAX_INFLATION_BYTES} bytes.
  */
 public final class ResponseBodyTransformer {
+
+    /**
+     * Maximum number of padding bytes an inflation may add, so a large body inflated by up to 1000 % can never allocate
+     * hundreds of megabytes or overflow the {@code int} array size.
+     */
+    static final int MAX_INFLATION_BYTES = 1024 * 1024;
 
     private static final byte[] PADDING = "[goblin-response-inflated]".getBytes(StandardCharsets.UTF_8);
 
@@ -47,6 +53,10 @@ public final class ResponseBodyTransformer {
             return truncated;
         }
         if (targetLength <= body.length) {
+            return body;
+        }
+        targetLength = Math.min(targetLength, (long) body.length + MAX_INFLATION_BYTES);
+        if (targetLength > Integer.MAX_VALUE - 8) {
             return body;
         }
         byte[] inflated = new byte[(int) targetLength];

@@ -390,4 +390,22 @@ class GoblinStatePersistenceTest {
         assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Added").action());
         assertEquals(ResponseHeaderAction.SET, loaded.getResponseHeaders().get("X-Override").action());
     }
+
+    @Test
+    void loadFallsBackWhenAValueIsNotNumeric() throws IOException {
+        Files.writeString(stateFile, "{\"latencyMinMs\":\"abc\",\"targetLevel\":\"high\"}");
+
+        assertDoesNotThrow(GoblinStatePersistence::load);
+        assertNull(GoblinStatePersistence.load(), "an unreadable state must fall back to the static configuration");
+    }
+
+    @Test
+    void saveLeavesNoTemporaryFileBehind() throws IOException {
+        GoblinStatePersistence.save(new MutableAssaultConfig());
+
+        assertTrue(Files.exists(stateFile));
+        try (var files = Files.list(tempDir)) {
+            assertEquals(1, files.count(), "only the state file must remain");
+        }
+    }
 }

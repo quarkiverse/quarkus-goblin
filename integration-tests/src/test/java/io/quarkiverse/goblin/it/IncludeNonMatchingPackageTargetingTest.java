@@ -33,6 +33,14 @@ class IncludeNonMatchingPackageTargetingTest extends AbstractPackageTargetingTes
     }
 
     /**
+     * The SERVICE layer honours the same package rules at build time as the HTTP_IN layer at runtime.
+     */
+    @Test
+    void serviceLayerHonoursThePackageRules() {
+        assertServiceLayerAssaulted(false);
+    }
+
+    /**
      * Test profile that only includes a package the sample endpoints do not belong to.
      */
     public static class IncludeNonMatchingProfile implements QuarkusTestProfile {

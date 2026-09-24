@@ -22,7 +22,7 @@ The integration is **optional** and lives in the `quarkus-goblin-metrics` module
 </dependency>
 ----
 
-The module brings in `quarkus-micrometer-registry-prometheus`, so `/q/metrics` is available immediately. Any other Micrometer backend (e.g. a custom `MeterRegistry`) picks up the same meters: the metrics are registered against the application's `MeterRegistry` bean.
+The module only brings in the Micrometer API (`quarkus-micrometer`), so it never adds a registry nor an endpoint to your application on its own. Add the registry you use -- for Prometheus, `io.quarkus:quarkus-micrometer-registry-prometheus`, which exposes `/q/metrics`. Any other Micrometer backend (e.g. a custom `MeterRegistry`) picks up the same meters: the metrics are registered against the application's `MeterRegistry` bean.
 
 == Exposed metrics
 

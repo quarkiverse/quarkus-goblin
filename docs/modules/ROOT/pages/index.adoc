@@ -19,11 +19,11 @@ Goblin fills that gap: inject realistic failures at the HTTP layer during develo
 
 Key design decisions:
 
-* **Dev mode only.** Chaos artifacts are physically absent from production builds. Not disabled -- absent. There is no toggle to forget to switch off.
+* **Dev and test only.** Chaos only activates under `quarkus:dev` and `@QuarkusTest`. In a production build the engine stays inactive whatever the configuration, the Dev UI is absent, and no application bean is woven with the service-assault interceptor; only the (inert) runtime classes ship in the extension jar.
 * **Zero code modification.** No `@ChaosLatency` annotations to scatter across your endpoints. Configuration is the only interface.
 * **Non-destructive.** You can target specific packages, exclude annotated methods, and control the percentage of affected requests.
 * **Composable.** Multiple assault types can be active simultaneously on the same request.
-* **Multi-layer.** Chaos resolves per request against the armed layers (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_OUT` → `HTTP_IN`), so a fault injected deepest propagates up through the resilience mechanisms at every boundary.
+* **Multi-layer.** Chaos resolves per request against the armed layers (`SERVICE` → `HTTP_IN`, with `HTTP_OUT` rolled per outgoing call), so a fault injected deepest propagates up through the resilience mechanisms above it. `DATABASE` and `MESSAGING` are reserved and not implemented yet.
 * **Persistent state.** Dev UI config changes survive restarts via automatic disk persistence (`.goblin-state.json`).
 
 == Quick start

@@ -1,7 +1,5 @@
 package io.quarkiverse.goblin.service;
 
-import java.util.concurrent.ThreadLocalRandom;
-
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.interceptor.AroundInvoke;
@@ -14,6 +12,7 @@ import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.assault.ExceptionAssault;
+import io.quarkiverse.goblin.assault.LatencySupport;
 
 /**
  * CDI interceptor injecting latency and exception assaults on application beans at the service layer, bypassing the HTTP
@@ -22,6 +21,11 @@ import io.quarkiverse.goblin.assault.ExceptionAssault;
  * Only fires when the {@link io.quarkiverse.goblin.ChaosLayer#SERVICE} layer was selected as the armed layer for the
  * current request by {@link AssaultEngine#resolveAssaultLayer()}; the decision itself is made once per request by the
  * inbound filter and carried through {@link ChaosRequestContext}, so this interceptor stays cheap on every other call.
+ * <p>
+ * Within an armed request, only the <em>outermost</em> intercepted call is assaulted: a bean calling another intercepted
+ * bean never multiplies the fault. The first outermost call uses the per-request decision; every further outermost call
+ * of the same request -- typically a {@code @Retry} attempt re-entering the method -- draws the target level again, so
+ * at level 100 every attempt fails and at a lower level some attempts recover.
  * <p>
  * <strong>Placement contract:</strong> Jakarta Interceptors invoke lower priority values before higher ones, so an
  * interceptor with a higher {@code @Priority} sits closer to the bean. Quarkus SmallRye Fault Tolerance registers its
@@ -45,7 +49,8 @@ public class GoblinServiceInterceptor {
 
     /**
      * Applies the service-layer latency, then service-layer exception assaults when the service layer was selected for
-     * this request and the relevant toggle is armed. Passes through immediately otherwise.
+     * this request, the call is the outermost intercepted one and the relevant toggle is armed. Passes through
+     * immediately otherwise.
      *
      * @param context the intercepted invocation
      * @return the invocation result, possibly after a latency assault
@@ -54,24 +59,37 @@ public class GoblinServiceInterceptor {
      */
     @AroundInvoke
     Object aroundInvoke(InvocationContext context) throws Exception {
-        if (!ChaosRequestContext.isServiceArmed() || engine.getMutableConfig() == null) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (!ChaosRequestContext.isServiceArmed() || cfg == null || !engine.isActive()) {
             return context.proceed();
         }
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        boolean outermost = ChaosRequestContext.enterService();
+        try {
+            if (outermost && (!ChaosRequestContext.markServiceFired() || engine.drawLevelGate())) {
+                assault(context, cfg);
+            }
+            return context.proceed();
+        } finally {
+            ChaosRequestContext.exitService();
+        }
+    }
+
+    private void assault(InvocationContext context, MutableAssaultConfig cfg) throws InterruptedException {
         String methodName = describe(context);
 
         if (cfg.isLatencyEnabled()) {
-            long min = cfg.getLatencyMinMs();
-            long max = cfg.getLatencyMaxMs();
-            long latency = ThreadLocalRandom.current().nextLong(min, max == Long.MAX_VALUE ? max : max + 1);
-            LOG.debugf("Goblin: service layer %s (level %d) injecting %d ms latency (range %d-%d ms) into %s",
-                    ChaosRequestContext.assaultLayer(), cfg.getTargetLevel(), latency, min, max, methodName);
-            engine.recordAssault(methodName, RECORD_LABEL_LATENCY, latency);
+            long latency = LatencySupport.drawDelay(cfg);
+            LOG.debugf("Goblin: service layer %s (level %d) injecting %d ms latency into %s",
+                    ChaosRequestContext.assaultLayer(), cfg.getTargetLevel(), latency, methodName);
+            boolean applied = true;
             try {
-                Thread.sleep(latency);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw e;
+                applied = LatencySupport.sleep(latency, methodName);
+            } finally {
+                // recorded once the delay has elapsed (or was interrupted, e.g. by @Timeout), like every other latency
+                // hook; a latency skipped on an event-loop thread is not an assault and is not recorded
+                if (applied) {
+                    engine.recordAssault(methodName, RECORD_LABEL_LATENCY, latency);
+                }
             }
         }
 
@@ -81,8 +99,6 @@ public class GoblinServiceInterceptor {
             engine.recordAssault(methodName, RECORD_LABEL_EXCEPTION);
             throw ExceptionAssault.createException(cfg);
         }
-
-        return context.proceed();
     }
 
     /**

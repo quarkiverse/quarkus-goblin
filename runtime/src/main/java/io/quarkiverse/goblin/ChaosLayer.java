@@ -24,7 +24,7 @@ public enum ChaosLayer {
     /**
      * Service layer: CDI-interceptor-based latency and exception assaults on application beans, placed inside the
      * MicroProfile Fault Tolerance machinery so resilience mechanisms are exercised. Backed by
-     * {@link GoblinServiceInterceptor}.
+     * {@link io.quarkiverse.goblin.service.GoblinServiceInterceptor}.
      */
     SERVICE,
 

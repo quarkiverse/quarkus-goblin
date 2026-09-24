@@ -11,8 +11,8 @@ three meters on the application's `MeterRegistry`:
 - `goblin.latency.injected.seconds` -- timer of the delays actually injected, tagged by `source`
 - `goblin.active` -- functional gauge over `AssaultEngine.isActive()`
 
-The module depends on `quarkus-micrometer-registry-prometheus` so `/q/metrics` works out of the box; any other
-Micrometer backend receives the same meters.
+The module depends on the Micrometer API only (`quarkus-micrometer`): the application picks its registry (e.g.
+`quarkus-micrometer-registry-prometheus` for `/q/metrics`), and every Micrometer backend receives the same meters.
 
 ## The AssaultObserver SPI
 

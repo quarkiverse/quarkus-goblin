@@ -29,7 +29,8 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
 - **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`)
 - **Markdown report export** -- Generate a factual report of config + assault history, ready to hand to an LLM for resilience review
-- **Dev mode only** -- Chaos artifacts are physically absent from production builds
+- **Multi-layer chaos** -- Arm the `HTTP_IN`, `HTTP_OUT` and `SERVICE` layers independently (Dev UI check-boxes); the `SERVICE` layer injects latency/exceptions on business beans through a CDI interceptor running *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real (`DATABASE` / `MESSAGING` reserved)
+- **Dev and test only** -- Chaos activates under `quarkus:dev` and `@QuarkusTest`; in a production build the engine stays inactive and no bean is woven with the service interceptor
 
 ## Quick start
 
@@ -54,7 +55,7 @@ Open the Dev UI at `http://localhost:8080/q/dev` and look for the Goblin card.
 ## Configuration
 
 ```properties
-# Enable/disable (default: true, only active in dev mode)
+# Enable/disable (default: true, only ever active in dev and test mode)
 quarkus.goblin.enabled=true
 
 # Assault type enabled at startup (can be changed at runtime via Dev UI)
@@ -113,7 +114,8 @@ Prometheus / Grafana dashboards:
 </dependency>
 ```
 
-Metrics are scraped at the standard Prometheus endpoint `/q/metrics`:
+The module depends on the Micrometer API only: add the registry you use, e.g.
+`io.quarkus:quarkus-micrometer-registry-prometheus`, whose `/q/metrics` endpoint then exposes:
 
 - `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `rest-client`, `webclient`)
 - `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source` (sum/count/max; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for histogram tuning)
@@ -155,8 +157,8 @@ All changes apply instantly with WARN logs in the console and are persisted to `
 
 ## Safety
 
-- **Dev mode only** -- Chaos only exists in `quarkus:dev`. Physically absent in production.
-- **Zero code modification** -- No annotations needed. Fully automatic instrumentation.
+- **Dev and test only** -- Chaos only activates in `quarkus:dev` and `@QuarkusTest`. Note that with the defaults (`enabled=true`, latency, level 100) every `@QuarkusTest` request is delayed: set `quarkus.goblin.enabled=false` (or `%test.quarkus.goblin.target.level=0`) in the test profile when you do not want chaos in your tests.
+- **Zero code modification** -- No annotations needed for the server-side and REST Client assaults; Vert.x `WebClient` instances are armed with one `GoblinWebClient.enable(...)` call.
 - **Explicit logging** -- WARN log emitted when chaos is active.
 
 ## Repository layout

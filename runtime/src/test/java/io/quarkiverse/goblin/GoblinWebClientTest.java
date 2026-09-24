@@ -193,4 +193,12 @@ class GoblinWebClientTest {
         }
         return false;
     }
+
+    @Test
+    void historyIdentifierDropsTheQueryString() {
+        assertEquals("/api/hello", GoblinWebClient.stripQuery("/api/hello?token=abc"));
+        assertEquals("/api/hello", GoblinWebClient.stripQuery("/api/hello#part?x"));
+        assertEquals("/api/hello", GoblinWebClient.stripQuery("/api/hello"));
+        assertEquals("", GoblinWebClient.stripQuery(null));
+    }
 }

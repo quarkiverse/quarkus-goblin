@@ -72,6 +72,9 @@ public class AssaultEngine {
             LOG.info("Loaded previous Goblin state from .goblin-state.json");
         } else if (staticConfig != null) {
             this.mutableConfig = MutableAssaultConfig.fromConfig(staticConfig);
+        } else {
+            // no recorded configuration (engine started outside the extension's build steps): built-in defaults
+            this.mutableConfig = new MutableAssaultConfig();
         }
         this.active = staticConfig == null || staticConfig.enabled();
         this.mutableConfig.validateAndFix();
@@ -180,6 +183,16 @@ public class AssaultEngine {
             return false;
         }
         return levelGate();
+    }
+
+    /**
+     * Draws the target-level gate once more, independently of any per-request decision. Used by the service
+     * interceptor to re-draw each further attempt (e.g. {@code @Retry}) within an already armed request.
+     *
+     * @return {@code true} when the draw passes the configured target level
+     */
+    public boolean drawLevelGate() {
+        return mutableConfig != null && levelGate();
     }
 
     private boolean levelGate() {

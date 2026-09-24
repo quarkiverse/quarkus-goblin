@@ -874,4 +874,65 @@ class MutableAssaultConfigTest {
             }
         };
     }
+
+    @Test
+    void latencySettersClampNegativeAndExcessiveValues() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyMinMs(-5);
+        config.setLatencyMaxMs(Long.MAX_VALUE);
+        assertEquals(0, config.getLatencyMinMs());
+        assertEquals(MutableAssaultConfig.MAX_LATENCY_MS, config.getLatencyMaxMs());
+    }
+
+    @Test
+    void latencySettersNeverReorderAnIntermediateState() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyRange(100, 150);
+        config.setLatencyMinMs(600);
+        config.setLatencyMaxMs(700);
+        assertEquals(600, config.getLatencyMinMs());
+        assertEquals(700, config.getLatencyMaxMs());
+    }
+
+    @Test
+    void setLatencyRangeClampsAndReportsNegativeValues() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        List<String> issues = config.setLatencyRange(-100, 50);
+        assertEquals(0, config.getLatencyMinMs());
+        assertEquals(50, config.getLatencyMaxMs());
+        assertFalse(issues.isEmpty());
+    }
+
+    @Test
+    void getLatencyRangeReturnsBothBounds() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyRange(12, 34);
+        assertArrayEquals(new long[] { 12, 34 }, config.getLatencyRange());
+    }
+
+    @Test
+    void setExceptionTypeKeepsThePreviousValueWhenBlank() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setExceptionType("java.lang.IllegalStateException");
+
+        List<String> nullIssues = config.setExceptionType(null);
+        List<String> blankIssues = config.setExceptionType("  ");
+
+        assertEquals("java.lang.IllegalStateException", config.getExceptionType());
+        assertFalse(nullIssues.isEmpty());
+        assertFalse(blankIssues.isEmpty());
+        assertDoesNotThrow(() -> config.setTargetLevel(50), "later setters must keep working");
+    }
+
+    @Test
+    void setResponseHeaderRejectsNamesThatAreNotHttpTokens() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Bad\r\nInjected", ResponseHeaderAction.SET, "v"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X Bad", ResponseHeaderAction.SET, "v"));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setResponseHeader("X-Bad:", ResponseHeaderAction.SET, "v"));
+        assertDoesNotThrow(() -> config.setResponseHeader("X-Goblin_Test.1", ResponseHeaderAction.SET, "v"));
+    }
 }

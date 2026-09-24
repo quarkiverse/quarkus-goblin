@@ -98,6 +98,18 @@ public class SampleResource {
     }
 
     @GET
+    @Path("/service/guarded")
+    public String serviceGuarded() {
+        return sampleService.guarded();
+    }
+
+    @GET
+    @Path("/service/nested")
+    public String serviceNested() {
+        return sampleService.nested();
+    }
+
+    @GET
     @Path("/proxy")
     public String proxyHello() {
         return sampleClient.hello();

@@ -19,6 +19,7 @@ import io.quarkiverse.goblin.service.GoblinServiceAssault;
 import io.quarkiverse.goblin.service.GoblinServiceInterceptor;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
+import io.quarkus.deployment.IsNormal;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.annotations.ExecutionTime;
@@ -35,6 +36,8 @@ public class GoblinBuildStep {
 
     private static final DotName MICROPROFILE_FALLBACK = DotName.createSimple(
             "org.eclipse.microprofile.faulttolerance.Fallback");
+    private static final DotName MICROPROFILE_FALLBACK_HANDLER = DotName.createSimple(
+            "org.eclipse.microprofile.faulttolerance.FallbackHandler");
 
     /**
      * Packages owned by the extension itself. Beans living there are never decorated with the service assault binding,
@@ -58,7 +61,14 @@ public class GoblinBuildStep {
         return new FeatureBuildItem(FEATURE);
     }
 
-    @BuildStep
+    /*
+     * The chaos wiring below (assault beans, client filter bean, service interceptor and the annotation transformation
+     * decorating every application bean) is only produced in dev and test mode: a production build never carries the
+     * service-assault binding nor pays for the interception of every application bean. The runtime classes themselves
+     * still ship in the runtime jar; their engine stays inactive outside dev/test.
+     */
+
+    @BuildStep(onlyIfNot = IsNormal.class)
     void registerAssaultBeans(CombinedIndexBuildItem combinedIndex,
             BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         AdditionalBeanBuildItem.Builder builder = AdditionalBeanBuildItem.builder().setUnremovable();
@@ -75,7 +85,7 @@ public class GoblinBuildStep {
      *
      * @param additionalBeans producer for additional bean registrations
      */
-    @BuildStep
+    @BuildStep(onlyIfNot = IsNormal.class)
     void registerClientFilterBean(BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         additionalBeans.produce(AdditionalBeanBuildItem.builder()
                 .setUnremovable()
@@ -103,21 +113,23 @@ public class GoblinBuildStep {
      * @param applicationArchives access to the application's root archive index
      * @param config the build-time Goblin configuration
      */
-    @BuildStep
+    @BuildStep(onlyIfNot = IsNormal.class)
     void registerServiceInterceptor(BuildProducer<AdditionalBeanBuildItem> additionalBeans,
             BuildProducer<AnnotationsTransformerBuildItem> transformers,
-            ApplicationArchivesBuildItem applicationArchives, GoblinConfig config) {
+            ApplicationArchivesBuildItem applicationArchives, CombinedIndexBuildItem combinedIndex,
+            GoblinConfig config) {
         additionalBeans.produce(AdditionalBeanBuildItem.builder()
                 .setUnremovable()
                 .addBeanClass(GoblinServiceInterceptor.class)
                 .build());
 
         IndexView applicationIndex = applicationArchives.getRootArchive().getIndex();
+        IndexView index = combinedIndex.getIndex();
         AnnotationTransformation transformation = AnnotationTransformation.forMethods()
                 .whenMethod(method -> {
                     ClassInfo clazz = method.declaringClass();
                     return applicationIndex.getClassByName(clazz.name()) != null
-                            && isMethodEligible(clazz, method, config);
+                            && isMethodEligible(clazz, method, config, index);
                 })
                 .transform(context -> context.add(GoblinServiceAssault.class));
         transformers.produce(new AnnotationsTransformerBuildItem(transformation));
@@ -134,24 +146,36 @@ public class GoblinBuildStep {
      * reached;</li>
      * <li>classes in a {@code goblin.target.exclude-packages} prefix are never decorated;</li>
      * <li>when {@code goblin.target.include-packages} is set, only matching classes are decorated;</li>
-     * <li>classes carrying one of the {@code goblin.target.exclude-annotations} markers are never decorated;</li>
+     * <li>classes or methods carrying one of the {@code goblin.target.exclude-annotations} markers are never
+     * decorated, exactly like the HTTP_IN layer;</li>
      * <li>static and private methods are never decorated, exactly as CDI interceptors ignore them;</li>
-     * <li>methods referenced as {@code fallbackMethod} by a {@code @Fallback} in the same class are never decorated, so
-     * the fallback can answer the original failure instead of being assaulted itself.</li>
+     * <li>methods referenced as {@code fallbackMethod} by a {@code @Fallback} (on a method or on the class) in the same
+     * class, and classes implementing {@code FallbackHandler}, are never decorated, so the fallback can answer the
+     * original failure instead of being assaulted itself.</li>
      * </ul>
      *
      * @param clazz the declaring class to evaluate
      * @param method the method to evaluate
      * @param config the build-time Goblin configuration
+     * @param index the combined index, used to resolve implemented interfaces
      * @return {@code true} when the service assault binding should be added to the method
      */
-    private static boolean isMethodEligible(ClassInfo clazz, MethodInfo method, GoblinConfig config) {
-        if (!isServiceEligible(clazz, config)) {
+    static boolean isMethodEligible(ClassInfo clazz, MethodInfo method, GoblinConfig config, IndexView index) {
+        if (!isServiceEligible(clazz, config, index)) {
             return false;
         }
-        return !Modifier.isStatic(method.flags())
-                && !Modifier.isPrivate(method.flags())
-                && !isFallbackTargetMethod(clazz, method.name());
+        if (Modifier.isStatic(method.flags()) || Modifier.isPrivate(method.flags())
+                || isFallbackTargetMethod(clazz, method.name())) {
+            return false;
+        }
+        if (config.target().excludeAnnotations().isPresent()) {
+            for (String excluded : config.target().excludeAnnotations().get()) {
+                if (method.hasDeclaredAnnotation(DotName.createSimple(excluded))) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
@@ -163,14 +187,55 @@ public class GoblinBuildStep {
      * @return {@code true} when the method is a fault-tolerance fallback target
      */
     private static boolean isFallbackTargetMethod(ClassInfo clazz, String methodName) {
+        if (isFallbackMethodOf(clazz.declaredAnnotation(MICROPROFILE_FALLBACK), methodName)) {
+            return true;
+        }
         for (MethodInfo candidate : clazz.methods()) {
-            AnnotationInstance fallback = candidate.declaredAnnotation(MICROPROFILE_FALLBACK);
-            if (fallback != null) {
-                AnnotationValue fallbackMethod = fallback.value("fallbackMethod");
-                if (fallbackMethod != null && methodName.equals(fallbackMethod.asString())) {
+            if (isFallbackMethodOf(candidate.declaredAnnotation(MICROPROFILE_FALLBACK), methodName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isFallbackMethodOf(AnnotationInstance fallback, String methodName) {
+        if (fallback == null) {
+            return false;
+        }
+        AnnotationValue fallbackMethod = fallback.value("fallbackMethod");
+        return fallbackMethod != null && methodName.equals(fallbackMethod.asString());
+    }
+
+    /**
+     * Checks whether a class, or one of its super types, implements the given interface or carries the given
+     * annotation on an implemented interface.
+     *
+     * @param clazz the class to inspect
+     * @param index the combined index
+     * @param interfaceName the interface to look for, or {@code null}
+     * @param interfaceAnnotation an annotation to look for on implemented interfaces, or {@code null}
+     * @return {@code true} on a match
+     */
+    private static boolean hasInterface(ClassInfo clazz, IndexView index, DotName interfaceName,
+            DotName interfaceAnnotation) {
+        ClassInfo current = clazz;
+        int guard = 0;
+        while (current != null && guard++ < 32) {
+            for (DotName iface : current.interfaceNames()) {
+                if (iface.equals(interfaceName)) {
+                    return true;
+                }
+                ClassInfo ifaceInfo = index.getClassByName(iface);
+                if (ifaceInfo != null && interfaceAnnotation != null
+                        && ifaceInfo.declaredAnnotation(interfaceAnnotation) != null) {
+                    return true;
+                }
+                if (ifaceInfo != null && hasInterface(ifaceInfo, index, interfaceName, interfaceAnnotation)) {
                     return true;
                 }
             }
+            DotName superName = current.superName();
+            current = superName != null ? index.getClassByName(superName) : null;
         }
         return false;
     }
@@ -191,9 +256,10 @@ public class GoblinBuildStep {
      *
      * @param clazz the class to evaluate
      * @param config the build-time Goblin configuration
+     * @param index the combined index, used to resolve implemented interfaces
      * @return {@code true} when the service assault binding can be added to methods of the class
      */
-    private static boolean isServiceEligible(ClassInfo clazz, GoblinConfig config) {
+    private static boolean isServiceEligible(ClassInfo clazz, GoblinConfig config, IndexView index) {
         String name = clazz.name().toString();
         if (name.lastIndexOf('.') < 0) {
             return false;
@@ -202,6 +268,10 @@ public class GoblinBuildStep {
             return false;
         }
         if (clazz.declaredAnnotation(JAX_RS_PATH) != null || clazz.declaredAnnotation(JAX_RS_PROVIDER) != null) {
+            return false;
+        }
+        // resources whose @Path is declared on an implemented interface, and fault-tolerance fallback handlers
+        if (hasInterface(clazz, index, MICROPROFILE_FALLBACK_HANDLER, JAX_RS_PATH)) {
             return false;
         }
         String packageName = name.substring(0, name.lastIndexOf('.'));

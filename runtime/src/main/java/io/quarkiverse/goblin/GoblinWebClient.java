@@ -3,14 +3,14 @@ package io.quarkiverse.goblin;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.WeakHashMap;
 
 import jakarta.enterprise.inject.spi.CDI;
 
 import org.jboss.logging.Logger;
 
 import io.quarkiverse.goblin.assault.ExceptionAssault;
+import io.quarkiverse.goblin.assault.LatencySupport;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import io.vertx.ext.web.client.HttpRequest;
@@ -50,11 +50,16 @@ public final class GoblinWebClient {
 
     /**
      * WebClients the interceptor was already attached to, protecting {@link #enable(WebClient)} from stacking duplicate
-     * interceptors on repeated calls. Keyed by identity (no {@code equals}/{@code hashCode} on Vert.x clients).
+     * interceptors on repeated calls. Keyed by identity (no {@code equals}/{@code hashCode} on Vert.x clients) and held
+     * weakly, so closed clients -- and, in dev mode, clients of a previous application generation -- are collected.
      */
-    private static final Set<WebClient> ENABLED = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static final Set<WebClient> ENABLED = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
-    private static volatile AssaultEngine engine;
+    /**
+     * Engine override for unit tests only. The production path resolves the engine from CDI on every call, so a dev-mode
+     * live reload (new application, new engine) is never served by a stale engine of the previous generation.
+     */
+    private static volatile AssaultEngine testEngine;
 
     private GoblinWebClient() {
     }
@@ -99,7 +104,7 @@ public final class GoblinWebClient {
         MutableAssaultConfig config = engine.getMutableConfig();
         String methodName = describeCall(context);
         if (config.isClientLatencyEnabled()) {
-            long delay = ThreadLocalRandom.current().nextLong(config.getLatencyMinMs(), config.getLatencyMaxMs() + 1);
+            long delay = LatencySupport.drawDelay(config);
             LOG.debugf("Goblin: injecting WebClient latency (%s ms) on %s", delay, methodName);
             delayThen(context, delay, () -> {
                 engine.recordAssault(methodName, "latency", delay);
@@ -194,25 +199,44 @@ public final class GoblinWebClient {
             if (request.port() > 0) {
                 identifier.append(':').append(request.port());
             }
-            identifier.append(request.uri());
+            identifier.append(stripQuery(request.uri()));
         } else if (request.uri() != null) {
-            identifier.append(' ').append(request.uri());
+            identifier.append(' ').append(stripQuery(request.uri()));
         }
         return identifier.toString();
     }
 
     /**
-     * Resolves the shared {@link AssaultEngine} from the CDI container, caching it for subsequent lookups.
+     * Drops the query string and fragment of a request URI: they routinely carry tokens that must not end up in the
+     * history, the traces or the logs.
+     *
+     * @param uri the request URI, possibly {@code null}
+     * @return the URI path only
+     */
+    static String stripQuery(String uri) {
+        if (uri == null) {
+            return "";
+        }
+        int cut = uri.length();
+        int query = uri.indexOf('?');
+        int fragment = uri.indexOf('#');
+        if (query >= 0) {
+            cut = query;
+        }
+        if (fragment >= 0 && fragment < cut) {
+            cut = fragment;
+        }
+        return uri.substring(0, cut);
+    }
+
+    /**
+     * Resolves the {@link AssaultEngine} of the running application from the CDI container.
      *
      * @return the application's assault engine, never {@code null}
      */
     private static AssaultEngine engine() {
-        AssaultEngine current = engine;
-        if (current == null) {
-            current = CDI.current().select(AssaultEngine.class).get();
-            engine = current;
-        }
-        return current;
+        AssaultEngine current = testEngine;
+        return current != null ? current : CDI.current().select(AssaultEngine.class).get();
     }
 
     /**
@@ -221,6 +245,6 @@ public final class GoblinWebClient {
      * @param testEngine the engine to use, or {@code null} to revert to the CDI lookup
      */
     static void setEngineForTests(AssaultEngine testEngine) {
-        engine = testEngine;
+        GoblinWebClient.testEngine = testEngine;
     }
 }
