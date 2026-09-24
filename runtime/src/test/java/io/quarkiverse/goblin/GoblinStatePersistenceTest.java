@@ -73,13 +73,11 @@ class GoblinStatePersistenceTest {
     }
 
     @Test
-    void loadReturnsDefaultsWhenFileIsCorrupted() throws IOException {
+    void loadFallsBackToTheConfigurationWhenFileIsCorrupted() throws IOException {
         Files.write(stateFile, "this is not json at all".getBytes());
 
-        MutableAssaultConfig loaded = GoblinStatePersistence.load();
-        assertNotNull(loaded);
-        assertTrue(loaded.isLatencyEnabled());
-        assertEquals(100, loaded.getTargetLevel());
+        assertNull(GoblinStatePersistence.load(),
+                "an unreadable state file must fall back to application.properties instead of failing the start");
     }
 
     @Test
@@ -197,14 +195,6 @@ class GoblinStatePersistenceTest {
         assertNotNull(loaded);
         assertEquals("Error: invalid, request", loaded.getExceptionMessage());
         assertEquals("Service\nUnavailable", loaded.getHttpStatusMessage());
-    }
-
-    @Test
-    void parseJsonHandlesMultipleCommasInValue() {
-        String json = "{\"key\": \"a, b, c, d\"}";
-        var map = GoblinStatePersistence.parseJson(json);
-
-        assertEquals("a, b, c, d", map.get("key"));
     }
 
     @Test
@@ -360,7 +350,8 @@ class GoblinStatePersistenceTest {
 
     @Test
     void loadSkipsResponseHeaderRuleWithUnsafeValue() throws IOException {
-        String inner = "{\"action\": \"SET\", \"value\": \"chaos\nInjected: true\"}";
+        // valid JSON whose decoded value contains a line feed (JSON escape sequence, not a raw newline)
+        String inner = "{\"action\": \"SET\", \"value\": \"chaos\\nInjected: true\"}";
         writeStateWithResponseHeaders("{\"X-Goblin\": \"" + escape(inner) + "\"}");
 
         MutableAssaultConfig loaded = GoblinStatePersistence.load();
@@ -407,5 +398,36 @@ class GoblinStatePersistenceTest {
         try (var files = Files.list(tempDir)) {
             assertEquals(1, files.count(), "only the state file must remain");
         }
+    }
+
+    @Test
+    void savedStateIsStructuredJson() throws IOException {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN));
+        config.setResponseHeader("X-Goblin", ResponseHeaderAction.SET, "chaos");
+        config.setTargetLevel(42);
+
+        GoblinStatePersistence.save(config);
+        io.vertx.core.json.JsonObject saved = new io.vertx.core.json.JsonObject(Files.readString(stateFile));
+
+        assertEquals(42, saved.getInteger("targetLevel"), "numbers are written as JSON numbers");
+        assertEquals(Boolean.TRUE, saved.getBoolean("latencyEnabled"), "booleans are written as JSON booleans");
+        assertEquals(List.of("SERVICE", "HTTP_IN"), saved.getJsonArray("layers").getList());
+        assertEquals("SET", saved.getJsonObject("responseHeaders").getJsonObject("X-Goblin").getString("action"));
+    }
+
+    @Test
+    void legacyFlatStateFileIsStillReadable() throws IOException {
+        String legacyHeaders = "{\"X-Goblin\": \"{\\\"action\\\": \\\"SET\\\", \\\"value\\\": \\\"chaos\\\"}\"}";
+        Files.writeString(stateFile, "{\"latencyEnabled\": \"false\", \"targetLevel\": \"42\", "
+                + "\"layers\": \"SERVICE,HTTP_IN\", \"responseHeaders\": \"" + escape(legacyHeaders) + "\"}");
+
+        MutableAssaultConfig loaded = GoblinStatePersistence.load();
+
+        assertNotNull(loaded);
+        assertFalse(loaded.isLatencyEnabled(), "quoted booleans of the legacy format are accepted");
+        assertEquals(42, loaded.getTargetLevel(), "quoted numbers of the legacy format are accepted");
+        assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), loaded.getLayers());
+        assertEquals("chaos", loaded.getResponseHeaders().get("X-Goblin").value());
     }
 }

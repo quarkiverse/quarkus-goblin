@@ -3,6 +3,7 @@ package io.quarkiverse.goblin.assault;
 import org.jboss.logging.Logger;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 
@@ -28,11 +29,13 @@ public final class LayerFaults {
      *
      * @param engine the engine recording the assaults
      * @param cfg the active configuration
+     * @param source the source the assaults are recorded under
      * @param target the history identifier of the assaulted target
      * @throws InterruptedException when the latency assault is interrupted
      * @throws RuntimeException the configured exception when the exception assault is enabled
      */
-    public static void inject(AssaultEngine engine, MutableAssaultConfig cfg, String target) throws InterruptedException {
+    public static void inject(AssaultEngine engine, MutableAssaultConfig cfg, AssaultSource source, String target)
+            throws InterruptedException {
         if (cfg.isLatencyEnabled()) {
             long latency = LatencySupport.drawDelay(cfg);
             LOG.debugf("Goblin: %s layer (level %d) injecting %d ms latency into %s",
@@ -42,7 +45,7 @@ public final class LayerFaults {
                 applied = LatencySupport.sleep(latency, target);
             } finally {
                 if (applied) {
-                    engine.recordAssault(target, RECORD_LABEL_LATENCY, latency);
+                    engine.recordAssault(source, target, RECORD_LABEL_LATENCY, latency);
                 }
             }
         }
@@ -50,7 +53,7 @@ public final class LayerFaults {
         if (cfg.isExceptionEnabled()) {
             LOG.debugf("Goblin: %s layer (level %d) throwing %s into %s",
                     ChaosRequestContext.assaultLayer(), cfg.getTargetLevel(), cfg.getExceptionType(), target);
-            engine.recordAssault(target, RECORD_LABEL_EXCEPTION);
+            engine.recordAssault(source, target, RECORD_LABEL_EXCEPTION);
             throw ExceptionAssault.createException(cfg);
         }
     }

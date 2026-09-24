@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,6 @@ class AssaultEngineLifecycleTest {
 
     @AfterEach
     void reset() throws IOException {
-        AssaultEngine.setStaticConfig(null);
         GoblinStatePersistence.overrideStateFile(null);
         if (stateFile != null) {
             Files.deleteIfExists(stateFile);
@@ -46,18 +44,18 @@ class AssaultEngineLifecycleTest {
 
         assertFalse(engine.isActive(), "a packaged production app must never run chaos");
         assertNull(engine.getMutableConfig(),
-                "in NORMAL mode neither the state file nor the static config must be consulted (regression: NPE)");
+                "in NORMAL mode neither the state file nor the configuration must be consulted (regression: NPE)");
     }
 
     @Test
     void testModeStartsFromStaticConfigAndIgnoresStateFile() throws IOException {
-        AssaultEngine.setStaticConfig(config(100, 500));
         AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500, true);
         writeStateFile();
 
         engine.initialize(LaunchMode.TEST);
 
-        assertTrue(engine.isActive(), "quarkus.goblin.enabled defaults to true in test mode");
+        assertTrue(engine.isActive(), "quarkus.goblin.test.enabled=true opts the tests in");
         assertNotNull(engine.getMutableConfig());
         assertEquals(500, engine.getMutableConfig().getLatencyMaxMs(),
                 "the test configuration must come from the static config, not from the local Dev UI state file (max=9000)");
@@ -68,8 +66,8 @@ class AssaultEngineLifecycleTest {
 
     @Test
     void devModeRestoresStateFileOverStaticConfig() throws IOException {
-        AssaultEngine.setStaticConfig(config(100, 500));
         AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500);
         writeStateFile();
 
         engine.initialize(LaunchMode.DEVELOPMENT);
@@ -79,6 +77,31 @@ class AssaultEngineLifecycleTest {
         assertEquals(9000, engine.getMutableConfig().getLatencyMaxMs(),
                 "in dev mode the persisted state file must win over application.properties");
         assertEquals(AssaultProfile.SLOW_FAILURE, engine.getMutableConfig().getProfile());
+    }
+
+    @Test
+    void testModeStaysInactiveWithoutOptInButLoadsItsConfiguration() {
+        AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500, false);
+
+        engine.initialize(LaunchMode.TEST);
+
+        assertFalse(engine.isActive(), "an application's tests must not be assaulted unless quarkus.goblin.test.enabled");
+        assertNotNull(engine.getMutableConfig(), "the configuration is loaded so a test can switch chaos on");
+        assertEquals(500, engine.getMutableConfig().getLatencyMaxMs());
+
+        engine.setActive(true);
+        assertTrue(engine.isActive(), "a test can opt in programmatically");
+    }
+
+    @Test
+    void theTestOptInDoesNotAffectDevMode() {
+        AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500, false);
+
+        engine.initialize(LaunchMode.DEVELOPMENT);
+
+        assertTrue(engine.isActive(), "dev mode keeps chaos on by default");
     }
 
     /**
@@ -97,10 +120,19 @@ class AssaultEngineLifecycleTest {
     }
 
     private static GoblinConfig config(int latencyMin, int latencyMax) {
+        return config(latencyMin, latencyMax, true);
+    }
+
+    private static GoblinConfig config(int latencyMin, int latencyMax, boolean testModeEnabled) {
         return new GoblinConfig() {
             @Override
             public boolean enabled() {
                 return true;
+            }
+
+            @Override
+            public TestConfig test() {
+                return () -> testModeEnabled;
             }
 
             @Override
@@ -191,20 +223,6 @@ class AssaultEngineLifecycleTest {
                         return 100;
                     }
 
-                    @Override
-                    public Optional<String[]> includePackages() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String[]> excludePackages() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String[]> excludeAnnotations() {
-                        return Optional.empty();
-                    }
                 };
             }
         };

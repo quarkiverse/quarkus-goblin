@@ -66,7 +66,7 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Reset the assault counters to zero. Returns `{ ok }`.
 
 | `getHistory`
-| Return the assault history buffer. Each entry exposes the method, type, timestamp, the applied latency duration (`latencyMs`, 0 for non-latency assaults), and the active assault config snapshot at the time of the assault (`config`).
+| Return the assault history buffer. Each entry exposes the method, type, timestamp, the applied latency duration (`latencyMs`, 0 for non-latency assaults), the `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), and the active assault config snapshot at the time of the assault (`config`).
 
 | `clearHistory`
 | Empty the assault history buffer.

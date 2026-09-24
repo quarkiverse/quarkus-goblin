@@ -7,7 +7,7 @@ Optional Micrometer / Prometheus metrics for the Goblin chaos engineering extens
 One `@ApplicationScoped` bean (`GoblinMetricsObserver`) implements the engine's `AssaultObserver` SPI and registers
 three meters on the application's `MeterRegistry`:
 
-- `goblin.assaults.total` -- counter tagged by `type` + `source` (`server`, `rest-client`, `webclient`)
+- `goblin.assaults.total` -- counter tagged by `type` + `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
 - `goblin.latency.injected.seconds` -- timer of the delays actually injected, tagged by `source`
 - `goblin.active` -- functional gauge over `AssaultEngine.isActive()`
 

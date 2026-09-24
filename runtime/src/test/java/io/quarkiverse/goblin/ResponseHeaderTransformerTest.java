@@ -29,7 +29,7 @@ class ResponseHeaderTransformerTest {
 
         assertEquals("chaos", headers.getFirst("X-Goblin"));
         assertEquals(1, engine.getHistory().size());
-        assertEquals("response-header-set:X-Goblin", engine.getHistory().get(0).type());
+        assertEquals("response-header-set:X-Goblin", engine.getHistory().getFirst().type());
     }
 
     @Test
@@ -55,7 +55,7 @@ class ResponseHeaderTransformerTest {
 
         assertNull(headers.getFirst("X-Goblin"));
         assertEquals(1, engine.getHistory().size());
-        assertEquals("response-header-remove:X-Goblin", engine.getHistory().get(0).type());
+        assertEquals("response-header-remove:X-Goblin", engine.getHistory().getFirst().type());
     }
 
     @Test
@@ -83,7 +83,7 @@ class ResponseHeaderTransformerTest {
 
         assertTrue(headers.isEmpty());
         assertEquals(1, engine.getHistory().size());
-        assertEquals("response-header-remove:X-Goblin", engine.getHistory().get(0).type());
+        assertEquals("response-header-remove:X-Goblin", engine.getHistory().getFirst().type());
     }
 
     @Test
@@ -137,13 +137,8 @@ class ResponseHeaderTransformerTest {
         assertTrue(engine.getHistory().isEmpty());
     }
 
-    @SuppressWarnings("unchecked")
-    private static void injectRule(MutableAssaultConfig config, String name, String value) throws Exception {
-        java.lang.reflect.Field field = MutableAssaultConfig.class.getDeclaredField("responseHeaders");
-        field.setAccessible(true);
-        java.util.Map<String, MutableAssaultConfig.HeaderRule> rules = (java.util.Map<String, MutableAssaultConfig.HeaderRule>) field
-                .get(config);
-        rules.put(name, new MutableAssaultConfig.HeaderRule(ResponseHeaderAction.SET, value));
+    private static void injectRule(MutableAssaultConfig config, String name, String value) {
+        config.putRawHeaderRuleForTests(name, new MutableAssaultConfig.HeaderRule(ResponseHeaderAction.SET, value));
     }
 
     private static ContainerResponseContext response(MultivaluedMap<String, Object> headers) {

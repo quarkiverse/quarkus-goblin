@@ -4,6 +4,7 @@ import java.sql.Connection;
 
 import io.agroal.api.AgroalPoolInterceptor;
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -41,12 +42,12 @@ public class GoblinAgroalPoolInterceptor implements AgroalPoolInterceptor {
             return;
         }
         AssaultEngine engine = Arc.container().instance(AssaultEngine.class).get();
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfig cfg = engine.configSnapshot();
         if (cfg == null || !engine.isActive() || !LayerFaults.shouldFire(engine)) {
             return;
         }
         try {
-            LayerFaults.inject(engine, cfg, describe());
+            LayerFaults.inject(engine, cfg, AssaultSource.DATABASE, describe());
         } catch (InterruptedException e) {
             // interrupt flag restored by LatencySupport; surface it as an acquisition failure
             throw new IllegalStateException("Goblin: database latency assault interrupted", e);

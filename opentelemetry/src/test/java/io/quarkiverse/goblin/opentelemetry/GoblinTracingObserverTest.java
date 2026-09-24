@@ -19,6 +19,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 
 class GoblinTracingObserverTest {
@@ -43,7 +44,7 @@ class GoblinTracingObserverTest {
 
         List<SpanData> spans = exporter.getFinishedSpanItems();
         assertEquals(1, spans.size());
-        SpanData span = spans.get(0);
+        SpanData span = spans.getFirst();
         assertEquals(GoblinTracingObserver.SPAN_NAME, span.getName());
         assertEquals(SpanKind.INTERNAL, span.getKind(), "an assault span annotates an in-process moment, no I/O of its own");
         assertEquals("latency", attr(span, "goblin.assault.type"));
@@ -58,12 +59,13 @@ class GoblinTracingObserverTest {
         long now = System.currentTimeMillis();
         observer.onAssault(record("SampleResource.hello", "latency", 250, now, "snapshot"));
 
-        assertEquals((now - 250) * 1_000_000L, exporter.getFinishedSpanItems().get(0).getStartEpochNanos());
+        assertEquals((now - 250) * 1_000_000L, exporter.getFinishedSpanItems().getFirst().getStartEpochNanos());
     }
 
     @Test
     void restClientAssaultSourceIsRecorded() {
-        observer.onAssault(record("REST-Client GET http://localhost:8081/api/hello", "latency", 100));
+        observer.onAssault(
+                record(AssaultSource.REST_CLIENT, "REST-Client GET http://localhost:8081/api/hello", "latency", 100));
 
         SpanData span = singleSpan();
         assertEquals(SpanKind.INTERNAL, span.getKind());
@@ -72,7 +74,7 @@ class GoblinTracingObserverTest {
 
     @Test
     void webClientAssaultSourceIsRecorded() {
-        observer.onAssault(record("WebClient GET http://localhost:8081/api/hello", "latency", 100));
+        observer.onAssault(record(AssaultSource.WEBCLIENT, "WebClient GET http://localhost:8081/api/hello", "latency", 100));
 
         SpanData span = singleSpan();
         assertEquals(SpanKind.INTERNAL, span.getKind());
@@ -155,20 +157,17 @@ class GoblinTracingObserverTest {
     }
 
     @Test
-    void sourceDetectionIsUnitTestable() {
-        assertEquals("server", GoblinTracingObserver.sourceOf("SampleResource.hello"));
-        assertEquals("server", GoblinTracingObserver.sourceOf(""));
-        assertEquals("server", GoblinTracingObserver.sourceOf(null));
-        assertEquals("rest-client", GoblinTracingObserver.sourceOf("REST-Client GET http://x"));
-        assertEquals("webclient", GoblinTracingObserver.sourceOf("WebClient GET http://x"));
-        assertEquals("database", GoblinTracingObserver.sourceOf("Database <default> connection"));
-        assertEquals("messaging", GoblinTracingObserver.sourceOf("Messaging com.acme.OrderConsumer.consume"));
+    void sourceAttributeComesFromTheRecord() {
+        assertEquals("service", record(AssaultSource.SERVICE, "com.acme.Service.call", "exception", 0).sourceTag());
+        assertEquals("database", record(AssaultSource.DATABASE, "Database <default> connection", "latency", 1).sourceTag());
+        assertEquals("server", record(null, "SampleResource.hello", "latency", 1).sourceTag(),
+                "a record without a source is a server-side assault");
     }
 
     private SpanData singleSpan() {
         List<SpanData> spans = exporter.getFinishedSpanItems();
         assertEquals(1, spans.size(), "expected exactly one span, got: " + spans);
-        return spans.get(0);
+        return spans.getFirst();
     }
 
     private SpanData finished(String name) {
@@ -188,6 +187,10 @@ class GoblinTracingObserverTest {
         Long value = span.getAttributes().get(AttributeKey.longKey(name));
         assertNotNull(value, "expected attribute " + name + " on span " + span.getName());
         return value;
+    }
+
+    private static AssaultEngine.AssaultRecord record(AssaultSource source, String method, String type, long latencyMs) {
+        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source);
     }
 
     private static AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {

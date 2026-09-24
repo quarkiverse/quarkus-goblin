@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -37,6 +38,11 @@ class GoblinServiceInterceptorTest {
         }
 
         @Override
+        public MutableAssaultConfig configSnapshot() {
+            return config.snapshot();
+        }
+
+        @Override
         public boolean isActive() {
             return active;
         }
@@ -48,7 +54,8 @@ class GoblinServiceInterceptorTest {
         }
 
         @Override
-        public void recordAssault(String method, String type, long latencyMs) {
+        public void recordAssault(AssaultSource source, String method, String type, long latencyMs) {
+            assertEquals(AssaultSource.SERVICE, source);
             records.add(type);
         }
     }

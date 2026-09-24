@@ -20,9 +20,17 @@ include::../partials/attributes.adoc[]
 * Assault metrics and latency histograms via Micrometer / Prometheus (https://github.com/quarkiverse/quarkus-goblin/pull/51[#51]).
 * Assault tracing via OpenTelemetry -- one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span (https://github.com/quarkiverse/quarkus-goblin/issues/47[#47]).
 
+=== Breaking changes
+
+* Chaos no longer activates in test mode by default: set `quarkus.goblin.test.enabled=true` to assault your `@QuarkusTest` suite (or call `AssaultEngine.setActive(true)` from a test). Adding the extension therefore never slows down nor breaks an existing test suite.
+
 === Improvements
 
 * The assault history now records the actually applied latency duration for latency assaults on **every** layer, including service-layer injections (previously only the HTTP layers recorded the value).
+* Every configuration key except the `quarkus.goblin.target.include-packages` / `exclude-packages` / `exclude-annotations` targeting rules is now read at runtime and can be overridden when the application starts. The targeting rules stay fixed at build time and are applied by a single implementation shared by every layer.
+* Configuration changes (profile switch, reset, import) are published atomically, and each assault hook reads one consistent snapshot per request.
+* Each recorded assault carries its `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), exposed in the history, the metrics and the traces; SERVICE-layer assaults are now tagged `service`.
+* The Dev UI state file is written as structured JSON; files written by earlier versions are still read.
 
 [[version-0-2]]
 == 0.2.x

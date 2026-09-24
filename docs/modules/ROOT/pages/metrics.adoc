@@ -34,7 +34,7 @@ The module only brings in the Micrometer API (`quarkus-micrometer`), so it never
 
 | `goblin_assaults_total`
 | Counter of every fired assault, incremented once per assault (including client-side ones).
-| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`) and `source` (`server`, `rest-client`, `webclient`, `database`, `messaging`)
+| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`) and `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
 
 | `goblin_latency_injected_seconds`
 | Timer of the delays actually injected (only incremented when latency was really applied). Exposed as a histogram: `_sum` / `_count` plus `_bucket` distribution series. Custom bucket boundaries can be set with `quarkus.micrometer.export.prometheus.prometheus.bucket-boundaries`.
@@ -47,7 +47,7 @@ The module only brings in the Micrometer API (`quarkus-micrometer`), so it never
 
 NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin.assaults.total`), but the Prometheus export sanitizes them to underscores -- `goblin_assaults_total` in `/q/metrics`. Other backends (JVM, statsd, ...) keep the dotted names, so write PromQL against the underscored form and refer to the dotted names when consuming the tags/names elsewhere.
 
-`source` is derived from the recorded history identifier: server-side assaults (`SampleResource.hello`) are tagged `server`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
+`source` is carried by each recorded assault: inbound REST assaults (`SampleResource.hello`) are tagged `server`, application bean assaults (SERVICE layer) `service`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
 
 TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (type)`; watch a specific source with `sum(rate(goblin_latency_injected_seconds_count[5m])) by (source)`.
 

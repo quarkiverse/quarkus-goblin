@@ -8,6 +8,7 @@ include::../partials/attributes.adoc[]
 *Chaos is not activating:*
 
 * Verify you are running in dev mode (`quarkus:dev`) or test mode (`@QuarkusTest`): chaos never activates in production mode.
+* In test mode, chaos is off unless `quarkus.goblin.test.enabled=true` (an INFO log says so at startup), or a test calls `AssaultEngine.setActive(true)`.
 * In test mode the `.goblin-state.json` file is ignored: tests always start from `application.properties`.
 * Check that `quarkus.goblin.enabled=true` (the default).
 * Verify at least one assault type is enabled in the Dev UI.

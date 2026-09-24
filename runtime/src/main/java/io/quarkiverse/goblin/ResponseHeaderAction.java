@@ -16,5 +16,19 @@ public enum ResponseHeaderAction {
     /**
      * Removes the header from the response when present.
      */
-    REMOVE
+    REMOVE;
+
+    /**
+     * Parses a user-provided action, tolerating case and surrounding whitespace. The historical {@code ADD} and
+     * {@code OVERRIDE} labels are mapped to {@link #SET} so previously saved configurations keep working.
+     *
+     * @param raw the raw action, possibly {@code null} or blank
+     * @return the matching action, or empty when blank or unknown
+     */
+    public static java.util.Optional<ResponseHeaderAction> parse(String raw) {
+        if (raw != null && ("ADD".equalsIgnoreCase(raw.trim()) || "OVERRIDE".equalsIgnoreCase(raw.trim()))) {
+            return java.util.Optional.of(SET);
+        }
+        return Enums.parse(ResponseHeaderAction.class, raw);
+    }
 }

@@ -1,10 +1,13 @@
 package io.quarkiverse.goblin;
 
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -40,7 +43,15 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     ResourceInfo resourceInfo;
 
     @Inject
-    GoblinConfig config;
+    GoblinTargetingConfig targeting;
+
+    /**
+     * Targeting eligibility per resource method, computed on first use: the rules are fixed at build time, so the
+     * reflection on annotations is paid once instead of on every request.
+     */
+    private final Map<Method, Boolean> eligibility = new ConcurrentHashMap<>();
+
+    private volatile TargetRules targetRules;
 
     /**
      * The assault chain sorted by {@link Assault#order()}. The set of assault beans is fixed at build time, so it is
@@ -60,7 +71,7 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         requestContext.setProperty(GATED_PROPERTY, assaultLayer == ChaosLayer.HTTP_IN);
         ChaosRequestContext.setAssaultLayer(assaultLayer);
         if (LOG.isDebugEnabled()) {
-            MutableAssaultConfig cfg = engine.getMutableConfig();
+            MutableAssaultConfig cfg = engine.configSnapshot();
             if (cfg != null) {
                 LOG.debugf("Goblin: request resolved to %s layer (level %d) for %s",
                         assaultLayer, cfg.getTargetLevel(), describeMethod());
@@ -74,7 +85,7 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         }
 
         String methodName = describeMethod();
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfig cfg = engine.configSnapshot();
         AssaultContext context = new AssaultContext(requestContext, cfg, engine, methodName);
 
         for (Assault assault : sortedAssaults()) {
@@ -94,7 +105,7 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         if (!engine.isActive()) {
             return;
         }
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfig cfg = engine.configSnapshot();
         if (cfg == null) {
             return;
         }
@@ -232,48 +243,37 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         if (method == null) {
             return false;
         }
+        return eligibility.computeIfAbsent(method, this::computeEligibility);
+    }
 
+    /**
+     * Applies the targeting rules to a resource method: its package, then the annotations of the method and of its
+     * declaring class. Computed once per resource method (the rules are fixed at build time).
+     *
+     * @param method the resource method
+     * @return {@code true} when the method may be assaulted
+     */
+    private boolean computeEligibility(Method method) {
+        TargetRules rules = targetRules();
         Class<?> declaringClass = method.getDeclaringClass();
-        String packageName = declaringClass.getPackage().getName();
-
-        if (config.target().excludePackages().isPresent()) {
-            for (String excluded : config.target().excludePackages().get()) {
-                if (packageName.startsWith(excluded)) {
-                    return false;
-                }
-            }
+        if (!rules.isPackageTargeted(declaringClass.getPackageName())) {
+            return false;
         }
+        return !rules.isExcludedBy(annotationNames(method.getAnnotations()))
+                && !rules.isExcludedBy(annotationNames(declaringClass.getAnnotations()));
+    }
 
-        if (config.target().includePackages().isPresent() && config.target().includePackages().get().length > 0) {
-            boolean included = false;
-            for (String includedPkg : config.target().includePackages().get()) {
-                if (packageName.startsWith(includedPkg)) {
-                    included = true;
-                    break;
-                }
-            }
-            if (!included) {
-                return false;
-            }
+    private TargetRules targetRules() {
+        TargetRules current = targetRules;
+        if (current == null) {
+            current = TargetRules.of(targeting);
+            targetRules = current;
         }
+        return current;
+    }
 
-        if (config.target().excludeAnnotations().isPresent()) {
-            Set<java.lang.annotation.Annotation> annotations = Set.of(method.getAnnotations());
-            for (String annotationName : config.target().excludeAnnotations().get()) {
-                for (java.lang.annotation.Annotation ann : annotations) {
-                    if (ann.annotationType().getName().equals(annotationName)) {
-                        return false;
-                    }
-                }
-                for (java.lang.annotation.Annotation ann : declaringClass.getAnnotations()) {
-                    if (ann.annotationType().getName().equals(annotationName)) {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        return true;
+    private static List<String> annotationNames(Annotation[] annotations) {
+        return Arrays.stream(annotations).map(annotation -> annotation.annotationType().getName()).toList();
     }
 
     private String describeMethod() {
