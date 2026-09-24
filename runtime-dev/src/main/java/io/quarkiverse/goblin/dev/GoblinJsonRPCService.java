@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -307,7 +308,12 @@ public class GoblinJsonRPCService {
                     .put("error", "Response header value must not contain CR, LF or control characters");
         }
         String trimmed = name.trim();
-        cfg.setResponseHeader(trimmed, parsed, safeValue);
+        try {
+            cfg.setResponseHeader(trimmed, parsed, safeValue);
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s': %s", trimmed, action, e.getMessage());
+            return new JsonObject().put("ok", false).put("error", e.getMessage());
+        }
         LOG.warnf("Goblin response header changed: %s %s value='%s'", trimmed, parsed, safeValue);
         return configJson(cfg)
                 .put("ok", true)
@@ -537,7 +543,16 @@ public class GoblinJsonRPCService {
         if (config == null) {
             return new JsonObject().put("ok", false).put("error", "Missing configuration payload");
         }
-        List<String> issues = applyConfigTo(cfg, toJsonObject(config));
+        // staged on a working copy and published at once: an invalid payload never leaves a half-applied configuration
+        MutableAssaultConfig staged = cfg.workingCopy();
+        List<String> issues;
+        try {
+            issues = applyConfigTo(staged, toJsonObject(config));
+        } catch (RuntimeException e) {
+            LOG.warnf("Goblin: configuration rejected, nothing applied: %s", e.getMessage());
+            return configJson(cfg).put("ok", false).put("error", "Invalid configuration, nothing applied: " + e.getMessage());
+        }
+        cfg.replaceWith(staged);
         LOG.warnf("Goblin: configuration applied via Dev UI: fields=%s", new ArrayList<>(config.keySet()));
         if (!issues.isEmpty()) {
             LOG.warnf("Goblin: configuration applied with issues: %s", issues);
@@ -586,32 +601,36 @@ public class GoblinJsonRPCService {
             cfg.setProfile(parseProfile(profile));
         }
         if (config.containsKey("latencyEnabled")) {
-            cfg.setLatencyEnabled(config.getBoolean("latencyEnabled"));
+            readBoolean(config, "latencyEnabled", issues).ifPresent(cfg::setLatencyEnabled);
         }
         if (config.containsKey("exceptionEnabled")) {
-            cfg.setExceptionEnabled(config.getBoolean("exceptionEnabled"));
+            readBoolean(config, "exceptionEnabled", issues).ifPresent(cfg::setExceptionEnabled);
         }
         if (config.containsKey("httpStatusEnabled")) {
-            cfg.setHttpStatusEnabled(config.getBoolean("httpStatusEnabled"));
+            readBoolean(config, "httpStatusEnabled", issues).ifPresent(cfg::setHttpStatusEnabled);
         }
         if (config.containsKey("dependencyDegradationEnabled")) {
-            cfg.setDependencyDegradationEnabled(config.getBoolean("dependencyDegradationEnabled"));
+            readBoolean(config, "dependencyDegradationEnabled", issues).ifPresent(cfg::setDependencyDegradationEnabled);
         }
         if (config.containsKey("clientLatencyEnabled")) {
-            cfg.setClientLatencyEnabled(config.getBoolean("clientLatencyEnabled"));
+            readBoolean(config, "clientLatencyEnabled", issues).ifPresent(cfg::setClientLatencyEnabled);
         }
         if (config.containsKey("clientExceptionEnabled")) {
-            cfg.setClientExceptionEnabled(config.getBoolean("clientExceptionEnabled"));
+            readBoolean(config, "clientExceptionEnabled", issues).ifPresent(cfg::setClientExceptionEnabled);
         }
         if (config.containsKey("responseBodyEnabled")) {
-            cfg.setResponseBodyEnabled(config.getBoolean("responseBodyEnabled"));
+            readBoolean(config, "responseBodyEnabled", issues).ifPresent(cfg::setResponseBodyEnabled);
         }
         if (config.containsKey("responseHeaderEnabled")) {
-            cfg.setResponseHeaderEnabled(config.getBoolean("responseHeaderEnabled"));
+            readBoolean(config, "responseHeaderEnabled", issues).ifPresent(cfg::setResponseHeaderEnabled);
         }
         JsonObject latency = config.getJsonObject("latency");
         if (latency != null && latency.containsKey("minMilliseconds") && latency.containsKey("maxMilliseconds")) {
-            issues.addAll(cfg.setLatencyRange(latency.getLong("minMilliseconds"), latency.getLong("maxMilliseconds")));
+            Optional<Long> min = readLong(latency, "minMilliseconds", issues);
+            Optional<Long> max = readLong(latency, "maxMilliseconds", issues);
+            if (min.isPresent() && max.isPresent()) {
+                issues.addAll(cfg.setLatencyRange(min.get(), max.get()));
+            }
         }
         JsonObject exception = config.getJsonObject("exception");
         if (exception != null) {
@@ -625,7 +644,7 @@ public class GoblinJsonRPCService {
         JsonObject httpStatus = config.getJsonObject("httpStatus");
         if (httpStatus != null) {
             if (httpStatus.containsKey("code")) {
-                issues.addAll(cfg.setHttpStatusCode(httpStatus.getInteger("code")));
+                readLong(httpStatus, "code", issues).ifPresent(code -> issues.addAll(cfg.setHttpStatusCode(code.intValue())));
             }
             if (httpStatus.containsKey("message")) {
                 cfg.setHttpStatusMessage(httpStatus.getString("message"));
@@ -640,7 +659,8 @@ public class GoblinJsonRPCService {
                 }
             }
             if (body.containsKey("percentage")) {
-                issues.addAll(cfg.setResponseBodyPercentage(body.getInteger("percentage")));
+                readLong(body, "percentage", issues)
+                        .ifPresent(percentage -> issues.addAll(cfg.setResponseBodyPercentage(percentage.intValue())));
             }
         }
         JsonObject headers = config.getJsonObject("headers");
@@ -649,7 +669,7 @@ public class GoblinJsonRPCService {
         }
         applyConfigLayers(cfg, config.getValue("layers"), issues);
         if (config.containsKey("level")) {
-            issues.addAll(cfg.setTargetLevel(config.getInteger("level")));
+            readLong(config, "level", issues).ifPresent(level -> issues.addAll(cfg.setTargetLevel(level.intValue())));
         }
         return issues;
     }
@@ -698,6 +718,42 @@ public class GoblinJsonRPCService {
      * @param headers the header map from the payload
      * @param issues collecting validation warnings
      */
+    /**
+     * Reads a boolean field tolerantly: a JSON boolean, or the strings {@code "true"} / {@code "false"}. Any other value
+     * is reported as an issue and the field is skipped.
+     */
+    private static Optional<Boolean> readBoolean(JsonObject json, String key, List<String> issues) {
+        Object value = json.getValue(key);
+        if (value instanceof Boolean flag) {
+            return Optional.of(flag);
+        }
+        if (value instanceof String text && ("true".equalsIgnoreCase(text.trim()) || "false".equalsIgnoreCase(text.trim()))) {
+            return Optional.of(Boolean.parseBoolean(text.trim()));
+        }
+        issues.add("'" + key + "' must be a boolean, got '" + value + "': skipped");
+        return Optional.empty();
+    }
+
+    /**
+     * Reads an integral field tolerantly: a JSON number, or a numeric string. Any other value is reported as an issue
+     * and the field is skipped.
+     */
+    private static Optional<Long> readLong(JsonObject json, String key, List<String> issues) {
+        Object value = json.getValue(key);
+        if (value instanceof Number number) {
+            return Optional.of(number.longValue());
+        }
+        if (value instanceof String text) {
+            try {
+                return Optional.of(Long.parseLong(text.trim()));
+            } catch (NumberFormatException e) {
+                // reported below
+            }
+        }
+        issues.add("'" + key + "' must be a number, got '" + value + "': skipped");
+        return Optional.empty();
+    }
+
     private static void applyConfigHeaders(MutableAssaultConfig cfg, JsonObject headers, List<String> issues) {
         cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
         for (Map.Entry<String, Object> entry : headers) {
@@ -729,7 +785,13 @@ public class GoblinJsonRPCService {
                         + "characters", name);
                 continue;
             }
-            cfg.setResponseHeader(name, action, safeValue);
+            try {
+                cfg.setResponseHeader(name, action, safeValue);
+            } catch (IllegalArgumentException e) {
+                issues.add(e.getMessage());
+                LOG.warnf("Goblin: skipping response header rule '%s' from applyConfig: %s", name, e.getMessage());
+                continue;
+            }
             LOG.warnf("Goblin: response header rule applied via applyConfig: %s %s value='%s'", name, action, safeValue);
         }
     }
