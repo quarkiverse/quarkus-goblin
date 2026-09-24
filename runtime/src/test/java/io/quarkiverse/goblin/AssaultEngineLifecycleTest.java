@@ -1,0 +1,212 @@
+package io.quarkiverse.goblin;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Optional;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+import io.quarkus.runtime.LaunchMode;
+
+/**
+ * Guards the launch-mode contract of {@link AssaultEngine}: chaos only activates in dev or test mode, a packaged
+ * production application always starts inactive without reading the state file (regression for a NullPointerException
+ * and for silent activation in {@code NORMAL} mode), and the persisted Dev UI state is only restored in dev mode so
+ * integration tests are never contaminated by a local {@code .goblin-state.json}.
+ */
+class AssaultEngineLifecycleTest {
+
+    private Path stateFile;
+
+    @AfterEach
+    void reset() throws IOException {
+        AssaultEngine.setStaticConfig(null);
+        GoblinStatePersistence.overrideStateFile(null);
+        if (stateFile != null) {
+            Files.deleteIfExists(stateFile);
+            stateFile = null;
+        }
+    }
+
+    @Test
+    void normalModeStaysInactiveAndConsumesNeitherStateNorStaticConfig() throws IOException {
+        AssaultEngine engine = new AssaultEngine();
+        writeStateFile();
+
+        engine.initialize(LaunchMode.NORMAL);
+
+        assertFalse(engine.isActive(), "a packaged production app must never run chaos");
+        assertNull(engine.getMutableConfig(),
+                "in NORMAL mode neither the state file nor the static config must be consulted (regression: NPE)");
+    }
+
+    @Test
+    void testModeStartsFromStaticConfigAndIgnoresStateFile() throws IOException {
+        AssaultEngine.setStaticConfig(config(100, 500));
+        AssaultEngine engine = new AssaultEngine();
+        writeStateFile();
+
+        engine.initialize(LaunchMode.TEST);
+
+        assertTrue(engine.isActive(), "quarkus.goblin.enabled defaults to true in test mode");
+        assertNotNull(engine.getMutableConfig());
+        assertEquals(500, engine.getMutableConfig().getLatencyMaxMs(),
+                "the test configuration must come from the static config, not from the local Dev UI state file (max=9000)");
+        assertEquals(100, engine.getMutableConfig().getLatencyMinMs());
+        assertEquals(AssaultProfile.NONE, engine.getMutableConfig().getProfile(),
+                "the SLOW_FAILURE profile saved in the state file must not leak into tests");
+    }
+
+    @Test
+    void devModeRestoresStateFileOverStaticConfig() throws IOException {
+        AssaultEngine.setStaticConfig(config(100, 500));
+        AssaultEngine engine = new AssaultEngine();
+        writeStateFile();
+
+        engine.initialize(LaunchMode.DEVELOPMENT);
+
+        assertTrue(engine.isActive());
+        assertNotNull(engine.getMutableConfig());
+        assertEquals(9000, engine.getMutableConfig().getLatencyMaxMs(),
+                "in dev mode the persisted state file must win over application.properties");
+        assertEquals(AssaultProfile.SLOW_FAILURE, engine.getMutableConfig().getProfile());
+    }
+
+    /**
+     * Writes a state file with values that differ from {@link #config(int, int)} (latency max 500) so each launch mode
+     * can be told apart: latency enabled at a 9000 ms maximum under the {@code SLOW_FAILURE} profile.
+     */
+    private void writeStateFile() throws IOException {
+        stateFile = Files.createTempFile("goblin-state-", ".json");
+        GoblinStatePersistence.overrideStateFile(stateFile.toString());
+        MutableAssaultConfig persisted = new MutableAssaultConfig();
+        persisted.restoreProfile(AssaultProfile.SLOW_FAILURE);
+        persisted.setLatencyEnabled(true);
+        persisted.setLatencyMaxMs(9000);
+        GoblinStatePersistence.save(persisted);
+        stateFile.toFile().deleteOnExit();
+    }
+
+    private static GoblinConfig config(int latencyMin, int latencyMax) {
+        return new GoblinConfig() {
+            @Override
+            public boolean enabled() {
+                return true;
+            }
+
+            @Override
+            public AssaultConfig assault() {
+                return new AssaultConfig() {
+                    @Override
+                    public AssaultType type() {
+                        return AssaultType.LATENCY;
+                    }
+
+                    @Override
+                    public Map<String, HeaderConfig> headers() {
+                        return Map.of();
+                    }
+
+                    @Override
+                    public AssaultProfile profile() {
+                        return AssaultProfile.NONE;
+                    }
+
+                    @Override
+                    public BodyConfig body() {
+                        return new BodyConfig() {
+                            @Override
+                            public ResponseBodyMode mode() {
+                                return ResponseBodyMode.TRUNCATE;
+                            }
+
+                            @Override
+                            public int percentage() {
+                                return 50;
+                            }
+                        };
+                    }
+
+                    @Override
+                    public LatencyConfig latency() {
+                        return new LatencyConfig() {
+                            @Override
+                            public long minMilliseconds() {
+                                return latencyMin;
+                            }
+
+                            @Override
+                            public long maxMilliseconds() {
+                                return latencyMax;
+                            }
+                        };
+                    }
+
+                    @Override
+                    public ExceptionConfig exception() {
+                        return new ExceptionConfig() {
+                            @Override
+                            public String type() {
+                                return "java.lang.RuntimeException";
+                            }
+
+                            @Override
+                            public String message() {
+                                return "Goblin chaos: simulated exception";
+                            }
+                        };
+                    }
+
+                    @Override
+                    public HttpStatusConfig httpStatus() {
+                        return new HttpStatusConfig() {
+                            @Override
+                            public int code() {
+                                return 503;
+                            }
+
+                            @Override
+                            public String message() {
+                                return "Service Unavailable (Goblin chaos)";
+                            }
+                        };
+                    }
+                };
+            }
+
+            @Override
+            public TargetConfig target() {
+                return new TargetConfig() {
+                    @Override
+                    public int level() {
+                        return 100;
+                    }
+
+                    @Override
+                    public Optional<String[]> includePackages() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<String[]> excludePackages() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<String[]> excludeAnnotations() {
+                        return Optional.empty();
+                    }
+                };
+            }
+        };
+    }
+}

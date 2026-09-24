@@ -34,14 +34,33 @@ public class AssaultEngine {
     }
 
     /**
-     * Initialises the engine on startup: restores persisted state when present (assault toggles and parameters only --
-     * the enabled/active flag is never persisted and always comes from {@code quarkus.goblin.enabled}), otherwise builds
-     * the mutable config from the static configuration, then logs the active assaults.
+     * Initialises the engine on startup, delegating to {@link #initialize(LaunchMode)} with the current launch mode.
      *
      * @param event the Quarkus startup event
      */
     void onStart(@Observes StartupEvent event) {
-        MutableAssaultConfig persisted = GoblinStatePersistence.load();
+        initialize(LaunchMode.current());
+    }
+
+    /**
+     * Initialises the engine for the given launch mode.
+     * <p>
+     * Chaos only ever activates in dev or test mode: in any other launch mode -- notably a packaged production
+     * application -- the engine stays inactive and neither the persisted state file nor the static configuration is
+     * consulted. In dev mode a previously persisted state file (assault toggles and parameters only -- the
+     * enabled/active flag is never persisted and always comes from {@code quarkus.goblin.enabled}) is restored when
+     * present, otherwise the mutable config is built from the static configuration. In test mode the state file is
+     * deliberately ignored so integration tests always start from {@code application.properties} and can never be
+     * contaminated by local Dev UI state. Package-private for unit tests.
+     *
+     * @param mode the launch mode the application started under
+     */
+    void initialize(LaunchMode mode) {
+        if (mode != LaunchMode.DEVELOPMENT && mode != LaunchMode.TEST) {
+            this.active = false;
+            return;
+        }
+        MutableAssaultConfig persisted = mode == LaunchMode.DEVELOPMENT ? GoblinStatePersistence.load() : null;
         if (persisted != null) {
             this.mutableConfig = persisted;
             LOG.info("Loaded previous Goblin state from .goblin-state.json");
@@ -50,7 +69,7 @@ public class AssaultEngine {
         }
         this.active = staticConfig == null || staticConfig.enabled();
         this.mutableConfig.validateAndFix();
-        if (LaunchMode.current() == LaunchMode.DEVELOPMENT) {
+        if (mode == LaunchMode.DEVELOPMENT) {
             this.mutableConfig.setOnChange(this::persistConfig);
         }
         if (active) {
