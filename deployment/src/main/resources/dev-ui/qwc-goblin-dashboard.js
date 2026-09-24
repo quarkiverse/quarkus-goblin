@@ -326,6 +326,16 @@ export class QwcGoblinDashboard extends LitElement {
 
     static HTTP_PICKS = [500, 503, 429, 404];
 
+    static LAYER_ORDER = ['DATABASE', 'MESSAGING', 'SERVICE', 'HTTP_OUT', 'HTTP_IN'];
+
+    static LAYERS = [
+        {value: 'DATABASE', label: 'Database', hint: 'Persistence layer. Assault hook not implemented yet (issue #54, phase 2).', soon: true},
+        {value: 'MESSAGING', label: 'Messaging', hint: 'Event bus / messaging. Assault hook not implemented yet (issue #54, phase 3).', soon: true},
+        {value: 'SERVICE', label: 'Service', hint: 'Latency and exceptions injected by GoblinServiceInterceptor on application beans, inside MicroProfile Fault Tolerance.'},
+        {value: 'HTTP_OUT', label: 'Outbound HTTP', hint: 'Latency and exceptions on outgoing REST Client / WebClient calls; each call rolls its own gate.'},
+        {value: 'HTTP_IN', label: 'Inbound REST', hint: 'Server-side latency, exceptions, HTTP status, dependency, body and header assaults.'},
+    ];
+
     static properties = {
         _config: {state: true},
         _status: {state: true},
@@ -437,6 +447,9 @@ export class QwcGoblinDashboard extends LitElement {
         }));
         return {
             level: String(result.level),
+            layers: Array.isArray(result.layers) && result.layers.length
+                ? result.layers
+                : ['HTTP_IN', 'HTTP_OUT'],
             latency: {
                 min: String(latency.minMilliseconds),
                 max: String(latency.maxMilliseconds),
@@ -609,6 +622,33 @@ export class QwcGoblinDashboard extends LitElement {
                 this._showToast(`${key.replace('Enabled', '')} ${enabled ? 'enabled' : 'disabled'}`, enabled ? '' : 'info');
             }
         });
+    }
+
+    _armedLayers() {
+        const c = this._config;
+        const raw = c && c.layers;
+        return Array.isArray(raw) && raw.length ? raw.filter(Boolean) : ['HTTP_IN', 'HTTP_OUT'];
+    }
+
+    _layerEnabled(layer) {
+        return this._armedLayers().includes(layer);
+    }
+
+    _toggleLayer(layer) {
+        if (!this._config) {
+            return;
+        }
+        const current = this._armedLayers();
+        const next = current.includes(layer) ? current.filter(l => l !== layer) : [...current, layer];
+        this.jsonRpc.applyConfig({config: {layers: next}}).then(r => {
+            if (r.result && r.result.ok) {
+                this._applyConfigResult(r.result);
+                const armed = r.result.layers && r.result.layers.includes(layer);
+                this._showToast(`${layer} ${armed ? 'armed' : 'disarmed'}`, armed ? '' : 'info');
+            } else {
+                this._showToast(r.result && r.result.error || 'Layer update failed', 'error');
+            }
+        }).catch(() => this._showToast('Layer update failed', 'error'));
     }
 
     _saveLatency() {
@@ -1087,6 +1127,35 @@ export class QwcGoblinDashboard extends LitElement {
             ` : ''}
 
             ${c ? html`
+
+                <div class="section">
+                    <h4>Chaos layers
+                        <span class="helper">Attack surface of a request, from the deepest to the shallowest layer. On each
+                            request the level gate (${c.level}%) is rolled independently for every armed layer and the
+                            <em>deepest</em> armed layer whose draw passes wins: inbound servers then defer to it, so e.g.
+                            arming Service shadows the same request being assaulted at the REST boundary.</span>
+                    </h4>
+                    ${QwcGoblinDashboard.LAYERS.map(layer => html`
+                    <div class="assault-toggle ${this._layerEnabled(layer.value) ? 'enabled' : ''}"
+                         ?aria-disabled="${layer.soon}"
+                         title="${layer.hint}">
+                        <label class="switch" @click="${e => e.stopPropagation()}">
+                            <input type="checkbox" role="switch" aria-label="${layer.label} layer"
+                                   ?checked="${this._layerEnabled(layer.value)}"
+                                   ?disabled="${layer.soon}"
+                                   @change="${() => this._toggleLayer(layer.value)}">
+                            <span class="slider" aria-hidden="true"></span>
+                        </label>
+                        <div>
+                            <div class="label">${layer.label}</div>
+                            <div class="desc">${layer.hint}</div>
+                        </div>
+                        ${layer.soon ? html`<span class="priority">soon</span>` : ''}
+                    </div>
+                    `)}
+                    <div class="helper">Unchecking every layer re-arms the legacy default (Inbound REST + Outbound HTTP).
+                        Database and Messaging are reserved for future assault hooks and never fire today.</div>
+                </div>
 
                 <div class="section">
                     <h4>Profile</h4>

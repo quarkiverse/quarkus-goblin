@@ -30,6 +30,9 @@ public class SampleResource {
     SampleClient sampleClient;
 
     @Inject
+    SampleService sampleService;
+
+    @Inject
     Vertx vertx;
 
     private WebClient webClient;
@@ -56,6 +59,42 @@ public class SampleResource {
     @Path("/unstable")
     public String unstable() {
         return "this endpoint should fail when chaos injects exceptions";
+    }
+
+    @GET
+    @Path("/service/hello")
+    public String serviceHello() {
+        return sampleService.hello();
+    }
+
+    @GET
+    @Path("/service/slow")
+    public String serviceSlow() throws InterruptedException {
+        return sampleService.slow();
+    }
+
+    @GET
+    @Path("/service/flaky")
+    public String serviceFlaky() {
+        return sampleService.flaky();
+    }
+
+    @GET
+    @Path("/service/fallback")
+    public String serviceFallback() {
+        return sampleService.fallbackable();
+    }
+
+    @GET
+    @Path("/service/retry-fallback")
+    public String serviceRetryFallback() {
+        return sampleService.retryThenFallback();
+    }
+
+    @GET
+    @Path("/service/timeout")
+    public String serviceTimeout() {
+        return sampleService.timed();
     }
 
     @GET

@@ -46,12 +46,19 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         if (!engine.isActive()) {
             return;
         }
-        boolean gated = engine.shouldAssault();
-        requestContext.setProperty(GATED_PROPERTY, gated);
-        if (!gated) {
+        ChaosLayer assaultLayer = engine.resolveAssaultLayer();
+        requestContext.setProperty(GATED_PROPERTY, assaultLayer == ChaosLayer.HTTP_IN);
+        ChaosRequestContext.setAssaultLayer(assaultLayer);
+        if (LOG.isDebugEnabled()) {
+            MutableAssaultConfig cfg = engine.getMutableConfig();
+            if (cfg != null) {
+                LOG.debugf("Goblin: request resolved to %s layer (level %d) for %s",
+                        assaultLayer, cfg.getTargetLevel(), describeMethod());
+            }
+        }
+        if (assaultLayer != ChaosLayer.HTTP_IN) {
             return;
         }
-
         if (!isTargetEligible()) {
             return;
         }
@@ -75,6 +82,7 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
             throws IOException {
+        ChaosRequestContext.clear();
         if (!engine.isActive()) {
             return;
         }

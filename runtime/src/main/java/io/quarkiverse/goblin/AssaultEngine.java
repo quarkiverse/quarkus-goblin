@@ -114,17 +114,69 @@ public class AssaultEngine {
     }
 
     /**
+     * Decides which single layer is armed for the current request, resolving ascending (from the bottom of the stack toward
+     * REST): every armed, actionable layer independently rolls the target-level gate, and the <em>deepest</em> layer whose
+     * draw passes becomes the armed layer for this request, shadowing any shallower layer whose own draw would also have
+     * passed. The draw is redone for every request, never cached across requests, so the fault distribution stays live and
+     * matches the per-request {@code shouldAssault()} behaviour of the legacy single-layer engine.
+     * <p>
+     * {@link ChaosLayer#HTTP_OUT} is deliberately excluded: outbound calls gate per call (see
+     * {@link #shouldAssaultClient()}) rather than per inbound request. Layers without a backing assault hook yet
+     * ({@link ChaosLayer#DATABASE}, {@link ChaosLayer#MESSAGING}) are never selected so arming them today degrades to
+     * "the deepest implemented layer wins" instead of silently swallowing the fault.
+     *
+     * @return the armed layer for this request, or {@code null} when no armed layer passed its draw
+     */
+    public ChaosLayer resolveAssaultLayer() {
+        if (!active || mutableConfig == null || !mutableConfig.hasAnyAssaultEnabled()) {
+            return null;
+        }
+        for (ChaosLayer layer : ChaosLayer.values()) {
+            if (layer == ChaosLayer.HTTP_OUT || !isLayerActionable(layer, mutableConfig)) {
+                continue;
+            }
+            if (levelGate()) {
+                return layer;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns whether the given layer both has at least one backing assault armed and is implemented as an assault hook.
+     *
+     * @param layer the layer to test
+     * @param config the active configuration
+     * @return {@code true} when a fault could actually fire at that layer
+     */
+    private static boolean isLayerActionable(ChaosLayer layer, MutableAssaultConfig config) {
+        if (!config.isLayerEnabled(layer)) {
+            return false;
+        }
+        return switch (layer) {
+            // no assault hook yet (issue #54 phases 2-3): never armed, so the draw falls through to SERVICE/HTTP_IN
+            case DATABASE, MESSAGING -> false;
+            // the service interceptor only injects latency and exceptions
+            case SERVICE -> config.isLatencyEnabled() || config.isExceptionEnabled();
+            case HTTP_IN -> config.hasAnyAssaultEnabled();
+            case HTTP_OUT -> config.hasAnyClientAssaultEnabled();
+        };
+    }
+
+    /**
      * Decides whether an outbound REST Client call should be assaulted, mirroring {@link #shouldAssault()} for the
      * client side.
      * <p>
-     * Client-side assaults only fire when at least one client assault toggle is enabled and the target level gate
-     * passes; the server-side toggles are deliberately ignored so a call is never delayed or failed unless the
-     * client-side assaults were explicitly enabled.
+     * Client-side assaults only fire when the {@link ChaosLayer#HTTP_OUT} layer is armed, at least one client assault toggle
+     * is enabled and the target level gate passes; the server-side toggles are deliberately ignored so a call is never
+     * delayed or failed unless the client-side assaults were explicitly enabled. The decision is per call (each outgoing
+     * call rolls its own gate) rather than per inbound request.
      *
      * @return {@code true} when the outbound call is eligible for a client-side assault
      */
     public boolean shouldAssaultClient() {
-        if (!active || mutableConfig == null || !mutableConfig.hasAnyClientAssaultEnabled()) {
+        if (!active || mutableConfig == null || !mutableConfig.isLayerEnabled(ChaosLayer.HTTP_OUT)
+                || !mutableConfig.hasAnyClientAssaultEnabled()) {
             return false;
         }
         return levelGate();
@@ -181,6 +233,7 @@ public class AssaultEngine {
     public void recordAssault(String method, String type, long latencyMs) {
         String configSnapshot = mutableConfig != null ? mutableConfig.describeAssaults() : "no assault enabled";
         AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, configSnapshot);
+        LOG.debugf("Goblin: history += %s type=%s latencyMs=%d (%s)", method, type, latencyMs, configSnapshot);
         history.addLast(record);
         while (history.size() > MAX_HISTORY) {
             history.pollFirst();

@@ -4,9 +4,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.jboss.logging.Logger;
 
@@ -87,6 +89,7 @@ public final class GoblinStatePersistence {
         map.put("httpStatusCode", config.getHttpStatusCode());
         map.put("httpStatusMessage", config.getHttpStatusMessage());
         map.put("targetLevel", config.getTargetLevel());
+        map.put("layers", encodeLayers(config.getLayers()));
         return mapToJson(map);
     }
 
@@ -120,6 +123,7 @@ public final class GoblinStatePersistence {
         config.setHttpStatusCode(resolveInt(map, "httpStatusCode", "503", defaulted));
         config.setHttpStatusMessage(resolve(map, "httpStatusMessage", "Service Unavailable (Goblin chaos)", defaulted));
         config.setTargetLevel(resolveInt(map, "targetLevel", "100", defaulted));
+        config.setLayers(parseLayers(resolve(map, "layers", defaultLayers(), defaulted)));
         if (!defaulted.isEmpty()) {
             LOG.infof("Restored missing fields from defaults: %s", String.join(", ", defaulted));
         }
@@ -133,6 +137,50 @@ public final class GoblinStatePersistence {
             return defaultValue;
         }
         return val;
+    }
+
+    /**
+     * Encodes the armed layers as a comma-separated list (e.g. {@code "HTTP_IN,HTTP_OUT"}), which the flat state-file
+     * parser stores as a plain quoted string.
+     *
+     * @param layers the armed layers
+     * @return the comma-separated layer names, in ascending declaration order
+     */
+    private static String encodeLayers(Set<ChaosLayer> layers) {
+        return layers.stream().map(ChaosLayer::name).collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private static String defaultLayers() {
+        return String.join(",", ChaosLayer.HTTP_IN.name(), ChaosLayer.HTTP_OUT.name());
+    }
+
+    /**
+     * Restores the armed layers from a comma-separated list, skipping unknown labels with a warning and defaulting to
+     * {@code HTTP_IN,HTTP_OUT} when the value is empty.
+     *
+     * @param encoded the persisted layer list, or {@code null}
+     * @return the restored layer set
+     */
+    private static Set<ChaosLayer> parseLayers(String encoded) {
+        if (encoded == null || encoded.isBlank()) {
+            return EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT);
+        }
+        Set<ChaosLayer> result = EnumSet.noneOf(ChaosLayer.class);
+        for (String token : encoded.split(",")) {
+            String name = token.trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            try {
+                result.add(ChaosLayer.valueOf(name.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                LOG.warnf("Invalid chaos layer '%s' in state file, skipping it", name);
+            }
+        }
+        if (result.isEmpty()) {
+            return EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT);
+        }
+        return result;
     }
 
     /**

@@ -1,8 +1,11 @@
 package io.quarkiverse.goblin;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.jboss.logging.Logger;
@@ -58,6 +61,11 @@ public class MutableAssaultConfig {
     }
 
     private final Map<String, HeaderRule> responseHeaders = new ConcurrentHashMap<>();
+
+    /**
+     * The layers armed for assault, defaulting to the legacy behaviour: inbound REST endpoints plus outbound HTTP calls.
+     */
+    private volatile Set<ChaosLayer> layers = EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT);
 
     /**
      * Builds a mutable copy of the configuration from the static {@link GoblinConfig}, applying profile defaults when a
@@ -626,6 +634,54 @@ public class MutableAssaultConfig {
         return targetLevel;
     }
 
+    /**
+     * @return an unmodifiable snapshot of the armed layers
+     */
+    public Set<ChaosLayer> getLayers() {
+        return EnumSet.copyOf(layers);
+    }
+
+    /**
+     * Replaces the armed layer set. A {@code null} or empty collection restores the legacy default of inbound and
+     * outbound HTTP.
+     *
+     * @param layers the layers to arm, or {@code null} to restore the default
+     */
+    public void setLayers(Collection<ChaosLayer> layers) {
+        this.layers = layers == null || layers.isEmpty()
+                ? EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT)
+                : EnumSet.copyOf(layers);
+        notifyChange();
+    }
+
+    /**
+     * Arms or disarms a single layer, leaving the others untouched.
+     *
+     * @param layer the layer to toggle
+     * @param enabled {@code true} to arm the layer, {@code false} to disarm it
+     */
+    public void setLayerEnabled(ChaosLayer layer, boolean enabled) {
+        if (layer == null) {
+            return;
+        }
+        Set<ChaosLayer> updated = EnumSet.copyOf(layers);
+        if (enabled) {
+            updated.add(layer);
+        } else {
+            updated.remove(layer);
+        }
+        this.layers = updated;
+        notifyChange();
+    }
+
+    /**
+     * @param layer the layer to test
+     * @return whether the given layer is armed
+     */
+    public boolean isLayerEnabled(ChaosLayer layer) {
+        return layer != null && layers.contains(layer);
+    }
+
     public List<String> setTargetLevel(int targetLevel) {
         this.targetLevel = targetLevel;
         List<String> issues = validateAndFix();
@@ -669,6 +725,7 @@ public class MutableAssaultConfig {
             responseBodyMode = ResponseBodyMode.TRUNCATE;
             responseBodyPercentage = 50;
             targetLevel = 100;
+            layers = EnumSet.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT);
         }
         List<String> issues = validateAndFix();
         notifyChange();

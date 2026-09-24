@@ -2,8 +2,10 @@ package io.quarkiverse.goblin;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -332,6 +334,68 @@ class MutableAssaultConfigTest {
         config.setClientLatencyEnabled(true);
 
         assertFalse(config.hasAnyAssaultEnabled(), "client toggles must not count towards server assault check");
+    }
+
+    @Test
+    void layersDefaultToHttpInAndHttpOut() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_IN));
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_OUT));
+        assertFalse(config.isLayerEnabled(ChaosLayer.SERVICE));
+    }
+
+    @Test
+    void setLayersReplacesTheArmedSet() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN));
+        assertEquals(Set.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_IN), config.getLayers());
+    }
+
+    @Test
+    void setLayersRestoresDefaultWhenNullOrEmpty() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(ChaosLayer.SERVICE));
+
+        config.setLayers(List.of());
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setLayers(null);
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
+    }
+
+    @Test
+    void getLayersReturnsAnIsolatedSnapshot() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.getLayers().add(ChaosLayer.SERVICE);
+        assertFalse(config.isLayerEnabled(ChaosLayer.SERVICE),
+                "mutating the returned set must not affect the configuration");
+    }
+
+    @Test
+    void setLayerEnabledTogglesASingleLayer() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        assertTrue(config.isLayerEnabled(ChaosLayer.SERVICE));
+        assertTrue(config.isLayerEnabled(ChaosLayer.HTTP_IN), "other layers must stay armed");
+
+        config.setLayerEnabled(ChaosLayer.HTTP_IN, false);
+        assertFalse(config.isLayerEnabled(ChaosLayer.HTTP_IN));
+
+        config.setLayerEnabled(ChaosLayer.SERVICE, false);
+        assertFalse(config.isLayerEnabled(ChaosLayer.SERVICE));
+        assertFalse(config.isLayerEnabled(null));
+    }
+
+    @Test
+    void resetToDefaultsRestoresHttpInAndHttpOutLayers() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setLayerEnabled(ChaosLayer.HTTP_IN, false);
+        config.setLayerEnabled(ChaosLayer.HTTP_OUT, false);
+        config.resetToDefaults();
+        assertEquals(Set.of(ChaosLayer.HTTP_IN, ChaosLayer.HTTP_OUT), config.getLayers());
     }
 
     @Test

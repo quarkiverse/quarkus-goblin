@@ -206,6 +206,128 @@ class AssaultEngineTest {
     }
 
     @Test
+    void shouldAssaultClientRequiresHttpOutLayerArmed() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setClientExceptionEnabled(true);
+        config.setTargetLevel(100);
+        config.setLayerEnabled(ChaosLayer.HTTP_OUT, false);
+        engine.setMutableConfigForTests(config);
+
+        assertFalse(engine.shouldAssaultClient(),
+                "client assaults must not fire when the HTTP_OUT layer is disarmed, even at level 100");
+    }
+
+    @Test
+    void resolveAssaultLayerNullWhileEngineInactive() {
+        AssaultEngine engine = new AssaultEngine();
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertNull(engine.resolveAssaultLayer(), "an inactive engine must never resolve a layer");
+    }
+
+    @Test
+    void resolveAssaultLayerNullWhenNoServerAssaultArmed() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(false);
+        config.setDependencyDegradationEnabled(false);
+        config.setClientLatencyEnabled(true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertNull(engine.resolveAssaultLayer(),
+                "only client-side toggles cannot arm any inbound layer");
+    }
+
+    @Test
+    void resolveAssaultLayerSelectsHttpInWithDefaultLayersAtLevel100() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertEquals(ChaosLayer.HTTP_IN, engine.resolveAssaultLayer(),
+                "with only HTTP_IN actionable and a guaranteed gate, HTTP_IN must win");
+    }
+
+    @Test
+    void resolveAssaultLayerNullWhenNoActionableLayerArmed() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.HTTP_IN, false);
+        config.setLayerEnabled(ChaosLayer.HTTP_OUT, false);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertNull(engine.resolveAssaultLayer());
+    }
+
+    @Test
+    void resolveAssaultLayerDeepestWinnerAtLevel100() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertEquals(ChaosLayer.SERVICE, engine.resolveAssaultLayer(),
+                "the deepest armed and actionable layer must win at level 100, shadowing HTTP_IN");
+    }
+
+    @Test
+    void resolveAssaultLayerSkipsNotYetImplementedLayers() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.DATABASE, true);
+        config.setLayerEnabled(ChaosLayer.MESSAGING, true);
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertEquals(ChaosLayer.SERVICE, engine.resolveAssaultLayer(),
+                "DATABASE and MESSAGING have no assault hook yet and must be skipped in favour of SERVICE");
+    }
+
+    @Test
+    void resolveAssaultLayerSkipsServiceWhenNotActionable() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setLatencyEnabled(false);
+        config.setExceptionEnabled(false);
+        config.setHttpStatusEnabled(true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+
+        assertEquals(ChaosLayer.HTTP_IN, engine.resolveAssaultLayer(),
+                "an armed SERVICE layer without latency or exception is not actionable and must fall through to HTTP_IN");
+    }
+
+    @Test
+    void resolveAssaultLayerNullWhenGateFailsAtLevelZero() throws Exception {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayerEnabled(ChaosLayer.SERVICE, true);
+        config.setTargetLevel(0);
+        engine.setMutableConfigForTests(config);
+
+        assertNull(engine.resolveAssaultLayer(), "a failed gate applies to every layer in the request");
+    }
+
+    @Test
     void failingObserverDoesNotBreakTheAssaultFlow() {
         AssaultEngine engine = new AssaultEngine();
         List<AssaultEngine.AssaultRecord> received = new ArrayList<>();

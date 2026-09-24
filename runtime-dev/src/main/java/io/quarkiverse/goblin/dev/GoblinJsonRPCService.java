@@ -1,8 +1,10 @@
 package io.quarkiverse.goblin.dev;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,6 +14,7 @@ import org.jboss.logging.Logger;
 
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
+import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseBodyMode;
@@ -37,6 +40,7 @@ public class GoblinJsonRPCService {
         return new JsonObject()
                 .put("active", engine.isActive())
                 .put("profile", cfg != null ? cfg.getProfile().name() : "NONE")
+                .put("layers", cfg != null ? layersJson(cfg) : new JsonArray())
                 .put("latencyEnabled", cfg != null && cfg.isLatencyEnabled())
                 .put("exceptionEnabled", cfg != null && cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg != null && cfg.isHttpStatusEnabled())
@@ -114,6 +118,7 @@ public class GoblinJsonRPCService {
 
         return new JsonObject()
                 .put("profile", cfg.getProfile().name())
+                .put("layers", layersJson(cfg))
                 .put("latencyEnabled", cfg.isLatencyEnabled())
                 .put("exceptionEnabled", cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg.isHttpStatusEnabled())
@@ -329,6 +334,18 @@ public class GoblinJsonRPCService {
         cfg.removeResponseHeader(trimmed);
         LOG.warnf("Goblin response header removed: %s", trimmed);
         return configJson(cfg).put("ok", true);
+    }
+
+    /**
+     * Serialises the armed layers for the Dev UI, in ascending declaration order.
+     *
+     * @param cfg the current mutable assault configuration
+     * @return the armed layer names
+     */
+    private static JsonArray layersJson(MutableAssaultConfig cfg) {
+        JsonArray layers = new JsonArray();
+        cfg.getLayers().forEach(layer -> layers.add(layer.name()));
+        return layers;
     }
 
     /**
@@ -648,10 +665,48 @@ public class GoblinJsonRPCService {
         if (headers != null) {
             applyConfigHeaders(cfg, headers, issues);
         }
+        applyConfigLayers(cfg, config.getValue("layers"), issues);
         if (config.containsKey("level")) {
             issues.addAll(cfg.setTargetLevel(config.getInteger("level")));
         }
         return issues;
+    }
+
+    /**
+     * Replaces the armed layer set from an {@code applyConfig} payload. The value may arrive as a JSON array or as a
+     * plain list depending on the transport's deserialization strategy. Unknown labels are skipped and reported as an
+     * issue; an empty array restores the default layers.
+     *
+     * @param cfg the configuration to populate
+     * @param raw the {@code layers} value, or {@code null} when absent
+     * @param issues collecting validation warnings
+     */
+    private static void applyConfigLayers(MutableAssaultConfig cfg, Object raw, List<String> issues) {
+        if (raw == null) {
+            return;
+        }
+        List<?> items;
+        if (raw instanceof List<?> list) {
+            items = list;
+        } else if (raw instanceof JsonArray array) {
+            items = array.getList();
+        } else {
+            issues.add("Chaos layers must be provided as an array of layer names");
+            LOG.warnf("Goblin: skipping layers from applyConfig: not an array (%s)", raw.getClass().getSimpleName());
+            return;
+        }
+        Set<ChaosLayer> parsed = new LinkedHashSet<>();
+        for (Object item : items) {
+            if (item instanceof String name) {
+                try {
+                    parsed.add(ChaosLayer.valueOf(name.trim().toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    issues.add("Unknown chaos layer '" + name + "'");
+                    LOG.warnf("Goblin: skipping layer '%s' from applyConfig", name);
+                }
+            }
+        }
+        cfg.setLayers(parsed);
     }
 
     /**
