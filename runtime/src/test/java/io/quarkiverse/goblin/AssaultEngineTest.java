@@ -6,12 +6,14 @@ import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 class AssaultEngineTest {
@@ -285,7 +287,7 @@ class AssaultEngineTest {
     }
 
     @Test
-    void resolveAssaultLayerSkipsNotYetImplementedLayers() throws Exception {
+    void resolveAssaultLayerSkipsLayersWhoseHookIsNotInstalled() throws Exception {
         AssaultEngine engine = new AssaultEngine();
         engine.setActive(true);
         MutableAssaultConfig config = new MutableAssaultConfig();
@@ -296,7 +298,7 @@ class AssaultEngineTest {
         engine.setMutableConfigForTests(config);
 
         assertEquals(ChaosLayer.SERVICE, engine.resolveAssaultLayer(),
-                "DATABASE and MESSAGING have no assault hook yet and must be skipped in favour of SERVICE");
+                "without a datasource nor messaging, DATABASE and MESSAGING must be skipped in favour of SERVICE");
     }
 
     @Test
@@ -463,5 +465,77 @@ class AssaultEngineTest {
         @Override
         public void close() {
         }
+    }
+
+    @AfterEach
+    void resetOptionalHooks() {
+        AssaultEngine.setOptionalHooks(Set.of());
+    }
+
+    private static AssaultEngine engineWithLayers(ChaosLayer... layers) {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setActive(true);
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setLayers(List.of(layers));
+        config.setExceptionEnabled(true);
+        config.setTargetLevel(100);
+        engine.setMutableConfigForTests(config);
+        return engine;
+    }
+
+    @Test
+    void optionalHooksAreOnlyAvailableOnceDeclared() {
+        AssaultEngine engine = new AssaultEngine();
+        assertFalse(engine.isLayerAvailable(ChaosLayer.DATABASE));
+        assertFalse(engine.isLayerAvailable(ChaosLayer.MESSAGING));
+        assertTrue(engine.isLayerAvailable(ChaosLayer.SERVICE));
+
+        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE));
+
+        assertTrue(engine.isLayerAvailable(ChaosLayer.DATABASE));
+        assertFalse(engine.isLayerAvailable(ChaosLayer.MESSAGING));
+        assertEquals(Set.of(ChaosLayer.DATABASE, ChaosLayer.SERVICE, ChaosLayer.HTTP_OUT, ChaosLayer.HTTP_IN),
+                engine.getAvailableLayers());
+    }
+
+    @Test
+    void databaseWinsAnHttpRequestOnceItsHookIsInstalled() {
+        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE));
+        AssaultEngine engine = engineWithLayers(ChaosLayer.DATABASE, ChaosLayer.SERVICE, ChaosLayer.HTTP_IN);
+
+        assertEquals(ChaosLayer.DATABASE, engine.resolveAssaultLayer());
+    }
+
+    @Test
+    void anHttpRequestNeverResolvesToMessaging() {
+        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.MESSAGING));
+        AssaultEngine engine = engineWithLayers(ChaosLayer.MESSAGING, ChaosLayer.HTTP_IN);
+
+        assertEquals(ChaosLayer.HTTP_IN, engine.resolveAssaultLayer(),
+                "MESSAGING is a consumer entry point: an HTTP request falls through to the next layer");
+    }
+
+    @Test
+    void aConsumedMessageResolvesAmongDatabaseMessagingAndService() {
+        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE, ChaosLayer.MESSAGING));
+
+        assertEquals(ChaosLayer.MESSAGING,
+                engineWithLayers(ChaosLayer.MESSAGING, ChaosLayer.SERVICE).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS));
+        assertEquals(ChaosLayer.DATABASE,
+                engineWithLayers(ChaosLayer.DATABASE, ChaosLayer.MESSAGING).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS));
+        assertNull(engineWithLayers(ChaosLayer.HTTP_IN).resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS),
+                "HTTP_IN never applies to a consumed message");
+    }
+
+    @Test
+    void optionalLayersOnlyInjectLatencyAndExceptions() {
+        AssaultEngine.setOptionalHooks(Set.of(ChaosLayer.DATABASE));
+        AssaultEngine engine = engineWithLayers(ChaosLayer.DATABASE, ChaosLayer.HTTP_IN);
+        engine.getMutableConfig().setExceptionEnabled(false);
+        engine.getMutableConfig().setLatencyEnabled(false);
+        engine.getMutableConfig().setHttpStatusEnabled(true);
+
+        assertEquals(ChaosLayer.HTTP_IN, engine.resolveAssaultLayer(),
+                "an HTTP status assault cannot fire at the database layer");
     }
 }

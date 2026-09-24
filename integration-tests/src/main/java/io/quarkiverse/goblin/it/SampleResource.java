@@ -110,6 +110,18 @@ public class SampleResource {
     }
 
     @GET
+    @Path("/db/ping")
+    public String dbPing() {
+        return sampleService.databasePing();
+    }
+
+    @GET
+    @Path("/db/retry")
+    public String dbRetry() {
+        return sampleService.databasePingWithRetry();
+    }
+
+    @GET
     @Path("/proxy")
     public String proxyHello() {
         return sampleClient.hello();

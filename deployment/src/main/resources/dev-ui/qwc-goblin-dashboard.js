@@ -329,8 +329,8 @@ export class QwcGoblinDashboard extends LitElement {
     static LAYER_ORDER = ['DATABASE', 'MESSAGING', 'SERVICE', 'HTTP_OUT', 'HTTP_IN'];
 
     static LAYERS = [
-        {value: 'DATABASE', label: 'Database', hint: 'Persistence layer. Assault hook not implemented yet (issue #54, phase 2).', soon: true},
-        {value: 'MESSAGING', label: 'Messaging', hint: 'Event bus / messaging. Assault hook not implemented yet (issue #54, phase 3).', soon: true},
+        {value: 'DATABASE', label: 'Database', hint: 'Latency and exceptions on JDBC connection acquisition (Agroal pool interceptor, below Hibernate / Panache / JDBC).', requires: 'a JDBC datasource (quarkus-agroal)'},
+        {value: 'MESSAGING', label: 'Messaging', hint: 'Latency and exceptions on @Incoming consumers, outside Fault Tolerance: handled by the messaging failure strategy. Each consumed message rolls its own layer.', requires: 'quarkus-messaging'},
         {value: 'SERVICE', label: 'Service', hint: 'Latency and exceptions injected by GoblinServiceInterceptor on application beans, inside MicroProfile Fault Tolerance.'},
         {value: 'HTTP_OUT', label: 'Outbound HTTP', hint: 'Latency and exceptions on outgoing REST Client / WebClient calls; each call rolls its own gate.'},
         {value: 'HTTP_IN', label: 'Inbound REST', hint: 'Server-side latency, exceptions, HTTP status, dependency, body and header assaults.'},
@@ -632,6 +632,12 @@ export class QwcGoblinDashboard extends LitElement {
 
     _layerEnabled(layer) {
         return this._armedLayers().includes(layer);
+    }
+
+    _layerAvailable(layer) {
+        const c = this._config;
+        const available = c && Array.isArray(c.availableLayers) ? c.availableLayers : ['SERVICE', 'HTTP_OUT', 'HTTP_IN'];
+        return available.includes(layer);
     }
 
     _toggleLayer(layer) {
@@ -1137,12 +1143,12 @@ export class QwcGoblinDashboard extends LitElement {
                     </h4>
                     ${QwcGoblinDashboard.LAYERS.map(layer => html`
                     <div class="assault-toggle ${this._layerEnabled(layer.value) ? 'enabled' : ''}"
-                         ?aria-disabled="${layer.soon}"
-                         title="${layer.hint}">
+                         ?aria-disabled="${!this._layerAvailable(layer.value)}"
+                         title="${this._layerAvailable(layer.value) ? layer.hint : 'Requires ' + layer.requires}">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="${layer.label} layer"
                                    ?checked="${this._layerEnabled(layer.value)}"
-                                   ?disabled="${layer.soon}"
+                                   ?disabled="${!this._layerAvailable(layer.value)}"
                                    @change="${() => this._toggleLayer(layer.value)}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1150,11 +1156,12 @@ export class QwcGoblinDashboard extends LitElement {
                             <div class="label">${layer.label}</div>
                             <div class="desc">${layer.hint}</div>
                         </div>
-                        ${layer.soon ? html`<span class="priority">soon</span>` : ''}
+                        ${this._layerAvailable(layer.value) ? '' : html`<span class="priority">unavailable</span>`}
                     </div>
                     `)}
                     <div class="helper">Unchecking every layer re-arms the legacy default (Inbound REST + Outbound HTTP).
-                        Database and Messaging are reserved for future assault hooks and never fire today.</div>
+                        Database requires a JDBC datasource and Messaging requires quarkus-messaging; an unavailable
+                        layer never fires. Outbound HTTP rolls its own gate on every outgoing call.</div>
                 </div>
 
                 <div class="section">

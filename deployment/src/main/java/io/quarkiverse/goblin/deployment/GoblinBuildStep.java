@@ -19,7 +19,7 @@ import io.quarkiverse.goblin.service.GoblinServiceAssault;
 import io.quarkiverse.goblin.service.GoblinServiceInterceptor;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
-import io.quarkus.deployment.IsNormal;
+import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.annotations.ExecutionTime;
@@ -68,7 +68,7 @@ public class GoblinBuildStep {
      * still ship in the runtime jar; their engine stays inactive outside dev/test.
      */
 
-    @BuildStep(onlyIfNot = IsNormal.class)
+    @BuildStep(onlyIfNot = IsProduction.class)
     void registerAssaultBeans(CombinedIndexBuildItem combinedIndex,
             BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         AdditionalBeanBuildItem.Builder builder = AdditionalBeanBuildItem.builder().setUnremovable();
@@ -85,7 +85,7 @@ public class GoblinBuildStep {
      *
      * @param additionalBeans producer for additional bean registrations
      */
-    @BuildStep(onlyIfNot = IsNormal.class)
+    @BuildStep(onlyIfNot = IsProduction.class)
     void registerClientFilterBean(BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         additionalBeans.produce(AdditionalBeanBuildItem.builder()
                 .setUnremovable()
@@ -113,7 +113,7 @@ public class GoblinBuildStep {
      * @param applicationArchives access to the application's root archive index
      * @param config the build-time Goblin configuration
      */
-    @BuildStep(onlyIfNot = IsNormal.class)
+    @BuildStep(onlyIfNot = IsProduction.class)
     void registerServiceInterceptor(BuildProducer<AdditionalBeanBuildItem> additionalBeans,
             BuildProducer<AnnotationsTransformerBuildItem> transformers,
             ApplicationArchivesBuildItem applicationArchives, CombinedIndexBuildItem combinedIndex,

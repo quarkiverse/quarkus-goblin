@@ -35,6 +35,19 @@ machinery, while the `HTTP_IN` filter stands down. The service decision is bound
 methods, `ManagedExecutor` tasks and reactive (`Uni` / `@NonBlocking`) endpoints are not covered yet. On a Vert.x
 event-loop thread every latency assault is skipped (a WARN is logged once) rather than blocking the loop.
 
+== Agroal / Hibernate ORM / Panache
+
+The `DATABASE` layer is an Agroal pool interceptor, installed on every JDBC datasource when `quarkus-agroal` is present
+(which Hibernate ORM and Panache use). It is not registered in production builds, and applications without a datasource
+never load the Agroal API. Hibernate Reactive and the reactive SQL clients are not covered.
+
+== Quarkus Messaging
+
+The `MESSAGING` layer is a CDI interceptor woven on `@Incoming` consumer methods when `quarkus-messaging` is present,
+whatever the connector (Kafka, AMQP, in-memory...). It relies on no messaging API at runtime. Only the synchronous part
+of a consumer is covered, and latency requires a blocking consumer. Outgoing messages (`Emitter`, `@Outgoing`) are not
+assaulted.
+
 == RESTEasy Reactive vs classic JAX-RS
 
 Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter`, which work with both RESTEasy Reactive and the classic RESTEasy runtime.

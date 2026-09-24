@@ -161,6 +161,8 @@ class GoblinTracingObserverTest {
         assertEquals("server", GoblinTracingObserver.sourceOf(null));
         assertEquals("rest-client", GoblinTracingObserver.sourceOf("REST-Client GET http://x"));
         assertEquals("webclient", GoblinTracingObserver.sourceOf("WebClient GET http://x"));
+        assertEquals("database", GoblinTracingObserver.sourceOf("Database <default> connection"));
+        assertEquals("messaging", GoblinTracingObserver.sourceOf("Messaging com.acme.OrderConsumer.consume"));
     }
 
     private SpanData singleSpan() {

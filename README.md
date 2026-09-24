@@ -29,7 +29,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
 - **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`)
 - **Markdown report export** -- Generate a factual report of config + assault history, ready to hand to an LLM for resilience review
-- **Multi-layer chaos** -- Arm the `HTTP_IN`, `HTTP_OUT` and `SERVICE` layers independently (Dev UI check-boxes); the `SERVICE` layer injects latency/exceptions on business beans through a CDI interceptor running *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real (`DATABASE` / `MESSAGING` reserved)
+- **Multi-layer chaos** -- Arm the `DATABASE`, `MESSAGING`, `SERVICE`, `HTTP_OUT` and `HTTP_IN` layers independently (Dev UI check-boxes): `DATABASE` fails or delays JDBC connection acquisition (Agroal, below Hibernate / Panache), `MESSAGING` faults `@Incoming` consumers, and `SERVICE` injects latency/exceptions on business beans *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real
 - **Dev and test only** -- Chaos activates under `quarkus:dev` and `@QuarkusTest`; in a production build the engine stays inactive and no bean is woven with the service interceptor
 
 ## Quick start
@@ -117,7 +117,7 @@ Prometheus / Grafana dashboards:
 The module depends on the Micrometer API only: add the registry you use, e.g.
 `io.quarkus:quarkus-micrometer-registry-prometheus`, whose `/q/metrics` endpoint then exposes:
 
-- `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `rest-client`, `webclient`)
+- `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `rest-client`, `webclient`, `database`, `messaging`)
 - `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source` (sum/count/max; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for histogram tuning)
 - `goblin_active` -- gauge, `1` while the engine is active, `0` otherwise
 
@@ -137,7 +137,7 @@ tracing backend:
 Each assault produces one span named `goblin.assault`:
 
 - kind `INTERNAL` (the OpenTelemetry default) for every assault: the span annotates an in-process moment and makes no network call of its own, so `CLIENT`/`SERVER` labels would fabricate phantom dependency edges or duplicate the request topology
-- attributes `goblin.assault.type`, `.source` (`server`, `rest-client`, `webclient`), `.target.method`, the injected value (`.latency_ms`, `.status_code`, `.exception`) and the `.config` snapshot
+- attributes `goblin.assault.type`, `.source` (`server`, `rest-client`, `webclient`, `database`, `messaging`), `.target.method`, the injected value (`.latency_ms`, `.status_code`, `.exception`) and the `.config` snapshot
 - linked to the parent request span; for latency, the injected delay is back-dated so it is attributed to the span; exception assaults mark the span `ERROR` (see the [guide](docs/modules/ROOT/pages/tracing.adoc))
 
 ## Dev UI

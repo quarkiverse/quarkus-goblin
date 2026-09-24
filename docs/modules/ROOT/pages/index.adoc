@@ -23,7 +23,7 @@ Key design decisions:
 * **Zero code modification.** No `@ChaosLatency` annotations to scatter across your endpoints. Configuration is the only interface.
 * **Non-destructive.** You can target specific packages, exclude annotated methods, and control the percentage of affected requests.
 * **Composable.** Multiple assault types can be active simultaneously on the same request.
-* **Multi-layer.** Chaos resolves per request against the armed layers (`SERVICE` → `HTTP_IN`, with `HTTP_OUT` rolled per outgoing call), so a fault injected deepest propagates up through the resilience mechanisms above it. `DATABASE` and `MESSAGING` are reserved and not implemented yet.
+* **Multi-layer.** Chaos resolves per request (or per consumed message) against the armed layers (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_IN`, with `HTTP_OUT` rolled per outgoing call), so a fault injected deepest propagates up through the resilience mechanisms above it.
 * **Persistent state.** Dev UI config changes survive restarts via automatic disk persistence (`.goblin-state.json`).
 
 == Quick start

@@ -1,7 +1,10 @@
 package io.quarkiverse.goblin;
 
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
@@ -25,6 +28,32 @@ public class AssaultEngine {
     static final int MAX_HISTORY = 1000;
     private static volatile GoblinConfig staticConfig;
 
+    /**
+     * Layers whose assault hook is always part of the extension.
+     */
+    private static final Set<ChaosLayer> BUILT_IN_HOOKS = Collections
+            .unmodifiableSet(EnumSet.of(ChaosLayer.SERVICE, ChaosLayer.HTTP_OUT, ChaosLayer.HTTP_IN));
+
+    /**
+     * Layers an inbound HTTP request can resolve to. {@link ChaosLayer#MESSAGING} is a message-consumer entry point and
+     * {@link ChaosLayer#HTTP_OUT} gates per outgoing call, so neither is part of the per-request draw.
+     */
+    public static final Set<ChaosLayer> HTTP_REQUEST_LAYERS = Collections
+            .unmodifiableSet(EnumSet.of(ChaosLayer.DATABASE, ChaosLayer.SERVICE, ChaosLayer.HTTP_IN));
+
+    /**
+     * Layers a consumed message can resolve to: the message consumer itself and the layers below it.
+     */
+    public static final Set<ChaosLayer> MESSAGE_LAYERS = Collections
+            .unmodifiableSet(EnumSet.of(ChaosLayer.DATABASE, ChaosLayer.MESSAGING, ChaosLayer.SERVICE));
+
+    /**
+     * Optional hooks installed at build time because the application has the matching extension (Agroal for
+     * {@link ChaosLayer#DATABASE}, Quarkus Messaging for {@link ChaosLayer#MESSAGING}). Reset on every start by the
+     * recorder.
+     */
+    private static volatile Set<ChaosLayer> optionalHooks = Collections.emptySet();
+
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
     private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
@@ -37,6 +66,33 @@ public class AssaultEngine {
 
     public static void setStaticConfig(GoblinConfig config) {
         staticConfig = config;
+    }
+
+    /**
+     * Declares the optional layer hooks installed for this application. Called by the recorder on every start.
+     *
+     * @param layers the layers whose hook is installed, never {@code null}
+     */
+    public static void setOptionalHooks(Set<ChaosLayer> layers) {
+        optionalHooks = layers.isEmpty() ? Collections.emptySet()
+                : Collections.unmodifiableSet(EnumSet.copyOf(layers));
+    }
+
+    /**
+     * @param layer the layer to test
+     * @return whether an assault hook backs the given layer in this application
+     */
+    public boolean isLayerAvailable(ChaosLayer layer) {
+        return BUILT_IN_HOOKS.contains(layer) || optionalHooks.contains(layer);
+    }
+
+    /**
+     * @return the layers backed by an assault hook in this application, in ascending declaration order
+     */
+    public Set<ChaosLayer> getAvailableLayers() {
+        EnumSet<ChaosLayer> available = EnumSet.copyOf(BUILT_IN_HOOKS);
+        available.addAll(optionalHooks);
+        return Collections.unmodifiableSet(available);
     }
 
     /**
@@ -117,25 +173,37 @@ public class AssaultEngine {
     }
 
     /**
-     * Decides which single layer is armed for the current request, resolving ascending (from the bottom of the stack toward
-     * REST): every armed, actionable layer independently rolls the target-level gate, and the <em>deepest</em> layer whose
-     * draw passes becomes the armed layer for this request, shadowing any shallower layer whose own draw would also have
-     * passed. The draw is redone for every request, never cached across requests, so the fault distribution stays live and
-     * matches the per-request {@code shouldAssault()} behaviour of the legacy single-layer engine.
-     * <p>
-     * {@link ChaosLayer#HTTP_OUT} is deliberately excluded: outbound calls gate per call (see
-     * {@link #shouldAssaultClient()}) rather than per inbound request. Layers without a backing assault hook yet
-     * ({@link ChaosLayer#DATABASE}, {@link ChaosLayer#MESSAGING}) are never selected so arming them today degrades to
-     * "the deepest implemented layer wins" instead of silently swallowing the fault.
+     * Decides which single layer is armed for the current inbound HTTP request, see
+     * {@link #resolveAssaultLayer(Set)} with {@link #HTTP_REQUEST_LAYERS}.
      *
      * @return the armed layer for this request, or {@code null} when no armed layer passed its draw
      */
     public ChaosLayer resolveAssaultLayer() {
+        return resolveAssaultLayer(HTTP_REQUEST_LAYERS);
+    }
+
+    /**
+     * Decides which single layer is armed for the current pseudo-request (an inbound HTTP request or a consumed
+     * message), resolving ascending (from the bottom of the stack toward the entry point): every armed, actionable layer
+     * independently rolls the target-level gate, and the <em>deepest</em> layer whose
+     * draw passes becomes the armed layer for this request, shadowing any shallower layer whose own draw would also have
+     * passed. The draw is redone for every request, never cached across requests, so the fault distribution stays live and
+     * matches the per-request {@code shouldAssault()} behaviour of the legacy single-layer engine.
+     * <p>
+     * Only the given candidate layers take part: {@link ChaosLayer#HTTP_OUT} never does (outbound calls gate per call,
+     * see {@link #shouldAssaultClient()}). Layers whose optional hook is not installed in this application (e.g.
+     * {@link ChaosLayer#DATABASE} without a datasource) are never selected, so arming them degrades to "the deepest
+     * available layer wins" instead of silently swallowing the fault.
+     *
+     * @param candidates the layers this entry point can resolve to
+     * @return the armed layer, or {@code null} when no armed layer passed its draw
+     */
+    public ChaosLayer resolveAssaultLayer(Set<ChaosLayer> candidates) {
         if (!active || mutableConfig == null || !mutableConfig.hasAnyAssaultEnabled()) {
             return null;
         }
         for (ChaosLayer layer : ChaosLayer.values()) {
-            if (layer == ChaosLayer.HTTP_OUT || !isLayerActionable(layer, mutableConfig)) {
+            if (!candidates.contains(layer) || !isLayerAvailable(layer) || !isLayerActionable(layer, mutableConfig)) {
                 continue;
             }
             if (levelGate()) {
@@ -146,7 +214,7 @@ public class AssaultEngine {
     }
 
     /**
-     * Returns whether the given layer both has at least one backing assault armed and is implemented as an assault hook.
+     * Returns whether the given layer is armed and has at least one of the assaults its hook can inject enabled.
      *
      * @param layer the layer to test
      * @param config the active configuration
@@ -157,10 +225,8 @@ public class AssaultEngine {
             return false;
         }
         return switch (layer) {
-            // no assault hook yet (issue #54 phases 2-3): never armed, so the draw falls through to SERVICE/HTTP_IN
-            case DATABASE, MESSAGING -> false;
-            // the service interceptor only injects latency and exceptions
-            case SERVICE -> config.isLatencyEnabled() || config.isExceptionEnabled();
+            // the database, messaging and service hooks only inject latency and exceptions
+            case DATABASE, MESSAGING, SERVICE -> config.isLatencyEnabled() || config.isExceptionEnabled();
             case HTTP_IN -> config.hasAnyAssaultEnabled();
             case HTTP_OUT -> config.hasAnyClientAssaultEnabled();
         };

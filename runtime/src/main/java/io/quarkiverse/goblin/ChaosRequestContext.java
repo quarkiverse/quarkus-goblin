@@ -1,5 +1,9 @@
 package io.quarkiverse.goblin;
 
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ArcContainer;
+import io.quarkus.arc.ManagedContext;
+
 /**
  * Carries the decided assault layer (the deepest armed layer whose target-level draw passed) for the current
  * pseudo-request, so every hook on the path -- the JAX-RS filters and the service interceptor -- agrees on which layer
@@ -13,8 +17,13 @@ package io.quarkiverse.goblin;
  * {@code ManagedExecutor}, reactive continuations) is never service-assaulted. Asynchronous / non-blocking paths are
  * out of scope for now (see issue #54).
  * <p>
- * Besides the decision, the context tracks the nesting depth of intercepted service calls and whether the service
- * assault already fired, so that only the outermost intercepted call is assaulted (nested bean-to-bean calls never
+ * The decision is bound to the CDI request context active when it was made: a decision read from another request
+ * context (or from none) is stale -- typically left on a pooled worker thread by an HTTP request whose response filter
+ * never ran because an exception escaped the resource -- and is discarded, so a later message consumer or scheduled
+ * job on the same thread is never assaulted by an unrelated decision.
+ * <p>
+ * Besides the decision, the context tracks the nesting depth of intercepted service calls and whether the armed layer
+ * already fired, so that only the outermost intercepted call is assaulted (nested bean-to-bean calls never
  * multiply the fault) and each further outermost call -- typically a {@code @Retry} attempt -- draws the target level
  * again.
  */
@@ -26,9 +35,10 @@ public final class ChaosRequestContext {
     }
 
     private static final class State {
+        Object owner;
         ChaosLayer layer;
         int serviceDepth;
-        boolean serviceFired;
+        boolean fired;
     }
 
     /**
@@ -43,15 +53,43 @@ public final class ChaosRequestContext {
             return;
         }
         State state = new State();
+        state.owner = currentOwner();
         state.layer = assaultLayer;
         STATE.set(state);
+    }
+
+    /**
+     * Returns the state of the current pseudo-request, discarding a stale one bound to another request context.
+     *
+     * @return the current state, or {@code null}
+     */
+    private static State current() {
+        State state = STATE.get();
+        if (state != null && state.owner != currentOwner()) {
+            STATE.remove();
+            return null;
+        }
+        return state;
+    }
+
+    /**
+     * @return the state object of the active CDI request context, or {@code null} when none is active (or outside a
+     *         Quarkus runtime, e.g. plain unit tests)
+     */
+    private static Object currentOwner() {
+        ArcContainer container = Arc.container();
+        if (container == null) {
+            return null;
+        }
+        ManagedContext requestContext = container.requestContext();
+        return requestContext.isActive() ? requestContext.getState() : null;
     }
 
     /**
      * @return the resolved assault layer for the current request, or {@code null} when none was selected
      */
     public static ChaosLayer assaultLayer() {
-        State state = STATE.get();
+        State state = current();
         return state != null ? state.layer : null;
     }
 
@@ -76,7 +114,7 @@ public final class ChaosRequestContext {
      * @return {@code true} when this is the outermost intercepted service call of the request
      */
     public static boolean enterService() {
-        State state = STATE.get();
+        State state = current();
         if (state == null) {
             return false;
         }
@@ -87,25 +125,25 @@ public final class ChaosRequestContext {
      * Leaves an intercepted service call entered with {@link #enterService()}.
      */
     public static void exitService() {
-        State state = STATE.get();
+        State state = current();
         if (state != null && state.serviceDepth > 0) {
             state.serviceDepth--;
         }
     }
 
     /**
-     * Marks the service assault as fired for the current request.
+     * Marks the armed layer as fired for the current request.
      *
-     * @return {@code true} when a service assault had already fired earlier in this request (the caller must then draw
+     * @return {@code true} when the armed layer had already fired earlier in this request (the caller must then draw
      *         the target level again instead of reusing the per-request decision)
      */
-    public static boolean markServiceFired() {
-        State state = STATE.get();
+    public static boolean markFired() {
+        State state = current();
         if (state == null) {
             return false;
         }
-        boolean alreadyFired = state.serviceFired;
-        state.serviceFired = true;
+        boolean alreadyFired = state.fired;
+        state.fired = true;
         return alreadyFired;
     }
 

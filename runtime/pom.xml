@@ -56,6 +56,12 @@
             <artifactId>vertx-web-client</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- DATABASE layer hook: only registered when the application has quarkus-agroal -->
+        <dependency>
+            <groupId>io.agroal</groupId>
+            <artifactId>agroal-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

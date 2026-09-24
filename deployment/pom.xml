@@ -30,6 +30,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-devui-deployment-spi</artifactId>
         </dependency>
+        <!-- build items only: lists the application's JDBC datasources for the DATABASE layer hook -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-agroal-spi</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
             <artifactId>quarkus-goblin</artifactId>

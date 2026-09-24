@@ -6,13 +6,10 @@ import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
 
-import org.jboss.logging.Logger;
-
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.ChaosRequestContext;
 import io.quarkiverse.goblin.MutableAssaultConfig;
-import io.quarkiverse.goblin.assault.ExceptionAssault;
-import io.quarkiverse.goblin.assault.LatencySupport;
+import io.quarkiverse.goblin.assault.LayerFaults;
 
 /**
  * CDI interceptor injecting latency and exception assaults on application beans at the service layer, bypassing the HTTP
@@ -39,11 +36,6 @@ import io.quarkiverse.goblin.assault.LatencySupport;
 @Priority(4100)
 public class GoblinServiceInterceptor {
 
-    private static final Logger LOG = Logger.getLogger(GoblinServiceInterceptor.class);
-
-    private static final String RECORD_LABEL_LATENCY = "latency";
-    private static final String RECORD_LABEL_EXCEPTION = "exception";
-
     @Inject
     AssaultEngine engine;
 
@@ -65,39 +57,12 @@ public class GoblinServiceInterceptor {
         }
         boolean outermost = ChaosRequestContext.enterService();
         try {
-            if (outermost && (!ChaosRequestContext.markServiceFired() || engine.drawLevelGate())) {
-                assault(context, cfg);
+            if (outermost && LayerFaults.shouldFire(engine)) {
+                LayerFaults.inject(engine, cfg, describe(context));
             }
             return context.proceed();
         } finally {
             ChaosRequestContext.exitService();
-        }
-    }
-
-    private void assault(InvocationContext context, MutableAssaultConfig cfg) throws InterruptedException {
-        String methodName = describe(context);
-
-        if (cfg.isLatencyEnabled()) {
-            long latency = LatencySupport.drawDelay(cfg);
-            LOG.debugf("Goblin: service layer %s (level %d) injecting %d ms latency into %s",
-                    ChaosRequestContext.assaultLayer(), cfg.getTargetLevel(), latency, methodName);
-            boolean applied = true;
-            try {
-                applied = LatencySupport.sleep(latency, methodName);
-            } finally {
-                // recorded once the delay has elapsed (or was interrupted, e.g. by @Timeout), like every other latency
-                // hook; a latency skipped on an event-loop thread is not an assault and is not recorded
-                if (applied) {
-                    engine.recordAssault(methodName, RECORD_LABEL_LATENCY, latency);
-                }
-            }
-        }
-
-        if (cfg.isExceptionEnabled()) {
-            LOG.debugf("Goblin: service layer %s (level %d) throwing %s into %s",
-                    ChaosRequestContext.assaultLayer(), cfg.getTargetLevel(), cfg.getExceptionType(), methodName);
-            engine.recordAssault(methodName, RECORD_LABEL_EXCEPTION);
-            throw ExceptionAssault.createException(cfg);
         }
     }
 

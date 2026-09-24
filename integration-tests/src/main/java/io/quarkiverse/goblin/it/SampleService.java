@@ -19,7 +19,7 @@ import org.jboss.logging.Logger;
  * <p>
  * Methods without annotations have no resilience wrapper, so a Goblin-injected exception surfaces straight to the caller.
  * The others exercise {@code @Retry}, {@code @Fallback}, both combined, {@code @Timeout} and {@code @CircuitBreaker}, and a
- * nested bean-to-bean call.
+ * nested bean-to-bean call, and database access through {@link SampleRepository}.
  */
 @ApplicationScoped
 public class SampleService {
@@ -28,6 +28,9 @@ public class SampleService {
 
     @Inject
     SampleDelegate delegate;
+
+    @Inject
+    SampleRepository repository;
 
     public String hello() {
         LOG.debugf("SampleService.hello() executing - no fault tolerance: an injected exception surfaces directly");
@@ -74,6 +77,25 @@ public class SampleService {
     public String nested() {
         LOG.debugf("SampleService.nested() executing - calls SampleDelegate.inner() through its CDI proxy");
         return "nested: " + delegate.inner();
+    }
+
+    public String databasePing() {
+        LOG.debugf("SampleService.databasePing() executing - no fault tolerance: a database fault surfaces directly");
+        return "db: " + repository.ping();
+    }
+
+    @Retry(maxRetries = 2, delay = 0, jitter = 0)
+    @Fallback(fallbackMethod = "databaseFallback")
+    public String databasePingWithRetry() {
+        LOG.debugf("SampleService.databasePingWithRetry() executing - @Retry(maxRetries=2) + @Fallback: each attempt "
+                + "acquires a new connection, the fallback answers once they are exhausted");
+        return "db: " + repository.ping();
+    }
+
+    String databaseFallback(Throwable cause) {
+        // never touches the database: an assaulted fallback could not answer the original failure
+        LOG.debugf("SampleService.databaseFallback() answering after %s", cause.getClass().getSimpleName());
+        return "database fallback reply";
     }
 
     String serviceFallback(Throwable cause) {

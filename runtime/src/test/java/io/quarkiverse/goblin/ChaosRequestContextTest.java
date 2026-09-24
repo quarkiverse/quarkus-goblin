@@ -46,20 +46,20 @@ class ChaosRequestContextTest {
     }
 
     @Test
-    void markServiceFiredReportsEarlierFires() {
+    void markFiredReportsEarlierFires() {
         ChaosRequestContext.setAssaultLayer(ChaosLayer.SERVICE);
-        assertFalse(ChaosRequestContext.markServiceFired());
-        assertTrue(ChaosRequestContext.markServiceFired());
+        assertFalse(ChaosRequestContext.markFired());
+        assertTrue(ChaosRequestContext.markFired());
     }
 
     @Test
     void newDecisionResetsTheServiceState() {
         ChaosRequestContext.setAssaultLayer(ChaosLayer.SERVICE);
         ChaosRequestContext.enterService();
-        ChaosRequestContext.markServiceFired();
+        ChaosRequestContext.markFired();
 
         ChaosRequestContext.setAssaultLayer(ChaosLayer.SERVICE);
-        assertFalse(ChaosRequestContext.markServiceFired());
+        assertFalse(ChaosRequestContext.markFired());
         assertTrue(ChaosRequestContext.enterService());
     }
 

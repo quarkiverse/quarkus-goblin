@@ -12,12 +12,17 @@ package io.quarkiverse.goblin;
 public enum ChaosLayer {
 
     /**
-     * Persistence layer (Hibernate / Agroal). Phase 2 of issue #54; not yet backed by an assault hook.
+     * Persistence layer: latency and exception assaults on JDBC connection acquisition, through an Agroal pool
+     * interceptor installed on every datasource (JDBC, Hibernate ORM, Panache). Only available when the application has
+     * a JDBC datasource ({@code quarkus-agroal}); Hibernate Reactive / reactive SQL clients are not covered.
      */
     DATABASE,
 
     /**
-     * Messaging layer (Reactive Messaging / event bus). Phase 3 of issue #54; not yet backed by an assault hook.
+     * Messaging layer: latency and exception assaults on the invocation of {@code @Incoming} consumer methods, placed
+     * <em>outside</em> MicroProfile Fault Tolerance so the fault is handled by the messaging failure strategy (nack,
+     * dead-letter queue...). Each consumed message is its own pseudo-request resolving among {@code DATABASE},
+     * {@code MESSAGING} and {@code SERVICE}. Only available with {@code quarkus-messaging}.
      */
     MESSAGING,
 

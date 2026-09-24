@@ -41,6 +41,7 @@ public class GoblinJsonRPCService {
                 .put("active", engine.isActive())
                 .put("profile", cfg != null ? cfg.getProfile().name() : "NONE")
                 .put("layers", cfg != null ? layersJson(cfg) : new JsonArray())
+                .put("availableLayers", availableLayersJson())
                 .put("latencyEnabled", cfg != null && cfg.isLatencyEnabled())
                 .put("exceptionEnabled", cfg != null && cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg != null && cfg.isHttpStatusEnabled())
@@ -99,7 +100,7 @@ public class GoblinJsonRPCService {
      * @param cfg the current mutable assault configuration
      * @return a JSON representation including profile, toggles, and per-assault parameters
      */
-    private static JsonObject configJson(MutableAssaultConfig cfg) {
+    private JsonObject configJson(MutableAssaultConfig cfg) {
         JsonObject latency = new JsonObject()
                 .put("minMilliseconds", cfg.getLatencyMinMs())
                 .put("maxMilliseconds", cfg.getLatencyMaxMs());
@@ -119,6 +120,7 @@ public class GoblinJsonRPCService {
         return new JsonObject()
                 .put("profile", cfg.getProfile().name())
                 .put("layers", layersJson(cfg))
+                .put("availableLayers", availableLayersJson())
                 .put("latencyEnabled", cfg.isLatencyEnabled())
                 .put("exceptionEnabled", cfg.isExceptionEnabled())
                 .put("httpStatusEnabled", cfg.isHttpStatusEnabled())
@@ -195,7 +197,7 @@ public class GoblinJsonRPCService {
      * @param active the effective chaos active flag after the change
      * @return the full configuration plus {@code ok} and {@code active} flags
      */
-    private static JsonObject activeResult(MutableAssaultConfig cfg, boolean active) {
+    private JsonObject activeResult(MutableAssaultConfig cfg, boolean active) {
         return (cfg != null ? configJson(cfg) : new JsonObject())
                 .put("ok", true)
                 .put("active", active);
@@ -342,6 +344,12 @@ public class GoblinJsonRPCService {
      * @param cfg the current mutable assault configuration
      * @return the armed layer names
      */
+    private JsonArray availableLayersJson() {
+        JsonArray layers = new JsonArray();
+        engine.getAvailableLayers().forEach(layer -> layers.add(layer.name()));
+        return layers;
+    }
+
     private static JsonArray layersJson(MutableAssaultConfig cfg) {
         JsonArray layers = new JsonArray();
         cfg.getLayers().forEach(layer -> layers.add(layer.name()));

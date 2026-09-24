@@ -32,15 +32,23 @@ For every outbound call -- MicroProfile REST Client or Vert.x WebClient -- the s
 [#chaos-layers]
 == Chaos layers
 
-Chaos is not tied to a single injection point: you pick which **layers** to arm, and every inbound request resolves to the 
-_deepest armed layer whose probability roll passes_, so a fault rooted at the bottom propagates naturally through the 
-layers above it. The layers, from deepest to shallowest:
+Chaos is not tied to a single injection point: you pick which **layers** to arm, and every inbound request -- or every
+consumed message -- resolves to the _deepest armed layer whose probability roll passes_, so a fault rooted at the bottom
+propagates naturally through the layers above it. The layers, from deepest to shallowest:
 
-. `DATABASE` -- persistence hook (Hibernate/Agroal), not implemented yet
-. `MESSAGING` -- Reactive Messaging / event bus hook, not implemented yet
-. `SERVICE` -- CDI interceptor on targeted beans (Phase 1 of the xref:index.adoc[multi-layer plan])
-. `HTTP_OUT` -- outbound REST Client / Vert.x WebClient calls (existing, opt-in client toggles)
-. `HTTP_IN` -- inbound REST endpoints (existing, default)
+. `DATABASE` -- JDBC connection acquisition, through an Agroal pool interceptor (requires a JDBC datasource)
+. `MESSAGING` -- `@Incoming` consumer methods (requires `quarkus-messaging`)
+. `SERVICE` -- CDI interceptor on targeted beans
+. `HTTP_OUT` -- outbound REST Client / Vert.x WebClient calls (opt-in client toggles)
+. `HTTP_IN` -- inbound REST endpoints (default)
+
+`DATABASE` and `MESSAGING` are only offered when the application has the matching extension; otherwise they are shown as
+*unavailable* in the Dev UI and never selected, so arming them falls through to the next available layer.
+
+There are two entry points, each resolving among its own candidate layers:
+
+* an **inbound HTTP request** resolves among `DATABASE`, `SERVICE` and `HTTP_IN`;
+* a **consumed message** resolves among `DATABASE`, `MESSAGING` and `SERVICE`.
 
 Two layers (`{HTTP_IN, HTTP_OUT}`) are armed by default, which reproduces exactly the pre-layers behaviour. For every 
 incoming request the engine walks the enabled layers from the deepest up, re-rolling `nextInt(100) < level` **independently 
@@ -54,7 +62,12 @@ distribution is biased toward the bottom.
   `HTTP_OUT` is *not* part of the per-request resolution: every outgoing call rolls its own gate, independently of
   the layer the inbound request resolved to, so an outbound fault can add up with a `SERVICE` or `HTTP_IN` one.
 * `SERVICE` armed -- the business bean interceptor fires (see below); the `HTTP_IN` filter stands down.
-* `DATABASE` / `MESSAGING` armed -- reserved; the Dev UI shows them as *soon* until the hooks land (Phase 2 / Phase 3).
+* `DATABASE` armed -- the next JDBC connection acquisitions of the request fail or are delayed (see below).
+* `MESSAGING` armed -- the consumer invocation fails or is delayed before the consumer body runs (see below).
+
+The decision is bound to the thread *and* to the CDI request context that made it: a decision read from another request
+context is discarded, so a worker thread left with a stale decision (an exception escaped a resource before the response
+filter could clear it) never assaults an unrelated message consumer or scheduled job.
 
 == Service-layer assaults
 
@@ -82,6 +95,42 @@ request resolved to the SERVICE layer.
 * **History.** Each service assault is recorded like any other, with a `ClassName.method` descriptor -- including the
   actually applied latency duration for the latency assault. Since the rule falls *inside* FT, a `@Retry`-guarded method
   produces one record per attempt.
+
+== Database-layer assaults
+
+The DATABASE layer injects faults where a slow or unreachable database really surfaces: when a JDBC connection is
+acquired from the Agroal pool. It therefore sits below Hibernate ORM, Panache and plain JDBC code alike.
+
+* **Hook.** One Agroal pool interceptor is registered per JDBC datasource (default and named) at build time, only when
+  `quarkus-agroal` is present. Hibernate Reactive and the reactive SQL clients do not use Agroal and are not covered.
+* **Granularity.** Agroal notifies an acquisition once per `getConnection()` outside a transaction, and once per
+  transaction inside one. The first acquisition of a request uses the per-request decision; every further acquisition
+  (typically a `@Retry` attempt opening a new transaction) draws `level` again.
+* **Faults.** `latency` delays the acquisition; `exception` throws the configured exception out of `getConnection()`
+  (the connection is released back to the pool). Fault Tolerance annotations on the repository or service above observe
+  it, exactly as they would observe a real connection failure.
+* **History.** Records are labelled `Database <datasource> connection`, e.g. `Database <default> connection`, and
+  tagged `source=database` in metrics and traces.
+* **Scope.** Only database access made within an inbound HTTP request or a consumed message is assaulted: a startup
+  task or a scheduled job has no resolved layer.
+
+== Messaging-layer assaults
+
+The MESSAGING layer targets the consumer side of Quarkus Messaging: the `@Incoming` methods of the application.
+
+* **Entry point.** A consumed message has no inbound HTTP request, so each consumer invocation is its own
+  pseudo-request: it resolves among `DATABASE`, `MESSAGING` and `SERVICE`, and the decision stays in scope for the whole
+  consumer call -- a `DATABASE` or `SERVICE` fault fires inside message processing exactly as inside a REST call.
+* **Placement outside Fault Tolerance.** The interceptor runs at `@Priority(4005)`, *outside* the MicroProfile Fault
+  Tolerance interceptor (`4010`): a messaging-layer fault stands for the delivery of the message failing, so it is
+  handled by the messaging failure strategy (nack, dead-letter queue, `failure-strategy=ignore`...) rather than by a
+  `@Retry` on the consumer. A `SERVICE` fault on the same consumer still runs inside Fault Tolerance.
+* **Eligibility.** The binding is woven at build time on the `@Incoming` methods of the application root archive,
+  honouring the same `goblin.target` rules as the service layer, only when `quarkus-messaging` is present.
+* **Synchronous scope.** For a consumer returning `Uni` / `CompletionStage` only the synchronous part of the call is
+  covered. Latency needs a blocking consumer (`@Blocking`, `@RunOnVirtualThread`): on an event-loop thread it is skipped
+  rather than blocking the loop.
+* **History.** Records are labelled `Messaging <class>.<method>` and tagged `source=messaging`.
 
 == Runtime config modification
 

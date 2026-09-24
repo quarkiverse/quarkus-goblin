@@ -57,11 +57,13 @@ Current status: **preview** (v0.3.0 in development)
 - [x] **OpenTelemetry tracing integration**
   Create an OTel span for each injected assault, with attributes for assault type, target method, and injected value. Link the assault span to the parent request span for end-to-end trace correlation.
 
-- [ ] **Multi-layer chaos assaults** (#54)
+- [x] **Multi-layer chaos assaults** (#54)
   - [x] Phase 0 -- layer model, persistence and Dev UI check-boxes.
   - [x] Phase 1 -- SERVICE layer: CDI interceptor at `@Priority(4100)`, inside MicroProfile Fault Tolerance.
-  - [ ] Phase 2 -- DATABASE layer (Hibernate / Agroal hook). Shown as *soon* in the Dev UI.
-  - [ ] Phase 3 -- MESSAGING layer (Reactive Messaging / event bus hook). Shown as *soon* in the Dev UI.
+  - [x] Phase 2 -- DATABASE layer: Agroal pool interceptor on JDBC connection acquisition (JDBC, Hibernate ORM, Panache).
+  - [x] Phase 3 -- MESSAGING layer: interceptor on `@Incoming` consumers, outside Fault Tolerance; each consumed message
+    resolves its own layer.
+  - Follow-ups: reactive consumers and Hibernate Reactive / reactive SQL clients, outgoing messages (`Emitter`).
 
 - [ ] **Saved scenarios**
   Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later. Store scenarios in a `.goblin/scenarios/` directory as JSON files.
