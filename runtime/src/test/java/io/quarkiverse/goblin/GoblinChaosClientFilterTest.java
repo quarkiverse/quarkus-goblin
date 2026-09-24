@@ -42,7 +42,7 @@ class GoblinChaosClientFilterTest {
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
         assertEquals(1, engine.getHistory().size());
-        AssaultEngine.AssaultRecord record = engine.getHistory().get(0);
+        AssaultEngine.AssaultRecord record = engine.getHistory().getFirst();
         assertEquals("latency", record.type());
         assertEquals("REST-Client GET http://localhost:8081/api/hello", record.method());
         assertTrue(elapsedMs >= 5, "expected at least 5ms delay, got " + elapsedMs + "ms");
@@ -65,7 +65,7 @@ class GoblinChaosClientFilterTest {
                 () -> filter.filter(requestContext("GET", TARGET)));
 
         assertEquals(1, engine.getHistory().size());
-        AssaultEngine.AssaultRecord record = engine.getHistory().get(0);
+        AssaultEngine.AssaultRecord record = engine.getHistory().getFirst();
         assertEquals("exception", record.type());
         assertEquals("REST-Client GET http://localhost:8081/api/hello", record.method());
     }
@@ -82,7 +82,7 @@ class GoblinChaosClientFilterTest {
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
         assertEquals(2, engine.getHistory().size());
-        assertEquals("latency", engine.getHistory().get(0).type());
+        assertEquals("latency", engine.getHistory().getFirst().type());
         assertEquals("exception", engine.getHistory().get(1).type());
         assertTrue(elapsedMs >= 5, "expected delay before the exception, got " + elapsedMs + "ms");
     }

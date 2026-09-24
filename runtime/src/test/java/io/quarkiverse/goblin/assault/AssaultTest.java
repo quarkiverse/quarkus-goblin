@@ -29,8 +29,8 @@ class AssaultTest {
 
         assertSame(AssaultOutcome.CONTINUE, outcome);
         assertEquals(1, engine.getHistory().size());
-        assertEquals("latency", engine.getHistory().get(0).type());
-        assertEquals("TestResource.hello", engine.getHistory().get(0).method());
+        assertEquals("latency", engine.getHistory().getFirst().type());
+        assertEquals("TestResource.hello", engine.getHistory().getFirst().method());
         assertTrue(elapsedMs >= 5, "expected at least 5ms delay, got " + elapsedMs);
     }
 
@@ -48,7 +48,7 @@ class AssaultTest {
 
         assertThrows(IllegalStateException.class, () -> new ExceptionAssault().apply(context("TestResource.hello")));
         assertEquals(1, engine.getHistory().size());
-        assertEquals("exception", engine.getHistory().get(0).type());
+        assertEquals("exception", engine.getHistory().getFirst().type());
     }
 
     /**

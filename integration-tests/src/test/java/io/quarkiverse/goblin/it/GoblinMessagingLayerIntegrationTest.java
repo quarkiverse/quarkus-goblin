@@ -67,7 +67,7 @@ public class GoblinMessagingLayerIntegrationTest {
         connector.source("orders").send("order-1");
 
         awaitCondition(() -> engine.getHistory().stream().anyMatch(record -> ORDERS_CONSUMER.equals(record.method())));
-        assertEquals("exception", engine.getHistory().get(0).type());
+        assertEquals("exception", engine.getHistory().getFirst().type());
         assertTrue(consumer.processed().isEmpty(), "the consumer body must never run, got: " + consumer.processed());
     }
 

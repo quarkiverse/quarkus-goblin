@@ -503,7 +503,7 @@ public class GoblinJsonRPCServiceTest {
         cfg.setLatencyMaxMs(500);
 
         engine.recordAssault("SampleResource.hello", "latency", 250);
-        AssaultEngine.AssaultRecord record = engine.getHistory().get(0);
+        AssaultEngine.AssaultRecord record = engine.getHistory().getFirst();
 
         assertEquals(250, record.latencyMs());
         assertEquals("latency", record.type());

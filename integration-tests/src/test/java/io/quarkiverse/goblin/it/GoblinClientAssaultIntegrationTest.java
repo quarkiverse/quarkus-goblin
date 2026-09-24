@@ -113,7 +113,7 @@ public class GoblinClientAssaultIntegrationTest {
 
         assertTrue(elapsed >= 150, "expected the delay before the client exception, got " + elapsed + "ms");
         assertEquals(2, engine.getHistory().size());
-        assertEquals("latency", engine.getHistory().get(0).type());
+        assertEquals("latency", engine.getHistory().getFirst().type());
         assertEquals("exception", engine.getHistory().get(1).type());
     }
 
