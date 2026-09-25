@@ -35,12 +35,13 @@ public class GoblinJsonRPCService {
     /**
      * Returns the current assault engine status for the Dev UI.
      *
-     * @return a JSON object with the active flag, profile, assault toggles, and target level
+     * @return a JSON object with the active flag, the pending auto-off, profile, assault toggles, and target level
      */
     public JsonObject getStatus() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         return new JsonObject()
                 .put("active", engine.isActive())
+                .put("autoOffRemainingMs", autoOffRemainingMs())
                 .put("profile", cfg != null ? cfg.getProfile().name() : "NONE")
                 .put("layers", cfg != null ? layersJson(cfg) : new JsonArray())
                 .put("availableLayers", availableLayersJson())
@@ -183,6 +184,37 @@ public class GoblinJsonRPCService {
         engine.setActive(active);
         LOG.warnf("Goblin chaos %s via Dev UI", active ? "ACTIVATED" : "DEACTIVATED");
         return activeResult(engine.getMutableConfig(), engine.isActive());
+    }
+
+    /**
+     * Schedules chaos to switch itself off after the given number of minutes, replacing any pending auto-off. The engine
+     * enforces the deadline on its own, whether or not the Dev UI is open.
+     *
+     * @param minutes the delay in minutes, strictly positive
+     * @return {@code ok} and the {@code autoOffRemainingMs}, or {@code ok=false} with an {@code error}
+     */
+    public JsonObject startAutoOff(int minutes) {
+        if (minutes <= 0) {
+            return new JsonObject().put("ok", false).put("error", "Auto-off delay must be a positive number of minutes");
+        }
+        engine.scheduleAutoOff(minutes * 60_000L);
+        LOG.warnf("Goblin chaos will auto-disable in %d min (Dev UI)", minutes);
+        return new JsonObject().put("ok", true).put("autoOffRemainingMs", autoOffRemainingMs());
+    }
+
+    /**
+     * Cancels any pending auto-off; chaos stays in its current state.
+     *
+     * @return {@code ok} and {@code autoOffRemainingMs=0}
+     */
+    public JsonObject cancelAutoOff() {
+        engine.cancelAutoOff();
+        return new JsonObject().put("ok", true).put("autoOffRemainingMs", 0L);
+    }
+
+    private long autoOffRemainingMs() {
+        long deadline = engine.autoOffDeadline();
+        return deadline > 0 ? Math.max(0, deadline - System.currentTimeMillis()) : 0;
     }
 
     /**
@@ -507,7 +539,8 @@ public class GoblinJsonRPCService {
     }
 
     /**
-     * Restores every assault parameter to its application.properties default, keeping the engine's active flag unchanged.
+     * Restores every assault parameter to its built-in default (not to application.properties), keeping the engine's
+     * active flag and any pending auto-off unchanged.
      *
      * @return a JSON object with the {@code ok} flag, any clamping {@code warning}, and the full reset configuration
      */

@@ -1,5 +1,4 @@
 = Assault types
-
 :toc: left
 :toclevels: 2
 
@@ -30,9 +29,9 @@ quarkus.goblin.assault.latency.min-milliseconds=500
 quarkus.goblin.assault.latency.max-milliseconds=5000
 ----
 
-The delay is applied via `Thread.sleep()` in the JAX-RS filter, before the request reaches your endpoint logic.
+The delay is applied via `Thread.sleep()` in the JAX-RS filter, before the request reaches your endpoint logic. On a Vert.x event-loop thread (a non-blocking endpoint) the delay is skipped, with a `WARN` logged once, rather than blocking the loop.
 
-If `min-milliseconds` is greater than `max-milliseconds`, the values are swapped (with a `WARN` log) both at startup and when saving the range in the Dev UI.
+If `min-milliseconds` is greater than `max-milliseconds`, the values are swapped (with a `WARN` log) at startup and when the range comes from JSON-RPC, an import or the state file; the Dev UI form refuses an inverted range before saving.
 
 == EXCEPTION
 
@@ -40,13 +39,13 @@ Throws a configurable exception before the request reaches the endpoint. The exc
 
 [source,properties]
 ----
-quarkus.goblin.assault.exception.type=java.io.IOException
+quarkus.goblin.assault.exception.type=java.lang.IllegalStateException
 quarkus.goblin.assault.exception.message=Connection refused to downstream service
 ----
 
 The exception must extend `RuntimeException` and have a constructor that accepts a single `String` parameter (the message). `RuntimeException` is used as a fallback if the specified class cannot be instantiated.
 
-If the class cannot be found, does not extend `RuntimeException`, or lacks a `String` constructor, an `ERROR` is logged at startup (and when saving in the Dev UI), and the engine falls back to `RuntimeException`.
+If the class cannot be found, does not extend `RuntimeException`, or lacks a `String` constructor, an `ERROR` is logged at startup (and when the class is saved from the Dev UI or JSON-RPC, where a warning reports it), and the engine falls back to `RuntimeException`.
 
 The Dev UI quick-picks are served by the engine (`exceptionPresets` in the config) and only offer classes validated against those constraints (e.g. `RuntimeException`, `IllegalStateException`, `WebApplicationException`, `InternalServerErrorException`) -- a preset can never trigger the runtime fallback, so each proposed choice is guaranteed to be throwable. Checked exceptions such as `java.io.IOException` or `java.util.concurrent.TimeoutException` are rejected because the filter layer can only throw unchecked exceptions.
 
@@ -62,7 +61,7 @@ quarkus.goblin.assault.http-status.message=Service Unavailable (simulated outage
 
 Common use case: verify that your frontend handles 503 responses gracefully.
 
-The status code must be in the `100`-`599` range. Out-of-range values are detected at startup (and when saving in the Dev UI) and default to `503` with an `ERROR` log.
+The status code must be in the `100`-`599` range. Out-of-range values are detected at startup (and when they come from JSON-RPC, an import or the state file) and default to `503` with an `ERROR` log; the Dev UI form refuses them before saving.
 
 == DEPENDENCY_DEGRADATION
 
@@ -82,11 +81,11 @@ quarkus.goblin.assault.body.percentage=50
 Two transformation modes are available:
 
 * **`TRUNCATE`** -- keeps only the first `percentage`% of the body. For example, truncating a JSON payload to `50`% yields a prefix that is no longer valid JSON, so a strict JSON client fails to parse it. The `Content-Length` header is updated to the truncated size, so the response stays well-framed and the corruption is purely at the payload level.
-* **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). The `Content-Length` header keeps advertising the original, smaller length while more bytes are emitted, exercising length-validating proxies and parsers. The transformed bytes are written verbatim: truncation never re-encodes a split multibyte character, so the delivered size always matches the configured percentage.
+* **`INFLATE`** -- pads the body with a fixed `[goblin-response-inflated]` marker so the effective size reaches `percentage`% of the original (typically over `100`%, e.g. `200`). Padding is capped at 1 MiB added to the original body, whatever the percentage. The `Content-Length` header keeps advertising the original, smaller length while more bytes are emitted, exercising length-validating proxies and parsers. The transformed bytes are written verbatim: truncation never re-encodes a split multibyte character, so the delivered size always matches the configured percentage.
 
-The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log both at startup and when saving in the Dev UI (e.g. `INFLATE` with `50` becomes `101`). In both modes the target size is `floor(originalBytes * percentage / 100)`: the emitted size is rounded down so it never exceeds the requested percentage, and any non-zero percentage keeps at least one byte (`0` yields an empty body).
+The `percentage` is validated per mode: `0`-`100` for `TRUNCATE`, `101`-`1000` for `INFLATE`. Out-of-range values are clamped with a `WARN` log at startup and when they come from JSON-RPC, an import or the state file (e.g. `INFLATE` with `50` becomes `101`); the Dev UI form refuses them before saving. In both modes the target size is `floor(originalBytes * percentage / 100)`: the emitted size is rounded down so it never exceeds the requested percentage, and any non-zero percentage keeps at least one byte (`0` yields an empty body).
 
-NOTE: The response body assault rewrites the entity in the JAX-RS response filter, so it only applies to responses that carry a body your application produces (String or byte-array entities). It follows the same targeting rules as the other server-side assaults (target level and package/annotation filters), and it is recorded in the assault history like any other assault.
+NOTE: The response body assault rewrites the entity in the JAX-RS response filter, before it is serialized, so it only applies to `String`, `CharSequence` and `byte[]` entities. An object entity serialized by a JSON provider (a POJO, a record, a collection...) is left untouched, without any log nor history entry: to corrupt a JSON payload, return it as a `String` or a `byte[]`. It follows the same targeting rules as the other server-side assaults (target level and package/annotation filters), and it is recorded in the assault history like any other assault.
 
 == RESPONSE_HEADER
 
@@ -107,7 +106,13 @@ Each header rule is configured under `quarkus.goblin.assault.headers.<header-nam
 * **`SET`** (default) -- forces the header to be present with the configured value: an existing value is **replaced**, and the header is **added** when the application did not emit it. Use it to inject a header the application never emits or to clobber an existing one.
 * **`REMOVE`** -- deletes the header when present. The configured `value` is ignored.
 
-The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Blank header names are rejected; an invalid `action` is rejected too -- the rule is skipped with a `WARN` log and never implicitly becomes `SET`.
+The header rules are applied in the response phase, **after** any response body transformation, so a `SET` on `Content-Length` or `Content-Type` wins over the values computed by the body assault. Header names are matched case-insensitively (as per HTTP), so a rule replaces or removes a header emitted with any casing. Header names must be HTTP tokens (letters, digits and ``!#$%&'*+-.^_`|~``) and values must not contain CR, LF or control characters. An invalid rule never implicitly becomes `SET`, and how it is reported depends on where it comes from:
+
+* in `application.properties`, an unknown `action` is a configuration error that fails the startup, and an invalid name or value is ignored with a `WARN` log;
+* in the Dev UI or JSON-RPC, the rule is rejected (`ok=false`, or skipped with a `warning` in an import);
+* in `.goblin-state.json`, the rule is skipped with a `WARN` log.
+
+The legacy `ADD` and `OVERRIDE` actions of earlier versions are accepted as `SET` in the Dev UI, JSON-RPC and the state file, not in `application.properties`.
 
 NOTE: The response header assault runs in the same JAX-RS response filter as the response body assault and follows the same targeting rules (target level and package/annotation filters). Every applied rule is recorded in the assault history with a type of the form `response-header-<action>:<header-name>` (for example `response-header-set:X-Chaos`). `REMOVE` is only recorded when it actually deleted a header.
 

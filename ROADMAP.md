@@ -101,7 +101,7 @@ Current status: **preview** (v0.3.0 released, v0.4.0 in development)
 ## v1.0.0 -- Maturity
 
 - [ ] **Stable public API**
-  Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultRecord`) with `@Experimental` annotations removed. Document the API contract and versioning policy for third-party extensions.
+  Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultEngine.AssaultRecord`, the `Assault` and `AssaultObserver` SPIs), which is currently preview and may change between minor versions. Document the API contract and versioning policy for third-party extensions.
 
 - [ ] **Production-profile safeguard**
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.

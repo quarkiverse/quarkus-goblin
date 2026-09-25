@@ -1,5 +1,4 @@
 = Troubleshooting
-
 :toc: left
 :toclevels: 2
 
@@ -13,11 +12,16 @@ include::../partials/attributes.adoc[]
 * Check that `quarkus.goblin.enabled=true` (the default).
 * Verify at least one assault type is enabled in the Dev UI.
 * Look for the WARN log at startup confirming chaos activation.
+* A Dev UI auto-off may have elapsed: the engine then logs `Goblin chaos auto-disabled` and switches chaos off, even when the Dev UI is closed.
+
+*Chaos is active again after a restart although I switched it off:*
+
+* The active flag is never persisted: every start takes it from `quarkus.goblin.enabled`. Set `quarkus.goblin.enabled=false` to start with chaos off.
 
 *Previous config is not restored on restart:*
 
 * Check that `.goblin-state.json` exists in the project working directory.
-* If the file is corrupted (e.g. manual edits), delete it and reconfigure via the Dev UI. Goblin will recreate it automatically.
+* If the file is corrupted (e.g. manual edits), delete it and reconfigure via the Dev UI. Goblin recreates it at the next configuration change.
 * Look for a WARN log: `Failed to load .goblin-state.json, falling back to application.properties`.
 
 *Endpoints are returning 500:*
@@ -32,10 +36,10 @@ include::../partials/attributes.adoc[]
 *A layer is armed but its assaults never fire:*
 
 * Only `latency` and `exception` apply to the `SERVICE`, `DATABASE` and `MESSAGING` layers: an HTTP status, dependency degradation, response body or response header assault only fires on `HTTP_IN`.
-* `SERVICE`: the method must belong to an application bean of the root archive, be neither static nor private, and pass the targeting rules; JAX-RS resources, `@Provider`s and fallback methods are never assaulted. `@Asynchronous` methods and reactive (`Uni`, `@NonBlocking`) endpoints are not covered.
+* `SERVICE`: the method must belong to an application bean of the root archive, be neither static nor private, and pass the targeting rules; JAX-RS resources, `@Provider`s and fallback methods are never assaulted, and a method excluded by `quarkus.goblin.target.exclude-annotations` is not woven either. `@Asynchronous` methods are not covered; for a method returning `Uni` / `CompletionStage` only the synchronous part is, and latency is skipped on an event-loop thread.
 * `DATABASE`: only connections acquired while an HTTP request or a consumed message is processed are assaulted (a startup task or a `@Scheduled` job has no resolved layer); Hibernate Reactive and the reactive SQL clients are not covered.
 * `MESSAGING`: only `@Incoming` methods are assaulted, and latency needs a blocking consumer (`@Blocking`, `@RunOnVirtualThread`); for a consumer returning `Uni` / `CompletionStage` only the synchronous part is covered.
-* A deeper armed layer shadows the shallower ones: with `DATABASE` and `SERVICE` armed at level 100, a request that touches the database is always assaulted at the database.
+* A deeper armed layer shadows the shallower ones, and the layer is resolved when the request starts: with `DATABASE` and `SERVICE` armed at level 100, every request resolves to `DATABASE`, so a request that never acquires a JDBC connection is not assaulted at all.
 
 *My `@Retry` / `@Fallback` never reacts:*
 

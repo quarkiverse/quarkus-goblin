@@ -8,7 +8,8 @@ One `@ApplicationScoped` bean (`GoblinMetricsObserver`) implements the engine's 
 three meters on the application's `MeterRegistry`:
 
 - `goblin.assaults.total` -- counter tagged by `type` + `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
-- `goblin.latency.injected.seconds` -- timer of the delays actually injected, tagged by `source`
+- `goblin.latency.injected.seconds` -- timer of the delays actually injected, tagged by `source`, with a percentile
+  histogram (`_bucket` series in Prometheus)
 - `goblin.active` -- functional gauge over `AssaultEngine.isActive()`
 
 The module depends on the Micrometer API only (`quarkus-micrometer`): the application picks its registry (e.g.
@@ -25,7 +26,8 @@ throw, and the engine guards against a failing observer without breaking the ass
 
 Add a meter in `GoblinMetricsObserver` and derive it from the `AssaultRecord` (method, type, latencyMs, timestamp)
 or engine state. Keep the name and tag conventions: dots for Micrometer (Prometheus normalizes to `_`), lower-case
-tag values.
+tag values. The one exception is `type` for the response header assaults (`response-header-set:<name>`), which carries
+the header name as configured: one series per header rule.
 
 ## Testing
 

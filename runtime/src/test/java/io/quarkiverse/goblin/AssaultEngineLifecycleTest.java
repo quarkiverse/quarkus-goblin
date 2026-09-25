@@ -28,6 +28,7 @@ class AssaultEngineLifecycleTest {
 
     @AfterEach
     void reset() throws IOException {
+        System.clearProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY);
         GoblinStatePersistence.overrideStateFile(null);
         if (stateFile != null) {
             Files.deleteIfExists(stateFile);
@@ -62,6 +63,68 @@ class AssaultEngineLifecycleTest {
         assertEquals(100, engine.getMutableConfig().getLatencyMinMs());
         assertEquals(AssaultProfile.NONE, engine.getMutableConfig().getProfile(),
                 "the SLOW_FAILURE profile saved in the state file must not leak into tests");
+    }
+
+    @Test
+    void elapsedAutoOffDeactivatesTheEngineWithoutAnyDevUi() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500);
+        engine.initialize(LaunchMode.DEVELOPMENT);
+        assertTrue(engine.isActive());
+
+        engine.scheduleAutoOff(60_000);
+        assertTrue(engine.isActive(), "a pending auto-off leaves chaos on");
+        assertTrue(engine.autoOffDeadline() > System.currentTimeMillis());
+
+        System.setProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY, Long.toString(System.currentTimeMillis() - 1));
+        assertFalse(engine.shouldAssault(), "an elapsed deadline stops the assaults on the next request");
+        assertFalse(engine.isActive());
+        assertEquals(0, engine.autoOffDeadline(), "the elapsed deadline is consumed");
+    }
+
+    @Test
+    void deactivatingChaosCancelsThePendingAutoOff() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500);
+        engine.initialize(LaunchMode.DEVELOPMENT);
+        engine.scheduleAutoOff(60_000);
+
+        engine.setActive(false);
+
+        assertEquals(0, engine.autoOffDeadline());
+        engine.setActive(true);
+        assertTrue(engine.isActive(), "re-enabling chaos is not affected by the cancelled auto-off");
+    }
+
+    @Test
+    void autoOffElapsedDuringALiveReloadKeepsChaosOff() throws IOException {
+        isolateStateFile();
+        System.setProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY, Long.toString(System.currentTimeMillis() - 1));
+        AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500);
+
+        engine.initialize(LaunchMode.DEVELOPMENT);
+
+        assertFalse(engine.isActive(), "quarkus.goblin.enabled=true must not resurrect chaos past its auto-off deadline");
+        assertEquals(0, engine.autoOffDeadline());
+    }
+
+    @Test
+    void pendingAutoOffSurvivesALiveReload() throws IOException {
+        isolateStateFile();
+        AssaultEngine first = new AssaultEngine();
+        first.config = config(100, 500);
+        first.initialize(LaunchMode.DEVELOPMENT);
+        long deadline = first.scheduleAutoOff(60_000);
+
+        AssaultEngine reloaded = new AssaultEngine();
+        reloaded.config = config(100, 500);
+        reloaded.initialize(LaunchMode.DEVELOPMENT);
+
+        assertTrue(reloaded.isActive());
+        assertEquals(deadline, reloaded.autoOffDeadline());
     }
 
     @Test
@@ -108,6 +171,12 @@ class AssaultEngineLifecycleTest {
      * Writes a state file with values that differ from {@link #config(int, int)} (latency max 500) so each launch mode
      * can be told apart: latency enabled at a 9000 ms maximum under the {@code SLOW_FAILURE} profile.
      */
+    private void isolateStateFile() throws IOException {
+        stateFile = Files.createTempFile("goblin-state-", ".json");
+        Files.delete(stateFile);
+        GoblinStatePersistence.overrideStateFile(stateFile.toString());
+    }
+
     private void writeStateFile() throws IOException {
         stateFile = Files.createTempFile("goblin-state-", ".json");
         GoblinStatePersistence.overrideStateFile(stateFile.toString());

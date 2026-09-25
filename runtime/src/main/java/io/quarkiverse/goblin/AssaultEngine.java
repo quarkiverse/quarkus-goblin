@@ -52,6 +52,12 @@ public class AssaultEngine {
      */
     private volatile Set<ChaosLayer> optionalHooks = Collections.emptySet();
 
+    /**
+     * JVM-wide system property holding the auto-off deadline (epoch milliseconds). A system property rather than a field
+     * so a pending auto-off survives dev-mode live reloads, which recreate the engine but keep the JVM.
+     */
+    static final String AUTO_OFF_DEADLINE_PROPERTY = "goblin.auto-off.deadline";
+
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
     private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
@@ -147,6 +153,13 @@ public class AssaultEngine {
         this.mutableConfig.validateAndFix();
         if (mode == LaunchMode.DEVELOPMENT) {
             this.mutableConfig.setOnChange(this::persistConfig);
+            if (autoOffDeadline() > 0 && autoOffElapsed()) {
+                clearAutoOff();
+                this.active = false;
+                LOG.info("Goblin chaos auto-disabled: the auto-off deadline elapsed during the restart");
+            }
+        } else {
+            clearAutoOff();
         }
         if (active) {
             MutableAssaultConfig mutableConfig = this.mutableConfig.snapshot();
@@ -168,18 +181,90 @@ public class AssaultEngine {
         GoblinStatePersistence.save(mutableConfig);
     }
 
+    /**
+     * Returns whether chaos is active. An elapsed auto-off deadline deactivates the engine on the spot, so the auto-off
+     * applies whether or not the Dev UI is open.
+     *
+     * @return {@code true} when chaos is active
+     */
     public boolean isActive() {
+        if (active && autoOffElapsed()) {
+            synchronized (this) {
+                if (active && autoOffElapsed()) {
+                    LOG.warn("Goblin chaos auto-disabled: the auto-off deadline elapsed");
+                    setActive(false);
+                }
+            }
+        }
         return active;
     }
 
+    /**
+     * Activates or deactivates chaos. Deactivating also cancels any pending auto-off.
+     *
+     * @param active the new active flag
+     */
     public void setActive(boolean active) {
         this.active = active;
+        if (!active) {
+            clearAutoOff();
+        }
         notifyObservers(observer -> observer.onActiveChange(active));
+    }
+
+    /**
+     * Schedules chaos to switch itself off after the given delay, replacing any pending auto-off. The engine enforces it
+     * on its own (see {@link #isActive()}), independently of the Dev UI, and the deadline survives dev-mode live reloads.
+     *
+     * @param delayMillis the delay before chaos is deactivated, strictly positive
+     * @return the deadline, in epoch milliseconds
+     */
+    public long scheduleAutoOff(long delayMillis) {
+        if (delayMillis <= 0) {
+            throw new IllegalArgumentException("Auto-off delay must be positive, got " + delayMillis);
+        }
+        long deadline = System.currentTimeMillis() + delayMillis;
+        System.setProperty(AUTO_OFF_DEADLINE_PROPERTY, Long.toString(deadline));
+        return deadline;
+    }
+
+    /**
+     * Cancels any pending auto-off; chaos stays in its current state.
+     */
+    public void cancelAutoOff() {
+        clearAutoOff();
+    }
+
+    /**
+     * Returns the pending auto-off deadline.
+     *
+     * @return the deadline in epoch milliseconds, or {@code 0} when no auto-off is pending
+     */
+    public long autoOffDeadline() {
+        String raw = System.getProperty(AUTO_OFF_DEADLINE_PROPERTY);
+        if (raw == null) {
+            return 0;
+        }
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            clearAutoOff();
+            return 0;
+        }
+    }
+
+    private boolean autoOffElapsed() {
+        long deadline = autoOffDeadline();
+        return deadline > 0 && System.currentTimeMillis() >= deadline;
+    }
+
+    private static void clearAutoOff() {
+        System.clearProperty(AUTO_OFF_DEADLINE_PROPERTY);
     }
 
     public boolean shouldAssault() {
         MutableAssaultConfig cfg = configSnapshot();
-        if (!active || cfg == null || !cfg.hasAnyAssaultEnabled()) {
+        if (!isActive() || cfg == null || !cfg.hasAnyAssaultEnabled()) {
             return false;
         }
         return levelGate(cfg);
@@ -213,7 +298,7 @@ public class AssaultEngine {
      */
     public ChaosLayer resolveAssaultLayer(Set<ChaosLayer> candidates) {
         MutableAssaultConfig cfg = configSnapshot();
-        if (!active || cfg == null || !cfg.hasAnyAssaultEnabled()) {
+        if (!isActive() || cfg == null || !cfg.hasAnyAssaultEnabled()) {
             return null;
         }
         for (ChaosLayer layer : ChaosLayer.values()) {
@@ -259,7 +344,7 @@ public class AssaultEngine {
      */
     public boolean shouldAssaultClient() {
         MutableAssaultConfig cfg = configSnapshot();
-        if (!active || cfg == null || !cfg.isLayerEnabled(ChaosLayer.HTTP_OUT) || !cfg.hasAnyClientAssaultEnabled()) {
+        if (!isActive() || cfg == null || !cfg.isLayerEnabled(ChaosLayer.HTTP_OUT) || !cfg.hasAnyClientAssaultEnabled()) {
             return false;
         }
         return levelGate(cfg);

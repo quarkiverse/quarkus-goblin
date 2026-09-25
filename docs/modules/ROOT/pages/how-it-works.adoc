@@ -1,5 +1,4 @@
 = How it works
-
 :toc: left
 :toclevels: 2
 
@@ -16,17 +15,22 @@ For the HTTP boundaries:
 * For outbound MicroProfile REST Client calls the `ClientRequestFilter` is registered as a global provider at build time and intercepts every call automatically.
 * For Vert.x `WebClient` calls the application arms the client once with `GoblinWebClient.enable(webClient)`; the interceptor is then attached through Vert.x's internal `WebClientInternal` mechanism.
 
-1. At build time, the deployment module registers both filters, the service interceptor binding and the `goblin` feature with Quarkus.
+1. At build time, the deployment module registers the client filter, the service interceptor binding and the `goblin` feature with Quarkus; the server-side JAX-RS filter is a `@Provider` discovered by Quarkus REST.
 2. At runtime startup, the `AssaultEngine` is initialized from the configuration in `application.properties`. In dev mode it first restores any persisted state file (`.goblin-state.json`) and registers a change listener so that every subsequent config mutation automatically persists the state to disk.
 3. For every incoming HTTP request, the filter checks whether chaos is active, whether this request should be affected (based on the `level` percentage), and which layer the request resolves to (see xref:how-it-works.adoc#chaos-layers[Chaos layers]). The resolved layer is carried on the request stack for the whole processing chain.
 4. If the HTTP_IN layer won, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body and response header assaults are applied on the way out, in the `ContainerResponseFilter`, rewriting the entity and its headers before they reach the client (header rules run after the body transformation, so an explicit header change always wins).
 5. An assault record is added to the history buffer (capped at 1000 entries).
 
-For every outbound call -- MicroProfile REST Client or Vert.x WebClient -- the same `level` gate and the client-side toggles are checked, then latency and/or exception are applied (the remote service is never reached when the exception assault fires). The REST Client filter runs early in the JAX-RS pipeline, before any endpoint logic executes; the WebClient interceptor runs just after the request is prepared, before it is dispatched over the wire. This means:
+The server-side request filter runs once the request is matched to a resource method, before any endpoint logic executes. This means:
 
 * Exception and HTTP_STATUS assaults **completely bypass** your endpoint code -- no side effects, no partial state mutations.
 * Latency assaults add delay **before** processing, simulating network or upstream slowness.
+* On a Vert.x event-loop thread (a non-blocking endpoint) the latency assault is skipped, with a WARN logged once, instead of blocking the loop; the other assaults still apply.
+
+For every outbound call -- MicroProfile REST Client or Vert.x WebClient -- the `HTTP_OUT` layer, the same `level` gate and the client-side toggles are checked, then latency and/or exception are applied. The REST Client filter runs before the request is sent; the WebClient interceptor runs just after the request is prepared, before it is dispatched over the wire. This means:
+
 * Client-side exceptions abort the outbound call **before it is dispatched** -- the downstream service never sees the request.
+* REST Client latency blocks the calling thread; when the call is made from an event-loop thread the latency is skipped (WARN logged once).
 * WebClient latency is applied without blocking the event loop: a timer is scheduled on the calling Vert.x context, with a blocking fallback only when no Vert.x context is active.
 
 [#chaos-layers]
@@ -45,6 +49,10 @@ propagates naturally through the layers above it. The layers, from deepest to sh
 `DATABASE` and `MESSAGING` are only offered when the application has the matching extension; otherwise they are shown as
 *unavailable* in the Dev UI and never selected, so arming them falls through to the next available layer.
 
+A layer only takes part when it is *actionable*: at least one of the assaults its hook can inject is enabled. The
+`DATABASE`, `MESSAGING` and `SERVICE` hooks only inject latency and exceptions, so with only the HTTP status assault
+enabled they are skipped and the request resolves to `HTTP_IN`.
+
 There are two entry points, each resolving among its own candidate layers:
 
 * an **inbound HTTP request** resolves among `DATABASE`, `SERVICE` and `HTTP_IN`;
@@ -52,9 +60,9 @@ There are two entry points, each resolving among its own candidate layers:
 
 Two layers (`{HTTP_IN, HTTP_OUT}`) are armed by default, which reproduces exactly the pre-layers behaviour. For every 
 incoming request the engine walks the enabled layers from the deepest up, re-rolling `nextInt(100) < level` **independently 
-for each layer** -- the roll is never cached. The deepest layer whose roll passes wins and becomes the armed layer for the 
+for each layer** -- the roll is never cached. The deepest available and actionable layer whose roll passes wins and becomes the armed layer for the
 whole request; the shallower layers pass through unimpeded, and the fault thrown at the bottom then propagates up through 
-the `SERVICE` and `HTTP_IN` machinery. With `level = 100` the deepest enabled layer always wins; with a lower level the 
+the `SERVICE` and `HTTP_IN` machinery. With `level = 100` the deepest available and actionable layer always wins; with a lower level the 
 distribution is biased toward the bottom.
 
 * `HTTP_IN` armed -- the `ContainerRequestFilter` applies the server-side assaults exactly as before.
@@ -93,7 +101,7 @@ request resolved to the SERVICE layer.
 * **Synchronous scope (for now).** The decision is bound to the request thread, so `@Asynchronous` / non-blocking methods
   are not covered by Phase 1. On a Vert.x event-loop thread latency assaults are skipped (WARN logged once) instead of
   blocking the loop.
-* **History.** Each service assault is recorded like any other, with a `ClassName.method` descriptor -- including the
+* **History.** Each service assault is recorded like any other, with a fully qualified `com.example.ClassName.method` descriptor -- including the
   actually applied latency duration for the latency assault. Since the rule falls *inside* FT, a `@Retry`-guarded method
   produces one record per attempt.
 
@@ -152,7 +160,7 @@ Runtime config changes made through the Dev UI are automatically persisted to a 
 
 This means your chaos scenario survives restarts -- no need to reconfigure the dashboard every time you restart in dev mode.
 
-The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, response header rules, armed layers, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`.
+The persisted state only covers the **assault configuration** (profile, toggles, latency range, exception settings, HTTP status settings, response body mode/percentage, response header rules, armed layers, target level). The global **enabled/active** flag is deliberately excluded: it is always taken from `quarkus.goblin.enabled` at startup and, during a session, from the Dev UI toggle -- a state file can never reactivate an extension you disabled via `quarkus.goblin.enabled=false`. A pending Dev UI auto-off is not stored in the file either: it survives a live reload of the same dev-mode process, not a new start.
 
 State persistence is dev-mode only: the change listener is only registered in dev mode, and the state file is only read on a dev-mode startup. Chaos itself only activates in dev mode, and in test mode on opt-in (`quarkus.goblin.test.enabled=true`) -- a packaged production application always starts with the engine inactive. Integration or system tests always start from `application.properties` and never read nor overwrite the chaos configuration you saved from the Dev UI.
 
@@ -164,7 +172,8 @@ If the state file is corrupted or unreadable, Goblin logs a warning and falls ba
 
 Every recorded assault and every active-state change is broadcast to the registered `AssaultObserver` beans
 (`io.quarkiverse.goblin.AssaultObserver`, default no-op methods). Observers run synchronously on the request path:
-the engine calls each bean and skips/logs any failing observer so observability can never break an assault. The engine
+the engine calls each bean and skips any failing observer (the failure is only logged at `DEBUG`) so observability
+can never break an assault. The engine
 injects `Instance<AssaultObserver>`, so any `@ApplicationScoped` implementation is picked up automatically; outside
 the CDI container (plain unit tests) the notification simply does nothing.
 
@@ -181,6 +190,6 @@ Goblin ships with six built-in assault types (latency, exception, HTTP status, d
 * `isEnabled(config)` -- whether the assault should run for the current mutable configuration.
 * `recordLabel()` -- the label used in the assault history and the Markdown report.
 * `order()` -- the execution position in the chain. Latency (order `10`) runs first; assaults that abort the request run afterwards.
-* `apply(context)` -- perform the assault. Return `AssaultOutcome.CONTINUE` to let the next enabled type run, or `ABORTED` to stop processing. To short-circuit the request call `context.getRequestContext().abortWith(...)`; to throw a simulated failure, throw a `RuntimeException`.
+* `apply(context)` -- perform the assault. Return `AssaultOutcome.CONTINUE` to let the next enabled type run, or `ABORTED` to stop processing. To short-circuit the request call `context.getRequestContext().abortWith(...)`; to throw a simulated failure, throw a `RuntimeException`. The engine does not record anything on your behalf: call `context.getEngine().recordAssault(context.getMethodName(), recordLabel())` when the assault fires, so it shows up in the history, the counters, the metrics and the traces.
 
 At build time Goblin scans the application index for implementors of `Assault` and registers them as beans, so a custom type provided by your application is picked up automatically. The filter resolves the ordered list of assaults for every request and applies the enabled ones in `order()` sequence.

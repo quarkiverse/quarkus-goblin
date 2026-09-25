@@ -1,10 +1,19 @@
 # Goblin Integration Tests
 
 End-to-end `@QuarkusTest` suite exercising the extension through a real JAX-RS application
-(`io.quarkiverse.goblin.it.SampleResource`) with the endpoints `/api/hello`, `/api/slow`, `/api/unstable`,
-`/api/proxy` (a proxy that calls `SampleClient` internally) and `/api/web-proxy` (a proxy that calls back through a
-Vert.x `WebClient` armed with `GoblinWebClient.enable(...)`), handy to exercise client-side assaults in dev mode.
-`src/main/resources/application.properties` enables Goblin with latency defaults so the engine is active at boot.
+(`io.quarkiverse.goblin.it.SampleResource`) with the endpoints:
+
+- `/api/hello`, `/api/slow`, `/api/unstable` -- plain endpoints for the `HTTP_IN` assaults;
+- `/api/service/*` (`hello`, `slow`, `flaky`, `fallback`, `retry-fallback`, `timeout`, `guarded`, `nested`) -- calls
+  into `SampleService` / `SampleDelegate`, guarded by Fault Tolerance annotations, for the `SERVICE` layer;
+- `/api/db/ping` and `/api/db/retry` -- `SampleRepository` on an in-memory H2 datasource, without and with
+  `@Retry` + `@Fallback`, for the `DATABASE` layer;
+- `/api/proxy` (a proxy that calls `SampleClient` internally) and `/api/web-proxy` (a proxy that calls back through a
+  Vert.x `WebClient` armed with `GoblinWebClient.enable(...)`), handy to exercise client-side assaults in dev mode.
+
+`SampleConsumer` consumes the in-memory `orders` and `audits` channels for the `MESSAGING` layer.
+`src/main/resources/application.properties` enables Goblin with latency defaults so the engine is active at boot, and
+opts the tests in with `quarkus.goblin.test.enabled=true`.
 
 The suite also exercises **client-side assaults**: `SampleClient` (`@RegisterRestClient(configKey = "sample-client")`,
 targeting `http://localhost:8081`) verifies that the globally-registered `GoblinChaosClientFilter` attacks outbound
@@ -21,6 +30,10 @@ REST Client calls with latency and exceptions, and `GoblinWebClientIntegrationTe
 | `GoblinMetricsIntegrationTest` | The optional `quarkus-goblin-metrics` module end-to-end: meters registered with the expected names/tags on the live Prometheus registry (server, REST Client and WebClient sources), settled-step counter/timer values, and the `goblin.active` gauge |
 | `GoblinTracingIntegrationTest` | The optional `quarkus-goblin-opentelemetry` module end-to-end: a `goblin.assault` span per assault (server latency, HTTP status, REST Client / WebClient latency, client exception) with the `goblin.assault.*` attributes, INTERNAL kind and parent linkage to the request span, captured through the CDI `SpanExporter` bean (`InMemoryTraceSpanExporter`) |
 | `GoblinJsonRPCServiceTest` | The Dev UI JSON-RPC contract (status, toggles, editors, history, Markdown report, response body and response header config self-service) |
+| `GoblinServiceLayerIntegrationTest` | The `SERVICE` layer: latency and exception injected on the bean, inside Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout` observe the faults), inert when not armed |
+| `GoblinDatabaseLayerIntegrationTest` | The `DATABASE` layer: JDBC connection acquisition failed or delayed by the Agroal interceptor, `@Retry` then `@Fallback` answering, no assault outside an armed request |
+| `GoblinMessagingLayerIntegrationTest` | The `MESSAGING` layer: a consumed message faulted at the `@Incoming` consumer or deeper, and no stale HTTP decision leaking into a consumer |
+| `TestModeWithoutOptInTest` | The test-mode default: without `quarkus.goblin.test.enabled`, a `@QuarkusTest` suite is never assaulted |
 | `AbstractPackageTargetingTest` + `ExcludePackageTargetingTest`, `IncludeNonMatchingPackageTargetingTest`, `IncludeMatchingPackageTargetingTest`, `ExcludeOverridesIncludeTargetingTest` | Package-based targeting via `include-packages` / `exclude-packages` |
 
 `GoblinClientAssaultIntegrationTest` needs `quarkus-rest-client` (declared in this module's `pom.xml`) and the
@@ -30,8 +43,9 @@ its real `Vertx` `WebClient`, and targets the same test-port URL.
 
 ## The targeting-test pattern
 
-`GoblinChaosFilter.isTargetEligible()` reads the package filters from the **static** `GoblinConfig`, so targeting is
-exercised with a dedicated `@QuarkusTest` class per scenario, each declaring its own `@TestProfile` that sets the
+The package and annotation filters come from `GoblinTargetingConfig`, which is fixed at build time (it also drives the
+weaving of the service and messaging interceptors), so targeting is exercised with a dedicated `@QuarkusTest` class per
+scenario, each declaring its own `@TestProfile` that sets the
 `quarkus.goblin.target.*` properties. A shared fixture (`AbstractPackageTargetingTest`) resets the engine on every
 test: it enables the HTTP status assault with 503 at 100% level so that a request which passes the filters is
 observably short-circuited, and spares requests that do not.
@@ -42,12 +56,13 @@ Everything else (assault toggles, parameters, level) is mutable at runtime and i
 ## Running
 
 ```bash
-./mvnw -pl integration-tests test          # only this module
-./mvnw clean install -Dno-format           # full build (unit + integration)
+mvn -pl integration-tests test            # only this module (after a first install)
+mvn clean install -Dno-format             # full build (unit + integration)
 ```
 
 The JaCoCo **aggregate** coverage report for the whole project is generated in this module
-(`target/site/jacoco-aggregate/`) because it depends on both `runtime` and `deployment`; the CI publishes the derived
+(`target/site/jacoco-aggregate/`) because it depends on every module (`runtime`, `deployment`, `metrics` and
+`opentelemetry`); the CI publishes the derived
 percentage to the `badges` branch (see [README.md](../README.md#coverage)).
 
 ## Adding a test for a new assault

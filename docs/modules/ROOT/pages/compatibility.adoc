@@ -1,5 +1,4 @@
 = Compatibility
-
 :toc: left
 :toclevels: 2
 
@@ -27,13 +26,16 @@ The classic HTTP-level workflow:
 . Configure chaos on unprotected endpoints (default behavior).
 . Exclude fault-tolerant endpoints via `quarkus.goblin.target.exclude-annotations`.
 . Verify that the unprotected endpoints fail as expected.
-. Remove the exclusion, chaos-test the fault-tolerant endpoints to confirm `@Timeout` and `@Fallback` trigger correctly.
+. Remove the exclusion and arm the `SERVICE` (or `DATABASE`) layer to confirm `@Timeout` and `@Fallback` trigger correctly: at the `HTTP_IN` layer the fault would hit the endpoint before its annotations can react.
 
-TIP: To exercise the resilience chain end-to-end today, arm the **SERVICE** layer and clear the `HTTP_IN` / `HTTP_OUT`
-check-boxes: the fault is then injected directly on the business bean and propagates through the fault-tolerance
-machinery, while the `HTTP_IN` filter stands down. The service decision is bound to the request thread: `@Asynchronous`
-methods, `ManagedExecutor` tasks and reactive (`Uni` / `@NonBlocking`) endpoints are not covered yet. On a Vert.x
-event-loop thread every latency assault is skipped (a WARN is logged once) rather than blocking the loop.
+TIP: To exercise the resilience chain end-to-end today, arm the **SERVICE** layer and switch the `HTTP_IN` / `HTTP_OUT`
+layers off: the fault is then injected directly on the business bean and propagates through the fault-tolerance
+machinery, while the `HTTP_IN` filter stands down. A bean method excluded by `quarkus.goblin.target.exclude-annotations`
+is not woven, so keep the Fault Tolerance annotations out of that property for this workflow. The service decision is
+bound to the request thread: `@Asynchronous` methods and `ManagedExecutor` tasks are not covered yet, and for a method
+returning `Uni` / `CompletionStage` only the synchronous part of the call is. On a Vert.x event-loop thread the latency
+assaults that would block are skipped (a WARN is logged once) rather than blocking the loop; only the WebClient latency,
+which uses a Vert.x timer, still applies there.
 
 == Agroal / Hibernate ORM / Panache
 
@@ -48,9 +50,9 @@ whatever the connector (Kafka, AMQP, in-memory...). It relies on no messaging AP
 of a consumer is covered, and latency requires a blocking consumer. Outgoing messages (`Emitter`, `@Outgoing`) are not
 assaulted.
 
-== RESTEasy Reactive vs classic JAX-RS
+== Quarkus REST (RESTEasy Reactive)
 
-Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter`, which work with both RESTEasy Reactive and the classic RESTEasy runtime.
+Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter` and targets Quarkus REST (`quarkus-rest`, formerly RESTEasy Reactive), which the extension is built and tested against. The classic RESTEasy runtime (`quarkus-resteasy`) is not tested and not supported.
 
 == MicroProfile REST Client / Quarkus REST Client
 

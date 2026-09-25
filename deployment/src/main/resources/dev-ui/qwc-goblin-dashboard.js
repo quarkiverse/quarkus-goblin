@@ -2,7 +2,6 @@ import {LitElement, html, css} from 'lit';
 import {live} from 'lit/directives/live.js';
 import {JsonRpc} from 'jsonrpc';
 
-const AUTO_OFF_KEY = 'goblin.autoOffDeadline';
 const CUSTOM_PROFILES_KEY = 'goblin.customProfiles';
 
 export class QwcGoblinDashboard extends LitElement {
@@ -382,7 +381,6 @@ export class QwcGoblinDashboard extends LitElement {
         super.connectedCallback();
         this._loadData();
         this._loadCustomProfiles();
-        this._restoreAutoOff();
         this._refreshTimer = setInterval(() => this._refresh(), 2000);
         this._tickTimer = setInterval(() => this._tick(), 1000);
         this._keyHandler = (e) => {
@@ -407,7 +405,10 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _refresh() {
-        this.jsonRpc.getStatus().then(r => { this._status = {...r.result}; });
+        this.jsonRpc.getStatus().then(r => {
+            this._status = {...r.result};
+            this._syncAutoOff(r.result.autoOffRemainingMs);
+        });
         this.jsonRpc.getCounters().then(r => { this._counters = {...r.result}; });
         // the configuration can change from another tab, a live reload or a JSON-RPC client: keep the toggles and the
         // forms in sync, without touching a section the user is currently editing
@@ -558,6 +559,10 @@ export class QwcGoblinDashboard extends LitElement {
         this.jsonRpc.toggleActive().then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
+                if (!r.result.active) {
+                    // deactivating chaos also cancels the pending auto-off on the server
+                    this._syncAutoOff(0);
+                }
             }
         });
     }
@@ -567,7 +572,8 @@ export class QwcGoblinDashboard extends LitElement {
             this.jsonRpc.disableAll().then(r => {
                 if (r.result.ok) {
                     this._applyConfigResult(r.result, '*');
-                    this._cancelAutoOff();
+                    // deactivating chaos also cancels the pending auto-off on the server
+                    this._syncAutoOff(0);
                     this._showToast('All assaults disabled', 'info');
                 }
             });
@@ -604,31 +610,35 @@ export class QwcGoblinDashboard extends LitElement {
 
     // ==================== auto-off / countdown ====================
 
+    // the engine owns the deadline and switches chaos off by itself, whether or not this page is open; the dashboard
+    // only mirrors the remaining time reported by the server
+
     _startAutoOff() {
         const minutes = parseInt(this.shadowRoot.getElementById('auto-off-minutes').value);
         if (isNaN(minutes) || minutes <= 0) {
             return;
         }
-        const deadline = Date.now() + minutes * 60000;
-        localStorage.setItem(AUTO_OFF_KEY, deadline);
-        this._autoOffDeadline = deadline;
-        this._tick();
-        this._showToast(`Chaos will auto-disable in ${minutes} min`, 'info');
+        this.jsonRpc.startAutoOff({minutes: minutes}).then(r => {
+            if (r.result.ok) {
+                this._syncAutoOff(r.result.autoOffRemainingMs);
+                this._showToast(`Chaos will auto-disable in ${minutes} min`, 'info');
+            } else {
+                this._showToast(r.result.error, 'error');
+            }
+        });
     }
 
     _cancelAutoOff() {
-        localStorage.removeItem(AUTO_OFF_KEY);
-        this._autoOffDeadline = null;
-        this._autoOffRemaining = 0;
+        this.jsonRpc.cancelAutoOff().then(() => this._syncAutoOff(0));
     }
 
-    _restoreAutoOff() {
-        const raw = localStorage.getItem(AUTO_OFF_KEY);
-        const deadline = parseInt(raw);
-        if (!isNaN(deadline) && deadline > Date.now()) {
-            this._autoOffDeadline = deadline;
-        } else if (!isNaN(deadline)) {
-            localStorage.removeItem(AUTO_OFF_KEY);
+    _syncAutoOff(remainingMs) {
+        if (remainingMs > 0) {
+            this._autoOffDeadline = Date.now() + remainingMs;
+            this._tick();
+        } else {
+            this._autoOffDeadline = null;
+            this._autoOffRemaining = 0;
         }
     }
 
@@ -645,15 +655,13 @@ export class QwcGoblinDashboard extends LitElement {
         }
         if (remaining === 0) {
             this._autoOffDeadline = null;
-            localStorage.removeItem(AUTO_OFF_KEY);
-            if (this._status && this._status.active) {
-                this.jsonRpc.setActive({active: false}).then(r => {
-                    if (r.result && r.result.ok) {
-                        this._applyConfigResult(r.result);
-                        this._showToast('Chaos auto-disabled', 'info');
-                    }
-                });
-            }
+            // reading the status makes the engine apply the elapsed deadline
+            this.jsonRpc.getStatus().then(r => {
+                this._status = {...r.result};
+                if (!r.result.active) {
+                    this._showToast('Chaos auto-disabled', 'info');
+                }
+            });
         }
     }
 
@@ -948,9 +956,9 @@ export class QwcGoblinDashboard extends LitElement {
         if (!profile) {
             return false;
         }
+        // a profile only owns the server-side toggles: the client-side ones never count as an override
         return ['latencyEnabled', 'exceptionEnabled', 'httpStatusEnabled', 'dependencyDegradationEnabled',
-            'clientLatencyEnabled', 'clientExceptionEnabled', 'responseBodyEnabled',
-            'responseHeaderEnabled'].some(k => c[k] !== profile.toggles[k]);
+            'responseBodyEnabled', 'responseHeaderEnabled'].some(k => c[k] !== profile.toggles[k]);
     }
 
     _setProfile(e) {
@@ -1031,7 +1039,6 @@ export class QwcGoblinDashboard extends LitElement {
             this.jsonRpc.resetDefaults().then(r => {
                 if (r.result.ok) {
                     this._applyConfigResult(r.result, '*');
-                    this._cancelAutoOff();
                     this._showToast(r.result.warning || 'Configuration reset to defaults', r.result.warning ? 'warning' : '');
                 } else {
                     this._showToast(r.result.error, 'error');

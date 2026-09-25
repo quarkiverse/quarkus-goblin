@@ -1,11 +1,12 @@
 = Configuration reference
-
 :toc: left
 :toclevels: 2
 
 include::../partials/attributes.adoc[]
 
 All configuration keys are under the `quarkus.goblin` prefix.
+
+IMPORTANT: In dev mode, once the Dev UI (or JSON-RPC) has changed the configuration, it is saved to `.goblin-state.json` in the project directory, and at the next start that file is loaded *instead of* the `quarkus.goblin.assault.*` keys and `quarkus.goblin.target.level`: editing those properties then has no effect until you delete the file. `quarkus.goblin.enabled`, `quarkus.goblin.test.enabled` and the build-time targeting rules are never taken from the file. In test mode the file is ignored.
 
 NOTE: The chaos layers are not configuration keys: every application starts with `HTTP_IN` and `HTTP_OUT` armed, and the layers are armed at runtime from the xref:dev-ui.adoc[Dev UI] or through JSON-RPC (`applyConfig` with a `layers` array); in dev mode the choice is persisted in `.goblin-state.json`. `DATABASE` requires a JDBC datasource and `MESSAGING` requires `quarkus-messaging`.
 
@@ -106,13 +107,13 @@ interceptors, so they are *fixed at build time* (a dev-mode live reload rebuilds
 | `quarkus.goblin.target.exclude-annotations`
 | `Optional<List<String>>`
 | _empty_
-| Exclude methods/classes carrying these annotations (every layer). Fixed at build time.
+| Exclude methods/classes carrying these annotations, on the `HTTP_IN`, `SERVICE` and `MESSAGING` layers (the `DATABASE` and `HTTP_OUT` layers are not filtered). Fixed at build time.
 |===
 
 [#configuration-validation]
 == Configuration validation
 
-Goblin validates assault parameters at startup and whenever you save a change in the Dev UI. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback, so a misconfiguration cannot silently corrupt your chaos experiments.
+Goblin validates assault parameters at startup and whenever a change reaches the engine (Dev UI, JSON-RPC, import). Invalid values are never applied: Goblin logs a clear message and applies a safe fallback, so a misconfiguration cannot silently corrupt your chaos experiments.
 
 [cols="3,4,3"]
 |===
@@ -124,4 +125,4 @@ Goblin validates assault parameters at startup and whenever you save a change in
 | `target.level` | Must be in the `0`-`100` range | Clamped and a `WARN` is logged
 |===
 
-At startup the checks run in `AssaultEngine.onStart()` and cover both the `application.properties` configuration and the state loaded from `.goblin-state.json`. When you edit a parameter in the Dev UI, the same rules apply: the corrected value is persisted back to `.goblin-state.json`, and the dashboard shows a warning toast explaining what changed -- for example, entering `min=10000, max=500` swaps them to `min=500, max=10000`.
+At startup the checks run in `AssaultEngine.onStart()` and cover both the `application.properties` configuration and the state loaded from `.goblin-state.json`. The Dev UI validates the forms before saving: the `Save` button stays disabled while a value is invalid (for example a latency `min` greater than `max`), so these server-side corrections only apply to values that reach the engine another way -- `application.properties`, JSON-RPC, an import or the state file. A value the forms accept but the engine corrects (a latency above `300000` ms, or an exception class that cannot be loaded, for instance) is corrected, persisted back to `.goblin-state.json`, and reported in a warning toast.

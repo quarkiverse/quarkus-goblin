@@ -38,6 +38,26 @@ class GoblinJsonRPCServiceTest {
             "clientLatencyEnabled", "clientExceptionEnabled", "responseBodyEnabled", "responseHeaderEnabled",
     };
 
+    @Test
+    void autoOffIsScheduledReportedAndCancelledThroughJsonRpc() {
+        try {
+            assertEquals(0L, service.getStatus().getLong("autoOffRemainingMs"));
+
+            JsonObject started = service.startAutoOff(5);
+            assertTrue(started.getBoolean("ok"));
+            long remaining = service.getStatus().getLong("autoOffRemainingMs");
+            assertTrue(remaining > 0 && remaining <= 5 * 60_000L, "remaining " + remaining);
+
+            JsonObject cancelled = service.cancelAutoOff();
+            assertTrue(cancelled.getBoolean("ok"));
+            assertEquals(0L, service.getStatus().getLong("autoOffRemainingMs"));
+
+            assertFalse(service.startAutoOff(0).getBoolean("ok"), "a non-positive delay is rejected");
+        } finally {
+            engine.cancelAutoOff();
+        }
+    }
+
     /**
      * A null {@link MutableAssaultConfig} (engine not yet initialised) must produce a stable {@code ok=false} error
      * object instead of throwing.
