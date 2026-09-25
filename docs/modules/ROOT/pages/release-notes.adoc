@@ -10,27 +10,39 @@ include::../partials/attributes.adoc[]
 |Version |Date
 
 |0.3.0
-|In development
+|2026-09-25
 |===
 
 === New Features
 
 * Multi-layer chaos assaults with per-request layer resolution (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_IN`, `HTTP_OUT` rolled per outgoing call), one check-box per layer in the Dev UI, and service-layer assaults on business beans via a CDI interceptor that runs inside the Fault Tolerance machinery -- so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` are exercised for real. The `DATABASE` layer fails or delays JDBC connection acquisition through an Agroal pool interceptor (JDBC, Hibernate ORM, Panache); the `MESSAGING` layer faults `@Incoming` consumers outside Fault Tolerance, each consumed message resolving its own layer (https://github.com/quarkiverse/quarkus-goblin/issues/54[#54]).
-* The `quarkus-goblin-metrics` module now depends on the Micrometer API only (`quarkus-micrometer`): add the registry of your choice, e.g. `quarkus-micrometer-registry-prometheus`, to expose `/q/metrics`.
-* Assault metrics and latency histograms via Micrometer / Prometheus (https://github.com/quarkiverse/quarkus-goblin/pull/51[#51]).
-* Assault tracing via OpenTelemetry -- one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span (https://github.com/quarkiverse/quarkus-goblin/issues/47[#47]).
+* Each recorded assault carries its `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), exposed in the history, the counters, the metrics, the traces and the Markdown report; the Dev UI status bar counts the assaults per source.
+* The Markdown report describes the armed chaos layers and the client-side assaults.
 
 === Breaking changes
 
 * Chaos no longer activates in test mode by default: set `quarkus.goblin.test.enabled=true` to assault your `@QuarkusTest` suite (or call `AssaultEngine.setActive(true)` from a test). Adding the extension therefore never slows down nor breaks an existing test suite.
+* The `quarkus-goblin-metrics` module now depends on the Micrometer API only (`quarkus-micrometer`): add the registry of your choice, e.g. `quarkus-micrometer-registry-prometheus`, to expose `/q/metrics`.
+* SERVICE-layer assaults are tagged `service` instead of `server` in the metrics and the traces.
+* Java API: the targeting rules moved from `GoblinConfig.TargetConfig` to `GoblinTargetingConfig` (the property names are unchanged), and `AssaultEngine.setStaticConfig` is removed.
 
 === Improvements
 
-* The assault history now records the actually applied latency duration for latency assaults on **every** layer, including service-layer injections (previously only the HTTP layers recorded the value).
 * Every configuration key except the `quarkus.goblin.target.include-packages` / `exclude-packages` / `exclude-annotations` targeting rules is now read at runtime and can be overridden when the application starts. The targeting rules stay fixed at build time and are applied by a single implementation shared by every layer.
-* Configuration changes (profile switch, reset, import) are published atomically, and each assault hook reads one consistent snapshot per request.
-* Each recorded assault carries its `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), exposed in the history, the metrics and the traces; SERVICE-layer assaults are now tagged `service`.
+* No chaos wiring in production builds: the service and messaging interceptor bindings, the database hook and the Dev UI JSON-RPC are only registered in dev and test.
+* Configuration changes (profile switch, reset, import) are published atomically, and each assault hook reads one consistent snapshot per request. A Dev UI import is staged and applied at once: a rejected payload changes nothing, and values of the wrong type are converted or skipped with a warning.
+* The assault history records the latency actually endured, including a delay cut short by `@Timeout`, on every layer.
+* Latency is never applied on a Vert.x event-loop thread, and latency values are bounded to 0-300000 ms.
+* The Dev UI keeps its toggles and forms in sync with the server (changes made from another tab or a JSON-RPC client appear within 2 seconds) and validates response header names before saving.
 * The Dev UI state file is written as structured JSON; files written by earlier versions are still read.
+* Quarkus 3.38 and every later version are accepted by the build (including the ecosystem CI snapshot).
+
+=== Bug Fixes
+
+* A decision left on a worker thread by a failed HTTP request no longer leaks into a later message consumer or scheduled job.
+* The Dev UI "client" counter counted nothing: assaults are now counted per source.
+* Saving response header rules with an invalid name no longer erases every rule.
+* A corrupted or legacy `.goblin-state.json` no longer prevents the application from starting.
 
 [[version-0-2]]
 == 0.2.x
@@ -39,13 +51,27 @@ include::../partials/attributes.adoc[]
 |===
 |Version |Date
 
+|0.2.1
+|2026-09-24
+
 |0.2.0
 |2026-09-21
 |===
 
-In development.
+=== 0.2.1
 
-=== New Features
+==== New Features
+
+* Assault metrics and latency histograms via Micrometer / Prometheus, in the optional `quarkus-goblin-metrics` module (https://github.com/quarkiverse/quarkus-goblin/pull/51[#51]).
+* Assault tracing via OpenTelemetry -- one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span, in the optional `quarkus-goblin-opentelemetry` module (https://github.com/quarkiverse/quarkus-goblin/issues/47[#47]).
+
+==== Bug Fixes
+
+* The chaos engine is initialised in dev and test mode only: a packaged production application no longer reads `.goblin-state.json` nor activates chaos at startup, and no longer fails with a `NullPointerException`. In test mode the state file is ignored.
+
+=== 0.2.0
+
+==== New Features
 
 * Predefined assault profiles (https://github.com/quarkiverse/quarkus-goblin/pull/35[#35]).
 * Turn the Assault History into a chaos testing console (https://github.com/quarkiverse/quarkus-goblin/pull/37[#37]).
@@ -54,11 +80,11 @@ In development.
 * Response body injection assault (https://github.com/quarkiverse/quarkus-goblin/pull/40[#40]).
 * Response header injection assault (https://github.com/quarkiverse/quarkus-goblin/pull/42[#42]).
 
-=== Improvements
+==== Improvements
 
 * Chaos Dashboard overhaul with live controls and server-driven quick picks (https://github.com/quarkiverse/quarkus-goblin/pull/41[#41]).
 
-=== Bug Fixes
+==== Bug Fixes
 
 * The enabled flag now always comes from the property, never from persisted state (https://github.com/quarkiverse/quarkus-goblin/pull/39[#39]).
 

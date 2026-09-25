@@ -2,7 +2,7 @@
 
 > Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application.
 
-Current status: **preview** (v0.3.0 in development)
+Current status: **preview** (v0.3.0 released, v0.4.0 in development)
 
 ---
 
@@ -49,13 +49,13 @@ Current status: **preview** (v0.3.0 in development)
 
 ---
 
-## v0.3.0 -- Dev UI & Observability
+## v0.3.0 -- Observability & Multi-layer chaos
 
 - [x] **Micrometer/Prometheus metrics**
-  Expose assault counters and latency histograms via Micrometer so they appear in existing Prometheus/Grafana dashboards. Metrics: `goblin_assaults_total` (tagged by type), `goblin_latency_injected_seconds` (histogram), `goblin_active` (gauge). Delivered as the optional `quarkus-goblin-metrics` module (#46).
+  Expose assault counters and latency histograms via Micrometer so they appear in existing Prometheus/Grafana dashboards. Metrics: `goblin_assaults_total` (tagged by type), `goblin_latency_injected_seconds` (histogram), `goblin_active` (gauge). Delivered as the optional `quarkus-goblin-metrics` module (#46), shipped early in 0.2.1.
 
 - [x] **OpenTelemetry tracing integration**
-  Create an OTel span for each injected assault, with attributes for assault type, target method, and injected value. Link the assault span to the parent request span for end-to-end trace correlation.
+  Create an OTel span for each injected assault, with attributes for assault type, target method, and injected value. Link the assault span to the parent request span for end-to-end trace correlation. Delivered as the optional `quarkus-goblin-opentelemetry` module (#47), shipped early in 0.2.1.
 
 - [x] **Multi-layer chaos assaults** (#54)
   - [x] Phase 0 -- layer model, persistence and Dev UI check-boxes.
@@ -65,15 +65,21 @@ Current status: **preview** (v0.3.0 in development)
     resolves its own layer.
   - Follow-ups: reactive consumers and Hibernate Reactive / reactive SQL clients, outgoing messages (`Emitter`).
 
-- [ ] **Saved scenarios**
-  Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later. Store scenarios in a `.goblin/scenarios/` directory as JSON files.
-
-- [ ] **Post-assault assertions (resilience verification)**
-  Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine + JSON-RPC, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience/resilience testing*.
+- [x] **Controlled test-mode activation**
+  Chaos stays off in `@QuarkusTest` unless `quarkus.goblin.test.enabled=true` (or `AssaultEngine.setActive(true)` from a
+  test).
 
 ---
 
-## v0.4.0 -- Extensions & Ecosystem
+## v0.4.0 -- Resilience verification, Extensions & Ecosystem
+
+> Moved from v0.3.0: saved scenarios and post-assault assertions.
+
+- [ ] **Saved scenarios**
+  Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later. Store scenarios in a `.goblin/scenarios/` directory as JSON files. The Dev UI custom profiles cover part of it today, but they live in the browser only.
+
+- [ ] **Post-assault assertions (resilience verification)**
+  Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine + JSON-RPC, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience/resilience testing*.
 
 - [ ] **gRPC support**
   Implement gRPC `ServerInterceptor` and `ClientInterceptor` to inject latency and exceptions on gRPC calls. Cover both unary and streaming RPCs.
@@ -97,9 +103,6 @@ Current status: **preview** (v0.3.0 in development)
 - [ ] **Stable public API**
   Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultRecord`) with `@Experimental` annotations removed. Document the API contract and versioning policy for third-party extensions.
 
-- [x] **Controlled test-mode activation**
-  Chaos stays off in `@QuarkusTest` unless `quarkus.goblin.test.enabled=true` (or `AssaultEngine.setActive(true)` from a
-  test).
 - [ ] **Production-profile safeguard**
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.
 
