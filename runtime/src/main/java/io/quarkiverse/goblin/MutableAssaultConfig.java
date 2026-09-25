@@ -122,6 +122,32 @@ public class MutableAssaultConfig {
     }
 
     /**
+     * Returns an independent, writable copy of the current state, without change listener. A multi-field change -- an
+     * import, a custom profile -- is staged on it, then published at once with {@link #replaceWith(MutableAssaultConfig)},
+     * so a failure half-way leaves this configuration untouched.
+     *
+     * @return a writable copy of the current configuration
+     */
+    public MutableAssaultConfig workingCopy() {
+        return new MutableAssaultConfig(state, false);
+    }
+
+    /**
+     * Publishes the whole state of a staged configuration as a single change (one state, one change notification).
+     *
+     * @param staged the configuration whose state becomes the current one, typically a {@link #workingCopy()}
+     */
+    public void replaceWith(MutableAssaultConfig staged) {
+        if (frozen) {
+            throw new UnsupportedOperationException("A configuration snapshot is read-only");
+        }
+        synchronized (writeLock) {
+            state = staged.state;
+        }
+        notifyChange();
+    }
+
+    /**
      * Derives the next state from the current one and publishes it atomically.
      *
      * @param change the modification applied to a working copy of the current state

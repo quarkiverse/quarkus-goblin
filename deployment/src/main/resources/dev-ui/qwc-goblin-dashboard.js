@@ -1,4 +1,5 @@
 import {LitElement, html, css} from 'lit';
+import {live} from 'lit/directives/live.js';
 import {JsonRpc} from 'jsonrpc';
 
 const AUTO_OFF_KEY = 'goblin.autoOffDeadline';
@@ -326,6 +327,9 @@ export class QwcGoblinDashboard extends LitElement {
 
     static HTTP_PICKS = [500, 503, 429, 404];
 
+    // RFC 9110 token: the header names the server accepts
+    static HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
     static SOURCES = [
         {tag: 'server', label: 'REST'},
         {tag: 'service', label: 'service'},
@@ -398,21 +402,65 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _loadData() {
-        this.jsonRpc.getConfig().then(r => { this._applyConfigResult(r.result); });
+        this.jsonRpc.getConfig().then(r => { this._applyConfigResult(r.result, '*'); });
         this._refresh();
     }
 
     _refresh() {
         this.jsonRpc.getStatus().then(r => { this._status = {...r.result}; });
         this.jsonRpc.getCounters().then(r => { this._counters = {...r.result}; });
+        // the configuration can change from another tab, a live reload or a JSON-RPC client: keep the toggles and the
+        // forms in sync, without touching a section the user is currently editing
+        this.jsonRpc.getConfig().then(r => { this._syncFromServer(r.result); });
     }
 
-    _applyConfigResult(result) {
-        if (!result) {
+    _syncFromServer(result) {
+        if (!result || !result.latency) {
             return;
         }
         this._config = {...result};
-        this._form = this._syncFormFromConfig(result);
+        this._form = this._mergeForm(this._syncFormFromConfig(result));
+    }
+
+    /**
+     * Returns the fresh form values, except for the sections still being edited (dirty), which keep the user's input.
+     */
+    _mergeForm(fresh) {
+        if (!this._form) {
+            return fresh;
+        }
+        const merged = {...fresh};
+        for (const section of Object.keys(fresh)) {
+            if (this._dirtyFor(section)) {
+                merged[section] = this._form[section];
+            }
+        }
+        return merged;
+    }
+
+    /**
+     * Applies a configuration returned by the server.
+     *
+     * @param result the full configuration
+     * @param saved the form section that was just saved (its dirty state is cleared), '*' when the whole configuration was
+     *        replaced (profile, reset, import...), or undefined for an action unrelated to the forms (a toggle...)
+     */
+    _applyConfigResult(result, saved) {
+        if (!result || !result.latency) {
+            return;
+        }
+        this._config = {...result};
+        if (saved === '*') {
+            this._form = this._syncFormFromConfig(result);
+            this._dirty = {};
+            this._errors = {};
+        } else {
+            if (saved) {
+                this._dirty = {...this._dirty, [saved]: false};
+                this._errors = {...this._errors, [saved]: undefined};
+            }
+            this._form = this._mergeForm(this._syncFormFromConfig(result));
+        }
         this._status = {
             ...this._status,
             active: result.active !== undefined ? result.active : (this._status && this._status.active !== undefined ? this._status.active : true),
@@ -427,8 +475,6 @@ export class QwcGoblinDashboard extends LitElement {
             responseBodyEnabled: result.responseBodyEnabled,
             responseHeaderEnabled: result.responseHeaderEnabled,
         };
-        this._dirty = {};
-        this._errors = {};
     }
 
     _showToast(msg, kind) {
@@ -520,7 +566,7 @@ export class QwcGoblinDashboard extends LitElement {
         if (confirm('Disable ALL assaults and deactivate chaos? This is reversible via the dashboard.')) {
             this.jsonRpc.disableAll().then(r => {
                 if (r.result.ok) {
-                    this._applyConfigResult(r.result);
+                    this._applyConfigResult(r.result, '*');
                     this._cancelAutoOff();
                     this._showToast('All assaults disabled', 'info');
                 }
@@ -541,7 +587,7 @@ export class QwcGoblinDashboard extends LitElement {
         const level = parseInt(this._form.level);
         this.jsonRpc.setTargetLevel({level}).then(r => {
             if (r.result.ok) {
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, 'level');
                 this._showToast(r.result.warning || 'Target level updated', r.result.warning ? 'warning' : '');
             }
         });
@@ -676,7 +722,7 @@ export class QwcGoblinDashboard extends LitElement {
         const max = parseInt(this._form.latency.max);
         this.jsonRpc.setLatencyRange({minMs: min, maxMs: max}).then(r => {
             if (r.result.ok) {
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, 'latency');
                 this._showToast(r.result.warning || 'Latency updated', r.result.warning ? 'warning' : '');
             }
         });
@@ -703,7 +749,7 @@ export class QwcGoblinDashboard extends LitElement {
         const msg = this._form.exception.message;
         this.jsonRpc.setExceptionConfig({type, message: msg}).then(r => {
             if (r.result.ok) {
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, 'exception');
                 this._showToast(r.result.warning || 'Exception updated', r.result.warning ? 'warning' : '');
             }
         });
@@ -741,7 +787,7 @@ export class QwcGoblinDashboard extends LitElement {
         const msg = this._form.httpStatus.message;
         this.jsonRpc.setHttpStatusConfig({code, message: msg}).then(r => {
             if (r.result.ok) {
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, 'httpStatus');
                 this._showToast(r.result.warning || 'HTTP status updated', r.result.warning ? 'warning' : '');
             }
         });
@@ -779,7 +825,7 @@ export class QwcGoblinDashboard extends LitElement {
         const percentage = parseInt(this._form.body.pct);
         this.jsonRpc.setResponseBodyConfig({mode, percentage}).then(r => {
             if (r.result.ok) {
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, 'body');
                 this._showToast(r.result.warning || 'Response body updated', r.result.warning ? 'warning' : '');
             } else {
                 this._showToast(r.result && r.result.error || 'Response body update failed', 'error');
@@ -846,16 +892,24 @@ export class QwcGoblinDashboard extends LitElement {
                 this._showToast('Header names must not be blank', 'error');
                 return;
             }
+            if (!QwcGoblinDashboard.HEADER_NAME.test(name)) {
+                this._showToast(`"${name}" is not a valid header name (letters, digits and !#$%&'*+-.^_\`|~ only)`, 'error');
+                return;
+            }
             headers[name] = {action: row.action, value: row.value || ''};
         }
         this.jsonRpc.applyConfig({config: {headers}}).then(r => {
             if (r.result && r.result.ok) {
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, 'headers');
                 this._showToast(r.result.warning || 'Response headers updated', r.result.warning ? 'warning' : '');
             } else {
                 this._showToast(r.result && r.result.error || 'Response header update failed', 'error');
+                this._loadData();
             }
-        }).catch(() => this._showToast('Response header update failed', 'error'));
+        }).catch(() => {
+            this._showToast('Response header update failed', 'error');
+            this._loadData();
+        });
     }
 
     _headerSummary(config) {
@@ -910,7 +964,7 @@ export class QwcGoblinDashboard extends LitElement {
             this.jsonRpc.applyConfig({config: saved.config}).then(r => {
                 if (r.result && r.result.ok) {
                     this._activeCustom = name;
-                    this._applyConfigResult(r.result);
+                    this._applyConfigResult(r.result, '*');
                     this._showToast(r.result.warning || `Profile '${name}' applied`, r.result.warning ? 'warning' : '');
                 } else {
                     this._showToast(r.result && r.result.error || 'Profile application failed', 'error');
@@ -925,7 +979,7 @@ export class QwcGoblinDashboard extends LitElement {
         this.jsonRpc.setProfile({profile: value}).then(r => {
             if (r && r.result && r.result.ok) {
                 this._activeCustom = null;
-                this._applyConfigResult(r.result);
+                this._applyConfigResult(r.result, '*');
                 this._showToast(`Profile ${this._profileLabel(r.result.profile)} applied`);
             } else {
                 this._showToast(r && r.result && r.result.error || 'Profile update failed', 'error');
@@ -976,7 +1030,7 @@ export class QwcGoblinDashboard extends LitElement {
         if (confirm('Reset all assaults and parameters to their application.properties defaults?')) {
             this.jsonRpc.resetDefaults().then(r => {
                 if (r.result.ok) {
-                    this._applyConfigResult(r.result);
+                    this._applyConfigResult(r.result, '*');
                     this._cancelAutoOff();
                     this._showToast(r.result.warning || 'Configuration reset to defaults', r.result.warning ? 'warning' : '');
                 } else {
@@ -1010,7 +1064,7 @@ export class QwcGoblinDashboard extends LitElement {
                 const config = JSON.parse(reader.result);
                 this.jsonRpc.applyConfig({config}).then(r => {
                     if (r.result && r.result.ok) {
-                        this._applyConfigResult(r.result);
+                        this._applyConfigResult(r.result, '*');
                         this._showToast(r.result.warning || 'Configuration imported', r.result.warning ? 'warning' : '');
                     } else {
                         this._showToast(r.result && r.result.error || 'Import failed', 'error');
@@ -1145,7 +1199,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="${this._layerAvailable(layer.value) ? layer.hint : 'Requires ' + layer.requires}">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="${layer.label} layer"
-                                   ?checked="${this._layerEnabled(layer.value)}"
+                                   .checked="${live(!!(this._layerEnabled(layer.value)))}"
                                    ?disabled="${!this._layerAvailable(layer.value)}"
                                    @change="${() => this._toggleLayer(layer.value)}">
                             <span class="slider" aria-hidden="true"></span>
@@ -1193,7 +1247,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="Priority 10 - artificial delay before processing">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Latency assault"
-                                   ?checked="${c.latencyEnabled}"
+                                   .checked="${live(!!(c.latencyEnabled))}"
                                    @change="${() => this._toggleAssault('latencyEnabled', 'toggleLatency')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1229,7 +1283,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="Priority 20 - throws before executing the method">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Exception assault"
-                                   ?checked="${c.exceptionEnabled}"
+                                   .checked="${live(!!(c.exceptionEnabled))}"
                                    @change="${() => this._toggleAssault('exceptionEnabled', 'toggleException')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1270,7 +1324,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="Priority 30 - aborts the request with a status code">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="HTTP status assault"
-                                   ?checked="${c.httpStatusEnabled}"
+                                   .checked="${live(!!(c.httpStatusEnabled))}"
                                    @change="${() => this._toggleAssault('httpStatusEnabled', 'toggleHttpStatus')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1311,7 +1365,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="Priority 40 - simulates a downstream service failure">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Dependency degradation assault"
-                                   ?checked="${c.dependencyDegradationEnabled}"
+                                   .checked="${live(!!(c.dependencyDegradationEnabled))}"
                                    @change="${() => this._toggleAssault('dependencyDegradationEnabled', 'toggleDependencyDegradation')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1332,7 +1386,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="Response phase - rewrites the emitted entity">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Response body assault"
-                                   ?checked="${c.responseBodyEnabled}"
+                                   .checked="${live(!!(c.responseBodyEnabled))}"
                                    @change="${() => this._toggleAssault('responseBodyEnabled', 'toggleResponseBody')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1371,7 +1425,7 @@ export class QwcGoblinDashboard extends LitElement {
                          title="Response phase - sets or removes response headers">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Response header assault"
-                                   ?checked="${c.responseHeaderEnabled}"
+                                   .checked="${live(!!(c.responseHeaderEnabled))}"
                                    @change="${() => this._toggleAssault('responseHeaderEnabled', 'toggleResponseHeader')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1415,7 +1469,7 @@ export class QwcGoblinDashboard extends LitElement {
                          @click="${() => this._toggleAssault('clientLatencyEnabled', 'toggleClientLatency')}">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Client latency assault"
-                                   ?checked="${c.clientLatencyEnabled}"
+                                   .checked="${live(!!(c.clientLatencyEnabled))}"
                                    @change="${() => this._toggleAssault('clientLatencyEnabled', 'toggleClientLatency')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>
@@ -1430,7 +1484,7 @@ export class QwcGoblinDashboard extends LitElement {
                          @click="${() => this._toggleAssault('clientExceptionEnabled', 'toggleClientException')}">
                         <label class="switch" @click="${e => e.stopPropagation()}">
                             <input type="checkbox" role="switch" aria-label="Client exception assault"
-                                   ?checked="${c.clientExceptionEnabled}"
+                                   .checked="${live(!!(c.clientExceptionEnabled))}"
                                    @change="${() => this._toggleAssault('clientExceptionEnabled', 'toggleClientException')}">
                             <span class="slider" aria-hidden="true"></span>
                         </label>

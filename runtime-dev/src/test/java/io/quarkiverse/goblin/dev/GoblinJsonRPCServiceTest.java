@@ -18,6 +18,7 @@ import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseHeaderAction;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 class GoblinJsonRPCServiceTest {
@@ -757,6 +758,96 @@ class GoblinJsonRPCServiceTest {
      * @param config the configuration to install
      * @return the installed configuration, enabling callers to tweak it before invoking the service
      */
+    /**
+     * An import that fails half-way (unknown profile here) must leave the configuration untouched.
+     */
+    @Test
+    void applyConfigRejectedPayloadChangesNothing() throws Exception {
+        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        cfg.setTargetLevel(30);
+
+        JsonObject result = service.applyConfig(new JsonObject()
+                .put("level", 80)
+                .put("profile", "CHAOS")
+                .put("latencyEnabled", false).getMap());
+
+        assertFalse(result.getBoolean("ok"));
+        assertNotNull(result.getString("error"));
+        assertEquals(30, cfg.getTargetLevel(), "nothing may be applied from a rejected payload");
+        assertTrue(cfg.isLatencyEnabled());
+    }
+
+    /**
+     * Booleans and numbers given as strings (a hand-edited export) are converted; values that cannot be converted
+     * are skipped with a warning while the rest of the payload is applied.
+     */
+    @Test
+    void applyConfigToleratesStringValuesAndSkipsInvalidOnes() throws Exception {
+        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.applyConfig(new JsonObject()
+                .put("exceptionEnabled", "true")
+                .put("level", "50")
+                .put("latencyEnabled", 42)
+                .put("httpStatus", new JsonObject().put("code", "not-a-code")).getMap());
+
+        assertTrue(result.getBoolean("ok"));
+        assertTrue(cfg.isExceptionEnabled());
+        assertEquals(50, cfg.getTargetLevel());
+        assertTrue(cfg.isLatencyEnabled(), "an unconvertible value is skipped, the field keeps its value");
+        assertEquals(503, cfg.getHttpStatusCode());
+        String warning = result.getString("warning");
+        assertTrue(warning.contains("latencyEnabled") && warning.contains("code"), warning);
+    }
+
+    /**
+     * An invalid header name is skipped with a warning; the other rules of the payload are still stored.
+     */
+    @Test
+    void applyConfigSkipsInvalidHeaderNamesWithoutLosingTheOtherRules() throws Exception {
+        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        cfg.setResponseHeader("X-Existing", ResponseHeaderAction.SET, "kept");
+
+        JsonObject result = service.applyConfig(new JsonObject().put("headers", new JsonObject()
+                .put("X-Existing", new JsonObject().put("action", "SET").put("value", "kept"))
+                .put("X Bad", new JsonObject().put("action", "SET").put("value", "v"))).getMap());
+
+        assertTrue(result.getBoolean("ok"));
+        assertEquals("kept", cfg.getResponseHeaders().get("X-Existing").value());
+        assertFalse(cfg.getResponseHeaders().containsKey("X Bad"));
+        assertTrue(result.getString("warning").contains("X Bad"), result.getString("warning"));
+    }
+
+    /**
+     * A whole import is persisted once, not once per field.
+     */
+    @Test
+    void applyConfigPublishesTheImportAsASingleChange() throws Exception {
+        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        int[] changes = { 0 };
+        cfg.setOnChange(() -> changes[0]++);
+
+        service.applyConfig(new JsonObject()
+                .put("exceptionEnabled", true)
+                .put("level", 42)
+                .put("layers", new JsonArray().add("SERVICE")).getMap());
+
+        assertEquals(1, changes[0]);
+    }
+
+    /**
+     * {@code setResponseHeaderInfo} reports an invalid header name as {@code ok=false} instead of failing the call.
+     */
+    @Test
+    void setResponseHeaderInfoRejectsInvalidNames() throws Exception {
+        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+
+        JsonObject result = service.setResponseHeaderInfo("X Bad", "SET", "v");
+
+        assertFalse(result.getBoolean("ok"));
+        assertTrue(cfg.getResponseHeaders().isEmpty());
+    }
+
     private MutableAssaultConfig setMutableConfig(MutableAssaultConfig config) {
         try {
             Field field = AssaultEngine.class.getDeclaredField("mutableConfig");
