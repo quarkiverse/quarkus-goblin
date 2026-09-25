@@ -550,16 +550,31 @@ class MutableAssaultConfigTest {
     }
 
     @Test
-    void profilesLeaveBodyToggleUntouched() {
+    void profilesTurnBodyToggleOffButKeepItsParameters() {
         MutableAssaultConfig config = new MutableAssaultConfig();
         config.setResponseBodyEnabled(true);
         config.setResponseBodyMode(ResponseBodyMode.INFLATE);
         config.setResponseBodyPercentage(200);
 
         config.setProfile(AssaultProfile.SLOW_FAILURE);
-        assertTrue(config.isResponseBodyEnabled(), "body toggle must survive profile application");
+        assertFalse(config.isResponseBodyEnabled(), "a profile turns every server-side toggle off, body included");
         assertEquals(ResponseBodyMode.INFLATE, config.getResponseBodyMode());
         assertEquals(200, config.getResponseBodyPercentage());
+    }
+
+    @Test
+    void profilesResetTheMessagesOfTheAssaultsTheyEnable() {
+        MutableAssaultConfig config = new MutableAssaultConfig();
+        config.setExceptionMessage("custom exception message");
+        config.setHttpStatusMessage("custom status message");
+
+        config.setProfile(AssaultProfile.SLOW_FAILURE);
+        assertEquals(AssaultSettings.DEFAULTS.exceptionMessage, config.getExceptionMessage());
+        assertEquals("custom status message", config.getHttpStatusMessage(), "SLOW_FAILURE does not enable HTTP status");
+
+        config.setProfile(AssaultProfile.INTERMITTENT);
+        assertEquals(500, config.getHttpStatusCode());
+        assertEquals(MutableAssaultConfig.INTERMITTENT_STATUS_MESSAGE, config.getHttpStatusMessage());
     }
 
     @Test

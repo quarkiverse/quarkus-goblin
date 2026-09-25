@@ -16,14 +16,13 @@ include::../partials/attributes.adoc[]
 === New Features
 
 * Multi-layer chaos assaults with per-request layer resolution (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_IN`, `HTTP_OUT` rolled per outgoing call), one check-box per layer in the Dev UI, and service-layer assaults on business beans via a CDI interceptor that runs inside the Fault Tolerance machinery -- so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` are exercised for real. The `DATABASE` layer fails or delays JDBC connection acquisition through an Agroal pool interceptor (JDBC, Hibernate ORM, Panache); the `MESSAGING` layer faults `@Incoming` consumers outside Fault Tolerance, each consumed message resolving its own layer (https://github.com/quarkiverse/quarkus-goblin/issues/54[#54]).
-* Each recorded assault carries its `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), exposed in the history, the counters, the metrics, the traces and the Markdown report; the Dev UI status bar counts the assaults per source.
+* The `source` of each recorded assault, already tagged in the metrics and traces since 0.2.1 (`server`, `rest-client`, `webclient`), gains the `service`, `database` and `messaging` values, and is now also exposed in the history, the counters and the Markdown report; the Dev UI status bar counts the assaults per source.
 * The Markdown report describes the armed chaos layers and the client-side assaults.
 
 === Breaking changes
 
 * Chaos no longer activates in test mode by default: set `quarkus.goblin.test.enabled=true` to assault your `@QuarkusTest` suite (or call `AssaultEngine.setActive(true)` from a test). Adding the extension therefore never slows down nor breaks an existing test suite.
 * The `quarkus-goblin-metrics` module now depends on the Micrometer API only (`quarkus-micrometer`): add the registry of your choice, e.g. `quarkus-micrometer-registry-prometheus`, to expose `/q/metrics`.
-* SERVICE-layer assaults are tagged `service` instead of `server` in the metrics and the traces.
 * Java API: the targeting rules moved from `GoblinConfig.TargetConfig` to `GoblinTargetingConfig` (the property names are unchanged), and `AssaultEngine.setStaticConfig` is removed.
 
 === Improvements
@@ -32,7 +31,7 @@ include::../partials/attributes.adoc[]
 * No chaos wiring in production builds: the service and messaging interceptor bindings, the database hook and the Dev UI JSON-RPC are only registered in dev and test.
 * Configuration changes (profile switch, reset, import) are published atomically, and each assault hook reads one consistent snapshot per request. A Dev UI import is staged and applied at once: a rejected payload changes nothing, and values of the wrong type are converted or skipped with a warning.
 * The assault history records the latency actually endured, including a delay cut short by `@Timeout`, on every layer.
-* Latency is never applied on a Vert.x event-loop thread, and latency values are bounded to 0-300000 ms.
+* A blocking latency is never applied on a Vert.x event-loop thread (the WebClient latency uses a timer), and latency values are bounded to 0-300000 ms.
 * The Dev UI keeps its toggles and forms in sync with the server (changes made from another tab or a JSON-RPC client appear within 2 seconds) and validates response header names before saving.
 * The Dev UI state file is written as structured JSON; files written by earlier versions are still read.
 * Quarkus 3.38 and every later version are accepted by the build (including the ecosystem CI snapshot).
@@ -126,14 +125,21 @@ include::../partials/attributes.adoc[]
 |2026-08-28
 |===
 
-=== New Features
+=== 0.0.2
 
-* Server-side assaults: latency, exception, HTTP status and dependency degradation (https://github.com/quarkiverse/quarkus-goblin/pull/1[#1]).
+==== New Features
+
 * Dev UI dashboard with per-assault-type toggles (https://github.com/quarkiverse/quarkus-goblin/pull/10[#10]).
 * Factual markdown report export from the assault history (https://github.com/quarkiverse/quarkus-goblin/pull/13[#13]).
 * Adopt `-dev` naming for the dev-only extension modules (https://github.com/quarkiverse/quarkus-goblin/pull/14[#14]).
 
-=== Improvements
+==== Improvements
 
 * Migrate docs to the Antora structure for Quarkiverse publication (https://github.com/quarkiverse/quarkus-goblin/pull/6[#6]).
 * Add the Goblin icon to the extension list (https://github.com/quarkiverse/quarkus-goblin/pull/12[#12]).
+
+=== 0.0.1
+
+==== New Features
+
+* Server-side assaults: latency, exception, HTTP status and dependency degradation (https://github.com/quarkiverse/quarkus-goblin/pull/1[#1]).

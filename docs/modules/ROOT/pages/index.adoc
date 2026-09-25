@@ -1,5 +1,4 @@
 = Goblin - Chaos Engineering Extension for Quarkus
-
 :toc: left
 :toclevels: 3
 
@@ -74,7 +73,7 @@ You should see a response time well above your normal baseline.
 * xref:how-it-works.adoc[] -- JAX-RS filter mechanics, runtime config modification, state persistence, and adding your own assault type.
 * xref:metrics.adoc[] -- optional Micrometer / Prometheus metrics for assault activity (`quarkus-goblin-metrics`).
 * xref:tracing.adoc[] -- optional OpenTelemetry spans for each assault (`quarkus-goblin-opentelemetry`).
-* xref:compatibility.adoc[] -- coexistence with MicroProfile Fault Tolerance (service-layer interceptor placement) and both JAX-RS runtimes.
+* xref:compatibility.adoc[] -- coexistence with MicroProfile Fault Tolerance (service-layer interceptor placement), Quarkus REST, the REST clients and the optional database and messaging hooks.
 * xref:troubleshooting.adoc[] -- common issues and their fixes.
 * xref:end-to-end-example.adoc[] -- prove that your `@Timeout` and `@Fallback` actually work.
 * xref:json-rpc-reference.adoc[] -- the JSON-RPC API used by the Dev UI, for scripting and CI validation.
@@ -103,7 +102,7 @@ If the configured class does not exist or has no `String` constructor, Goblin fa
 
 *Are Dev UI changes persisted?*
 
-Yes. Runtime changes are automatically saved to a `.goblin-state.json` file in the project working directory and restored on the next startup. The file is gitignored by default.
+Yes. Runtime changes are automatically saved to a `.goblin-state.json` file in the project working directory and restored on the next startup. Add `.goblin-state.json` to your `.gitignore`: it holds your local chaos settings, and a committed copy would silently replace the `application.properties` configuration of your teammates in dev mode.
 
 == Non-goals (out of scope for V1)
 

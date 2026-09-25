@@ -1,5 +1,4 @@
 = Targeting
-
 :toc: left
 :toclevels: 2
 
@@ -75,6 +74,8 @@ Exclude methods (or their declaring classes) that carry specific annotations, on
 quarkus.goblin.target.exclude-annotations=org.eclipse.microprofile.faulttolerance.Timeout,org.eclipse.microprofile.faulttolerance.Fallback
 ----
 
-This prevents double-interception: you can chaos-test your unprotected endpoints while leaving fault-tolerant ones to their own mechanisms. To exercise the Fault Tolerance annotations themselves, arm the `SERVICE` or `DATABASE` layer instead: their faults are injected below or inside the guarded methods (see xref:end-to-end-example.adoc[End-to-end example]).
+This prevents double-interception: you can chaos-test your unprotected endpoints while leaving fault-tolerant ones to their own mechanisms.
+
+The exclusion applies to every layer that uses the targeting rules: a bean method carrying one of these annotations is not woven for `SERVICE` either (nor an `@Incoming` method for `MESSAGING`). To exercise the Fault Tolerance annotations themselves while they are excluded, arm the `DATABASE` layer, whose hook ignores the targeting rules, or let `SERVICE` hit a bean the guarded method calls that does not carry the annotation: the fault then fires inside the guarded method. Without the exclusion, `SERVICE` injects directly inside the guarded method (see xref:end-to-end-example.adoc[End-to-end example]).
 
 NOTE: Exclusion by annotation never requires you to *add* an annotation to your application. Goblin only reacts to annotations that are already present on your endpoints (such as MicroProfile Fault Tolerance types). There is deliberately no Goblin-owned annotation to scatter across your code -- consistent with the *zero code modification* principle.

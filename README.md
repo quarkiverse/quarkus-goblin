@@ -19,7 +19,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Exception injection** -- Throw configurable exceptions before method execution
 - **HTTP status forcing** -- Return specific HTTP status codes (503, 500, etc.)
 - **Dependency degradation** -- Simulate downstream service failures
-- **Response body injection** -- Truncate or inflate the response entity (`TRUNCATE` keeps the first N%, `INFLATE` pads it) to break strict JSON clients and length-validating consumers
+- **Response body injection** -- Truncate or inflate the response entity (`TRUNCATE` keeps the first N%, `INFLATE` pads it) to break strict JSON clients and length-validating consumers. Applies to `String`, `CharSequence` and `byte[]` entities; an object serialized by a JSON provider (e.g. a POJO) is left untouched
 - **Response header injection** -- Set or remove headers on emitted responses (`SET` forces the value, replacing an existing header or adding it when absent; `REMOVE` deletes it when present)
 - **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`) and Vert.x `WebClient` calls (`GoblinWebClient.enable(...)`, opt-in at client creation)
 - **Metrics** -- Optional `quarkus-goblin-metrics` module exposing assault activity as Micrometer / Prometheus metrics (`goblin_assaults_total`, `goblin_latency_injected_seconds`, `goblin_active`, see the [Metrics guide](docs/modules/ROOT/pages/metrics.adoc))
@@ -27,9 +27,9 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
 - **Targeting** -- By package, by annotation, by percentage of requests
 - **Dev UI** -- Toggle assaults, edit config, view history -- all in real time
-- **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`)
+- **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`, dev mode); the master on/off toggle is not persisted and always starts from `quarkus.goblin.enabled`
 - **Markdown report export** -- Generate a factual report of config + assault history, ready to hand to an LLM for resilience review
-- **Multi-layer chaos** -- Arm the `DATABASE`, `MESSAGING`, `SERVICE`, `HTTP_OUT` and `HTTP_IN` layers independently (Dev UI check-boxes): `DATABASE` fails or delays JDBC connection acquisition (Agroal, below Hibernate / Panache), `MESSAGING` faults `@Incoming` consumers, and `SERVICE` injects latency/exceptions on business beans *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real
+- **Multi-layer chaos** -- Arm the `DATABASE`, `MESSAGING`, `SERVICE`, `HTTP_OUT` and `HTTP_IN` layers independently (Dev UI switches): `DATABASE` fails or delays JDBC connection acquisition (Agroal, below Hibernate / Panache), `MESSAGING` faults `@Incoming` consumers, and `SERVICE` injects latency/exceptions on business beans *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real
 - **Dev by default, tests on opt-in** -- Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`; in a production build the engine stays inactive and no bean is woven with the service interceptor
 
 ## Quick start
@@ -121,7 +121,7 @@ The module depends on the Micrometer API only: add the registry you use, e.g.
 `io.quarkus:quarkus-micrometer-registry-prometheus`, whose `/q/metrics` endpoint then exposes:
 
 - `goblin_assaults_total` -- counter of every fired assault, tagged by `type` and `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
-- `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source` (sum/count/max; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for histogram tuning)
+- `goblin_latency_injected_seconds` -- timer of the delays actually injected, tagged by `source`, published as a histogram (`_sum`/`_count`/`_max` plus `_bucket` series; see the [guide](docs/modules/ROOT/pages/metrics.adoc) for bucket tuning)
 - `goblin_active` -- gauge, `1` while the engine is active, `0` otherwise
 
 ## Tracing (optional)
@@ -147,16 +147,16 @@ Each assault produces one span named `goblin.assault`:
 
 The Chaos Dashboard provides:
 
-- **Master toggle** -- Activate/deactivate all chaos
-- **Profile selector** -- Switch a whole assault setup (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) in one click; individual toggles stay overridable
+- **Master toggle** -- Activate/deactivate all chaos, with an optional auto-off (5 to 60 minutes) enforced by the engine even when the Dev UI is closed
+- **Profile selector** -- Switch a whole server-side assault setup (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`) in one click: a profile turns every server-side assault off, then enables its own; client-side toggles and layers are untouched and individual toggles stay overridable
 - **Assault type toggles** -- Independent on/off for Latency, Exception, HTTP Status, Dependency Degradation, Response Body, and Response Header
 - **Client-side assault toggles** -- `client latency` and `client exception` for outgoing REST Client and Vert.x WebClient calls
-- **Config sections** -- Edit parameters per type (disabled with placeholders when type is off)
+- **Config sections** -- Edit parameters per type (a summary of the current values when the type is off)
 - **Target level** -- Adjust percentage of affected requests
 - **History** -- Live chaos-testing console: 2-second auto-refresh, newest-first ordering, filters (assault type, method, time period), a summary band with totals and average injected latency, and expandable Active Config cells
 - **Markdown report** -- "Export Markdown" button in the History panel generates a factual report of the current configuration and assault history (copy or download it), handy for pasting into an LLM assistant (e.g. Claude) for a resilience review
 
-All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts. Invalid values are never applied: Goblin logs a clear message and applies a safe fallback -- inverted latency ranges are swapped, out-of-range HTTP status codes (100-599) fall back to 503, unknown exception classes fall back to `RuntimeException`, the response body percentage is clamped to its mode's valid range (0-100 for `TRUNCATE`, 101-1000 for `INFLATE`), unknown header actions are skipped, and the target level is clamped to 0-100. In the dashboard, a warning toast explains the applied correction.
+All changes apply instantly with WARN logs in the console and are persisted to `.goblin-state.json` across restarts (except the master toggle, which always starts from `quarkus.goblin.enabled`). Invalid values are never applied: Goblin logs a clear message and applies a safe fallback -- inverted latency ranges are swapped, out-of-range HTTP status codes (100-599) fall back to 503, unknown exception classes fall back to `RuntimeException`, the response body percentage is clamped to its mode's valid range (0-100 for `TRUNCATE`, 101-1000 for `INFLATE`), response header rules with an unknown action or an invalid name are rejected, and the target level is clamped to 0-100. In the dashboard, a warning toast explains the applied correction.
 
 ## Safety
 
@@ -189,7 +189,7 @@ Test coverage is aggregated by JaCoCo (`report-aggregate` on `integration-tests`
 To inspect the full HTML report locally:
 
 ```bash
-./mvnw clean install -Dno-format
+mvn clean install -Dno-format
 open integration-tests/target/site/jacoco-aggregate/index.html
 ```
 

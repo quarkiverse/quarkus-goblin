@@ -1,7 +1,4 @@
 = Tracing (OpenTelemetry)
-
-:page-aliases: tracing
-
 :toc: left
 :toclevels: 3
 

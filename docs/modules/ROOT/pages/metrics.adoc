@@ -1,7 +1,4 @@
 = Metrics (Micrometer / Prometheus)
-
-:page-aliases: metrics
-
 :toc: left
 :toclevels: 3
 
@@ -34,10 +31,10 @@ The module only brings in the Micrometer API (`quarkus-micrometer`), so it never
 
 | `goblin_assaults_total`
 | Counter of every fired assault, incremented once per assault (including client-side ones).
-| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`) and `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
+| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`, `response-header-set:X-RateLimit-Remaining`) and `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
 
 | `goblin_latency_injected_seconds`
-| Timer of the delays actually injected (only incremented when latency was really applied). Exposed as a histogram: `_sum` / `_count` plus `_bucket` distribution series. Custom bucket boundaries can be set with `quarkus.micrometer.export.prometheus.prometheus.bucket-boundaries`.
+| Timer of the delays actually injected (only incremented when latency was really applied). Exposed as a histogram: `_sum` / `_count` / `_max` plus `_bucket` distribution series. To change the buckets, register a Micrometer `MeterFilter` bean that overrides the `DistributionStatisticConfig` of `goblin.latency.injected.seconds` (see below).
 | `source`
 
 | `goblin_active`
@@ -47,23 +44,46 @@ The module only brings in the Micrometer API (`quarkus-micrometer`), so it never
 
 NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin.assaults.total`), but the Prometheus export sanitizes them to underscores -- `goblin_assaults_total` in `/q/metrics`. Other backends (JVM, statsd, ...) keep the dotted names, so write PromQL against the underscored form and refer to the dotted names when consuming the tags/names elsewhere.
 
+The response header assaults carry the header name and action in `type` (`response-header-set:<name>` or `response-header-remove:<name>`, with the name as configured): each header rule produces its own series, so keep the number of rules small on a long-lived Prometheus.
+
 `source` is carried by each recorded assault: inbound REST assaults (`SampleResource.hello`) are tagged `server`, application bean assaults (SERVICE layer) `service`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
 
 TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (type)`; watch a specific source with `sum(rate(goblin_latency_injected_seconds_count[5m])) by (source)`.
 
 == Reading the latency histogram
 
-Micrometer's Prometheus export keeps `_sum` / `_count` **cumulative**, but `_max` (and any quantile you derive from the `_bucket` series) only reflects the **current scrape interval**. When no latency is injected in a given interval, `_max` therefore drops to `0` -- this is the standard Prometheus/Micrometer behavior, identical to Quarkus's own `http_server_requests_seconds_max`, not a broken probe. There is no `_min` line: the histogram replaces it, and a running minimum over the buckets requires PromQL.
+Micrometer's Prometheus export keeps `_sum`, `_count` and the `_bucket` series **cumulative**, while `_max` is the largest delay recorded over a sliding window of about two minutes (Micrometer's default distribution expiry). When no latency is injected for that long, `_max` therefore drops back to `0` -- this is the standard Micrometer behavior, identical to Quarkus's own `http_server_requests_seconds_max`, not a broken probe. Quantiles are computed in PromQL from the `_bucket` series over the range you choose. There is no `_min` line.
 
 Percentile and min/max over a rolling window, e.g. per source:
 
 [source,promql]
 ----
 histogram_quantile(0.99, sum(rate(goblin_latency_injected_seconds_bucket[5m])) by (le, source))  # p99 of injected latency
-min_over_time(max_over_time(goblin_latency_injected_seconds_max[10m])[10m:])                   # persistent max if the interval gaps bother you
+max_over_time(goblin_latency_injected_seconds_max[10m])                                         # max over the last 10 minutes, across the _max resets
 ----
 
-Because the histogram is enabled by default, on every scrape you get the `_bucket` series (`goblin_latency_injected_seconds_bucket{source="..."}`, with boundaries from ~1 ms up to 30 s), which is also what Grafana heatmaps expect.
+Because the histogram is enabled by default, on every scrape you get the `_bucket` series (`goblin_latency_injected_seconds_bucket{source="..."}`, with Micrometer's default boundaries from ~1 ms up to 30 s), which is also what Grafana heatmaps expect. To narrow them, produce a `MeterFilter`:
+
+[source,java]
+----
+@Produces
+@Singleton
+MeterFilter goblinLatencyBuckets() {
+    return new MeterFilter() {
+        @Override
+        public DistributionStatisticConfig configure(Meter.Id id, DistributionStatisticConfig config) {
+            if (id.getName().equals("goblin.latency.injected.seconds")) {
+                return DistributionStatisticConfig.builder()
+                        .minimumExpectedValue((double) Duration.ofMillis(10).toNanos())
+                        .maximumExpectedValue((double) Duration.ofSeconds(10).toNanos())
+                        .build()
+                        .merge(config);
+            }
+            return config;
+        }
+    };
+}
+----
 
 == Assault signals for dashboards
 

@@ -1,5 +1,4 @@
 = End-to-end example: prove your resilience annotations work
-
 :toc: left
 :toclevels: 2
 
@@ -11,19 +10,24 @@ A fault injected at the inbound REST boundary (`HTTP_IN`) hits the request *befo
 
 == Start the sample application
 
+From the root of the repository, install the extension once, then start the sample application in dev mode:
+
 [source,bash]
 ----
-./mvnw -pl integration-tests quarkus:dev
+mvn install -DskipTests
+mvn -pl integration-tests quarkus:dev
 ----
 
-Open the Dev UI at `http://localhost:8080/q/dev` and the Goblin *Chaos Dashboard*. The sample application has an in-memory H2 datasource, so every layer is available.
+Open the Dev UI at `http://localhost:8080/q/dev` and the Goblin *Chaos Dashboard*. The sample application has an in-memory H2 datasource, so every layer is available. Its `application.properties` starts with chaos active and the **Latency** assault enabled (`100`-`500` ms, level `100`).
+
+NOTE: The dashboard settings are saved to `integration-tests/.goblin-state.json` and restored at the next start instead of `application.properties`. If you already used the dashboard, the toggles, layers and parameters below may differ from the defaults: delete the file before starting, or use *Reset to defaults* in the *Danger zone* (latency on with `100`-`5000` ms, `java.lang.RuntimeException`, layers *Inbound REST* + *Outbound HTTP*).
 
 == Scenario 1: a slow service triggers `@Timeout`
 
 `SampleService.timed()` is guarded by `@Timeout(400ms)`; `GET /api/service/timeout` calls it.
 
-. In *Chaos layers*, check **Service** and make sure **Database** is unchecked (the default *Inbound REST* and *Outbound HTTP* can stay checked). At level `100` the deepest armed layer wins the whole request: with *Database* armed, this request -- which never touches the database -- would resolve to the database layer and not be assaulted at all.
-. Enable **Latency** and set the range to `600`-`700` ms, above the 400 ms timeout. Keep the level at `100`.
+. In *Chaos layers*, switch **Service** on and make sure **Database** is off (the default *Inbound REST* and *Outbound HTTP* can stay on). At level `100` the deepest armed layer wins the whole request: with *Database* armed, this request -- which never touches the database -- would resolve to the database layer and not be assaulted at all.
+. **Latency** is already enabled: set its range to `600`-`700` ms, above the 400 ms timeout, and click `Save`. Keep the level at `100`.
 . Call the endpoint:
 +
 [source,bash]
@@ -36,8 +40,8 @@ curl -w "\nstatus=%{http_code} time=%{time_total}s\n" http://localhost:8080/api/
 
 `SampleService.databasePingWithRetry()` is guarded by `@Retry(maxRetries = 2)` and `@Fallback`; it calls `SampleRepository`, which acquires a JDBC connection. `GET /api/db/retry` calls it.
 
-. In *Chaos layers*, check **Database**.
-. Disable **Latency** and enable **Exception** (the default `java.lang.RuntimeException` is fine). Keep the level at `100`.
+. In *Chaos layers*, switch **Database** on.
+. Disable **Latency** and enable **Exception** (the default `java.lang.RuntimeException` is fine; any exception class works, since `@Retry` retries on every exception by default). Keep the level at `100`.
 . Call the endpoint:
 +
 [source,bash]

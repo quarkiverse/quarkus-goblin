@@ -1,27 +1,32 @@
 = JSON-RPC reference
-
 :toc: left
 :toclevels: 2
 
 include::../partials/attributes.adoc[]
 
-The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCService`). The same service is available over the Dev UI's built-in JSON-RPC bridge, which is useful for scripting or CI validation. All methods read or mutate the in-memory `MutableAssaultConfig`.
+The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCService`). The same service is available over the Dev UI's built-in JSON-RPC bridge, which is useful for scripting or CI validation. All methods read or mutate the in-memory `MutableAssaultConfig`; in dev mode every mutation is also written to `.goblin-state.json`, which replaces the `quarkus.goblin.assault.*` and `quarkus.goblin.target.level` properties at the next start (the active flag is never persisted).
 
 [cols="2,3"]
 |===
 | Method | Effect
 
 | `getStatus`
-| Returns `active`, the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), the `availableLayers` backed by an installed hook in this application (`SERVICE`, `HTTP_OUT`, `HTTP_IN`, plus `DATABASE` with a JDBC datasource and `MESSAGING` with Quarkus Messaging), and the target `level`.
+| Returns `active`, `autoOffRemainingMs` (the time left before the pending auto-off, `0` when none), the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), the `availableLayers` backed by an installed hook in this application (`SERVICE`, `HTTP_OUT`, `HTTP_IN`, plus `DATABASE` with a JDBC datasource and `MESSAGING` with Quarkus Messaging), and the target `level`.
 
 | `getConfig`
 | Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, response header rules under `headers`, armed chaos `layers`, `availableLayers`, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
 
 | `toggleActive` / `setActive(boolean)`
-| Enable/disable chaos entirely. Emits a WARN log. Returns `{ ok, active }`.
+| Enable/disable chaos entirely. Emits a WARN log. Deactivating chaos also cancels any pending auto-off. Returns the full config plus `ok` and `active`.
+
+| `startAutoOff(minutes)`
+| Schedule chaos to switch itself off after `minutes` (strictly positive), replacing any pending auto-off. The engine applies the deadline on its own, whether or not the Dev UI is open, and a pending auto-off survives a dev-mode live reload (not a new start). Returns `{ ok, autoOffRemainingMs }`; a non-positive delay returns `{ ok: false, error }`.
+
+| `cancelAutoOff()`
+| Cancel the pending auto-off; chaos stays in its current state. Returns `{ ok, autoOffRemainingMs: 0 }`.
 
 | `setProfile(profile)`
-| Activate a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`). Applies the profile defaults to the assault toggles; each toggle stays overridable afterwards.
+| Activate a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`, case-insensitive; a blank value means `NONE`). A profile other than `NONE` turns every server-side assault off (response body and response header included), then enables its own assaults and overwrites their parameters: latency `100`-`5000` ms and `java.lang.RuntimeException` with the default message for `SLOW_FAILURE`, HTTP `500` with `Internal Server Error (Goblin chaos)` for `INTERMITTENT`, a fixed `30000` ms latency for `TIMEOUT`. `NONE` leaves every toggle as it is. Client-side toggles and chaos layers are never touched. Each toggle stays overridable afterwards. An unknown profile returns `{ ok: false, error }`.
 
 | `toggleLatency` / `toggleException` / `toggleHttpStatus` / `toggleDependencyDegradation` / `toggleResponseBody` / `toggleResponseHeader`
 | Flip the corresponding assault toggle on/off.
@@ -51,28 +56,28 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Set the percentage of affected requests (clamped to 0-100).
 
 | `disableAll()`
-| Kill switch: deactivates the engine, disables every assault type and client-side assault, and resets the profile to `NONE`. Returns `{ ok, active: false }` plus the full config.
+| Kill switch: deactivates the engine (which cancels any pending auto-off), disables every assault type and client-side assault, and resets the profile to `NONE`. Returns `{ ok, active: false }` plus the full config.
 
 | `resetDefaults()`
-| Restore every toggle and parameter to its default value (profile `NONE`, latency `100-5000` ms, HTTP status `503`, body `TRUNCATE 50%`, layers `{HTTP_IN, HTTP_OUT}`, level `100`). Returns `{ ok }` plus the full config.
+| Restore every toggle and parameter to its built-in default value, not to `application.properties`: profile `NONE`, the latency assault *on* with `100-5000` ms, every other assault and client-side assault off, HTTP status `503`, body `TRUNCATE 50%`, no header rules, layers `{HTTP_IN, HTTP_OUT}`, level `100`. The active flag and any pending auto-off are left unchanged. Returns `{ ok, warning }` plus the full config.
 
 | `applyConfig(config)`
-| Apply a (partial) config object: `profile` is applied first, then any provided field overrides -- omitted fields keep their current value. The optional `headers` object replaces the whole set of response header rules (rules not listed are dropped); the optional `layers` array replaces the armed chaos layers (unknown layer names are skipped and surfaced in `warning`, an empty array restores the default layers). Unknown actions and header names that are not RFC 9110 tokens are skipped and surfaced in `warning`. Booleans and numbers given as strings (`"true"`, `"50"`) are converted; a value that cannot be converted is skipped and surfaced in `warning`. The payload is staged on a copy and published at once: when it is rejected (e.g. an unknown `profile`) the response is `{ ok: false, error }` and nothing is applied. Returns `{ ok, warning }` plus the full config. Used by the dashboard's import, custom-profile and chaos-layer features.
+| Apply a (partial) config object: `profile` is applied first, then any provided field overrides -- omitted fields keep their current value. The optional `headers` object replaces the whole set of response header rules (rules not listed are dropped); the optional `layers` array replaces the armed chaos layers (unknown layer names are skipped and surfaced in `warning`, an empty array restores the default layers). Unknown actions and header names that are not RFC 9110 tokens are skipped and surfaced in `warning`. Booleans and numbers given as strings (`"true"`, `"50"`) are converted; a value that cannot be converted is skipped and surfaced in `warning`. A few fields are skipped *without* a warning: a `latency` object is only applied when it carries both `minMilliseconds` and `maxMilliseconds`, an unknown `body.mode` is ignored, and non-string entries of `layers` are dropped. The payload is staged on a copy and published at once: when it is rejected (e.g. an unknown `profile`) nothing is applied and the response is the unchanged full config plus `ok: false` and `error`. Returns `{ ok, warning }` plus the full config. Used by the dashboard's import, custom-profile and chaos-layer features.
 
 | `getCounters`
 | Return `{ total, since, byType, bySource }` with the session assault counters: the total number of assaults since the engine started (or the counters were last reset), the epoch timestamp of that window start (`since`), a per-type breakdown (`byType`) and a per-source breakdown (`bySource`, keyed by `server`, `service`, `rest-client`, `webclient`, `database`, `messaging`).
 
 | `resetCounters()`
-| Reset the assault counters to zero. Returns `{ ok }`.
+| Reset the assault counters to zero. Returns `{ ok }` only.
 
 | `getHistory`
 | Return the assault history buffer. Each entry exposes the method, type, timestamp, the applied latency duration (`latencyMs`, 0 for non-latency assaults), the `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), and the active assault config snapshot at the time of the assault (`config`).
 
 | `clearHistory`
-| Empty the assault history buffer.
+| Empty the assault history buffer. Returns `{ cleared: true }` only.
 
 | `getMarkdownReport`
 | Return `{ markdown, generatedAt }` with a factual Markdown report of the current configuration and assault history.
 |===
 
-NOTE: Every mutating method returns the full configuration as `JsonObject` (the same shape as `getConfig`), so the Dev UI treats the response as a single source of truth. The legacy top-level keys (`mode`, `percentage`, `minMilliseconds`, `maxMilliseconds`, `type`, `message`, `code`, `level`) remain present for backward compatibility.
+NOTE: Every mutating method except `resetCounters`, `clearHistory`, `startAutoOff` and `cancelAutoOff` returns the full configuration as `JsonObject` (the same shape as `getConfig`) plus `ok`, so the Dev UI treats the response as a single source of truth; a rejected call returns `ok: false` and an `error` (alone, or with the unchanged full config for `applyConfig`). For backward compatibility the setters also echo the values they changed as top-level keys: `setLatencyRange` (`minMilliseconds`, `maxMilliseconds`), `setExceptionConfig` and `setHttpStatusConfig` (`type` or `code`, `message`), `setResponseBodyConfig` (`mode`, `percentage`), `setTargetLevel` (`level`), `setResponseHeaderInfo` (`name`, `action`, `value`); `getConfig` itself only carries `level` at the top level.

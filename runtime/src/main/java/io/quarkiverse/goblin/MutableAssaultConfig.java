@@ -48,6 +48,9 @@ public class MutableAssaultConfig {
      * A single response header injection rule: the {@link ResponseHeaderAction} applied to the named header and the
      * value written by {@code SET}.
      */
+    /** Reason phrase used by the {@link AssaultProfile#INTERMITTENT} profile, matching its HTTP 500. */
+    static final String INTERMITTENT_STATUS_MESSAGE = "Internal Server Error (Goblin chaos)";
+
     public record HeaderRule(ResponseHeaderAction action, String value) {
     }
 
@@ -604,8 +607,10 @@ public class MutableAssaultConfig {
     /**
      * Switches the active profile and applies its assault defaults.
      * <p>
-     * Selecting a non-{@code NONE} profile resets the individual assault toggles to the profile's defaults; each toggle
-     * can then be overridden manually on top of the profile. Selecting {@code NONE} leaves the toggles untouched. The
+     * Selecting a non-{@code NONE} profile turns every server-side assault off (response body and response header
+     * included), then enables the profile's assaults with their defaults and messages; each toggle can then be
+     * overridden manually on top of the profile. Client-side toggles and chaos layers are never touched. Selecting
+     * {@code NONE} leaves everything untouched. The
      * profile and its defaults are published as a single state, so no reader ever sees a half-applied profile.
      *
      * @param profile the profile to activate, or {@code null} to keep {@link AssaultProfile#NONE}
@@ -633,7 +638,10 @@ public class MutableAssaultConfig {
     }
 
     /**
-     * Resets the individual assault toggles and parameters to the defaults of the profile held by the builder.
+     * Resets the server-side assault toggles and the parameters of the profile held by the builder. Every server-side
+     * toggle is turned off first (latency, exception, HTTP status, dependency degradation, response body, response
+     * header), then the profile enables its own assaults with their defaults, messages included. Client-side toggles and
+     * chaos layers are left untouched.
      *
      * @param b the working copy to modify
      */
@@ -642,6 +650,7 @@ public class MutableAssaultConfig {
         b.exceptionEnabled = false;
         b.httpStatusEnabled = false;
         b.dependencyDegradationEnabled = false;
+        b.responseBodyEnabled = false;
         b.responseHeaderEnabled = false;
         switch (b.profile) {
             case SLOW_FAILURE -> {
@@ -650,10 +659,12 @@ public class MutableAssaultConfig {
                 b.latencyMinMs = 100;
                 b.latencyMaxMs = 5000;
                 b.exceptionType = "java.lang.RuntimeException";
+                b.exceptionMessage = AssaultSettings.DEFAULTS.exceptionMessage;
             }
             case INTERMITTENT -> {
                 b.httpStatusEnabled = true;
                 b.httpStatusCode = 500;
+                b.httpStatusMessage = INTERMITTENT_STATUS_MESSAGE;
             }
             case TIMEOUT -> {
                 b.latencyEnabled = true;
@@ -877,8 +888,9 @@ public class MutableAssaultConfig {
     }
 
     /**
-     * Restores every field to its application.properties default (profile {@code NONE}, latency 100-5000 ms, 503, truncate
-     * 50 %, level 100 %, all client-side assaults off), as a single state. Persists the restored defaults when a change
+     * Restores every field to its built-in default, not to application.properties (profile {@code NONE}, latency assault
+     * on with 100-5000 ms, 503, truncate 50 %, level 100 %, layers HTTP_IN and HTTP_OUT, all client-side assaults off), as
+     * a single state. Persists the restored defaults when a change
      * listener is installed.
      *
      * @return a list of human-readable warnings for any values that were clamped during validation, empty when the defaults

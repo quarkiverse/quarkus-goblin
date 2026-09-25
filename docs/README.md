@@ -5,15 +5,17 @@ Antora sources for the user-facing Goblin guide. The rendered documentation is p
 
 ## Layout
 
-- `antora.yml` -- component descriptor (`name: quarkus-goblin`, `title: Goblin`, `version: dev`).
+- `antora.yml` -- component descriptor (`name: quarkus-goblin`, `title: Goblin`); the published version comes from the
+  branch (`main` is published as `dev`, a maintenance branch such as `0.3.x` under its own name).
 - `modules/ROOT/nav.adoc` -- navigation tree.
-- `modules/ROOT/pages/index.adoc` -- the full guide (assault types, targeting, configuration validation, Dev UI with
-  screenshots, end-to-end example, JSON-RPC reference, FAQ).
+- `modules/ROOT/pages/*.adoc` -- the guide, one page per topic (`index.adoc` is the entry point and FAQ; see
+  `nav.adoc` for the order).
 - `modules/ROOT/partials/attributes.adoc` -- shared AsciiDoc attributes.
 - `modules/ROOT/assets/images/` -- Dev UI screenshots and the extension logo.
 
-The configuration reference is generated at build time by `quarkus-config-doc-maven-plugin` from the
-`@ConfigRoot`/`@ConfigMapping` Javadoc in `runtime`, then processed by `asciidoctor-maven-plugin`.
+`pages/configuration-reference.adoc` is written by hand: keep it in sync with the `@ConfigMapping` interfaces of
+`runtime` (`GoblinConfig`, `GoblinTargetingConfig`). The build also runs `quarkus-config-doc-maven-plugin`, whose
+generated output lands in `target/` and is not included in the published pages.
 
 ## Conventions
 

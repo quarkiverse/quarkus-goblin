@@ -1,5 +1,4 @@
 = Profiles
-
 :toc: left
 :toclevels: 2
 
@@ -17,20 +16,20 @@ Available profiles:
 |===
 | Profile | Assaults enabled | Sensible defaults
 | `NONE`
-| none (manual mode, `assault.type` is used instead)
+| none (manual mode): at startup `assault.type` is used instead; selected at runtime, it leaves every toggle as it is
 |
 | `SLOW_FAILURE`
 | latency + exception
 | Latency `100`-`5000` ms, `RuntimeException("Goblin chaos: simulated exception")`
 | `INTERMITTENT`
 | HTTP status
-| HTTP 500 -- combine with `quarkus.goblin.target.level` to control frequency
+| HTTP 500 with the message `Internal Server Error (Goblin chaos)` -- combine with `quarkus.goblin.target.level` to control frequency
 | `TIMEOUT`
 | latency
 | Fixed `30000` ms (30 s) -- ideal for exercising client-side `@Timeout`
 |===
 
-Profiles only set the assault toggles and parameters: they never arm or disarm a layer, nor touch the client-side toggles. `INTERMITTENT` (HTTP status) only fires on the `HTTP_IN` layer, while the latency and exception of `SLOW_FAILURE` and `TIMEOUT` fire on whichever layer the request resolves to (`HTTP_IN`, `SERVICE`, `DATABASE`, `MESSAGING`).
+A profile other than `NONE` first turns every server-side assault off -- latency, exception, HTTP status, dependency degradation, response body and response header -- then enables its own assaults with the defaults above, messages included. The parameters of the assaults it does not enable (for instance the response body mode and percentage, or the header rules) are kept. Profiles never arm or disarm a layer, and never touch the client-side toggles. `INTERMITTENT` (HTTP status) only fires on the `HTTP_IN` layer, while the latency and exception of `SLOW_FAILURE` and `TIMEOUT` fire on whichever layer the request resolves to (`HTTP_IN`, `SERVICE`, `DATABASE`, `MESSAGING`).
 
 TIP: Profiles are a **starting point, not a lock-in**. Once a profile is active, each assault toggle stays independently overridable through the Dev UI or JSON-RPC, and those overrides survive restarts like any other Dev UI change.
 

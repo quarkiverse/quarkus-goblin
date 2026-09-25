@@ -16,10 +16,16 @@ Every **public method** becomes a JSON-RPC endpoint callable from the front-end 
 
 | Group | Method | Purpose |
 |---|---|---|
-| Status | `getStatus()` | Active flag, all toggles, target level |
+| Status | `getStatus()` | Active flag, pending auto-off, all toggles, layers, target level |
 | Status | `toggleActive()` / `setActive(boolean)` | Master on/off |
+| Status | `disableAll()` | Kill switch: chaos off, every assault off, profile `NONE` |
+| Status | `startAutoOff(minutes)` / `cancelAutoOff()` | Schedule or cancel the engine-side auto-off (remaining time in `getStatus().autoOffRemainingMs`) |
 | Config | `getConfig()` | Full mutable configuration snapshot |
+| Config | `setProfile(profile)` | Apply a predefined assault profile |
+| Config | `applyConfig(config)` | Apply a (partial) configuration at once: import, custom profiles, chaos layers |
+| Config | `resetDefaults()` | Restore the built-in defaults |
 | Toggles | `toggleLatency()` / `toggleException()` / `toggleHttpStatus()` / `toggleDependencyDegradation()` / `toggleResponseBody()` / `toggleResponseHeader()` | Flip a single assault |
+| Toggles | `toggleClientLatency()` / `toggleClientException()` | Flip a client-side assault |
 | Editors | `setLatencyRange(minMs, maxMs)` | Update latency bounds |
 | Editors | `setExceptionConfig(type, message)` | Update exception class/message |
 | Editors | `setHttpStatusConfig(code, message)` | Update status code/body |
@@ -27,12 +33,14 @@ Every **public method** becomes a JSON-RPC endpoint callable from the front-end 
 | Editors | `setResponseHeaderInfo(name, action, value)` / `removeResponseHeader(name)` | Set or drop a response header rule |
 | Editors | `setTargetLevel(level)` | Update percentage of affected requests |
 | History | `getHistory()` / `clearHistory()` | Read/clear the assault history |
+| Counters | `getCounters()` / `resetCounters()` | Read (total, per type, per source) / reset the assault counters |
 | Report | `getMarkdownReport()` | Export the Markdown resilience report |
 
 Setter methods may return a `warning` field carrying human-readable corrections when the request could not be applied
 verbatim (e.g. an inverted latency range is swapped, an invalid status code falls back to 503). Mutations go through
-`MutableAssaultConfig`, which calls `notifyChange()` so the change is persisted to `.goblin-state.json` and survives a
-restart automatically.
+`MutableAssaultConfig`, whose setters publish the change and notify the change listener, so it is persisted to
+`.goblin-state.json` and survives a restart automatically -- as long as the field is serialized by
+`GoblinStatePersistence`.
 
 ## Extending the Dev UI for a new assault
 
@@ -41,7 +49,10 @@ restart automatically.
 2. Wire the corresponding section into `qwc-goblin-dashboard.js` in
    [deployment/src/main/resources/dev-ui/](../deployment/src/main/resources/dev-ui/) using `jsonRpc` calls that match
    the new method names.
-3. Because `MutableAssaultConfig.notifyChange()` runs on every setter, no extra work is needed for persistence.
+3. Also expose the new toggle in `getStatus`, `getConfig` and `applyConfig`, and switch it off in `disableAll`.
+4. Persistence is not automatic for a new field: every setter notifies the change listener, but the field must also be
+   written and read by `GoblinStatePersistence` (and have a place in `AssaultSettings`, `resetToDefaults()` and
+   `MutableAssaultConfig.fromConfig(...)`, see [runtime/README.md](../runtime/README.md#adding-a-new-assault)).
 
 ## Conventions
 
