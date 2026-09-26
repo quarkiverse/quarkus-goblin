@@ -19,7 +19,7 @@ Every **public method** becomes a JSON-RPC endpoint callable from the front-end 
 | Status | `getStatus()` | Active flag, pending auto-off, all toggles, layers, target level |
 | Status | `toggleActive()` / `setActive(boolean)` | Master on/off |
 | Status | `disableAll()` | Kill switch: chaos off, every assault off, profile `NONE` |
-| Status | `startAutoOff(minutes)` / `cancelAutoOff()` | Schedule or cancel the engine-side auto-off (remaining time in `getStatus().autoOffRemainingMs`) |
+| Status | `startAutoOff(minutes)` / `cancelAutoOff()` | Schedule (1 to 1440 minutes) or cancel the engine-side auto-off (remaining time in `getStatus().autoOffRemainingMs`) |
 | Config | `getConfig()` | Full mutable configuration snapshot |
 | Config | `setProfile(profile)` | Apply a predefined assault profile |
 | Config | `applyConfig(config)` | Apply a (partial) configuration at once: import, custom profiles, chaos layers |

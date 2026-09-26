@@ -372,6 +372,8 @@ export class QwcGoblinDashboard extends LitElement {
         this._errors = {};
         this._autoOffDeadline = null;
         this._autoOffRemaining = 0;
+        this._autoOffChecking = false;
+        this._statusSeq = 0;
         this._customProfiles = [];
         this._activeCustom = null;
         this.jsonRpc = new JsonRpc(this);
@@ -405,10 +407,7 @@ export class QwcGoblinDashboard extends LitElement {
     }
 
     _refresh() {
-        this.jsonRpc.getStatus().then(r => {
-            this._status = {...r.result};
-            this._syncAutoOff(r.result.autoOffRemainingMs);
-        });
+        this._loadStatus();
         this.jsonRpc.getCounters().then(r => { this._counters = {...r.result}; });
         // the configuration can change from another tab, a live reload or a JSON-RPC client: keep the toggles and the
         // forms in sync, without touching a section the user is currently editing
@@ -556,7 +555,10 @@ export class QwcGoblinDashboard extends LitElement {
     // ==================== status ====================
 
     _toggleActive() {
-        this.jsonRpc.toggleActive().then(r => {
+        // send the state the user asked for, based on what the dashboard shows: a blind toggle could switch chaos back
+        // on right after the auto-off switched it off
+        const target = !(this._status && this._status.active);
+        this.jsonRpc.setActive({active: target}).then(r => {
             if (r.result.ok) {
                 this._applyConfigResult(r.result);
                 if (!r.result.active) {
@@ -613,6 +615,23 @@ export class QwcGoblinDashboard extends LitElement {
     // the engine owns the deadline and switches chaos off by itself, whether or not this page is open; the dashboard
     // only mirrors the remaining time reported by the server
 
+    /**
+     * Reads the engine status. Responses can arrive out of order: only the latest request updates the dashboard.
+     * Reading the status also makes the engine apply an elapsed auto-off deadline.
+     */
+    _loadStatus() {
+        const seq = ++this._statusSeq;
+        return this.jsonRpc.getStatus().then(r => {
+            if (seq !== this._statusSeq) {
+                return;
+            }
+            this._status = {...r.result};
+            this._syncAutoOff(r.result.autoOffRemainingMs, r.result.active);
+        }).catch(() => {
+            // transient transport failure: the next 2-second poll retries
+        });
+    }
+
     _startAutoOff() {
         const minutes = parseInt(this.shadowRoot.getElementById('auto-off-minutes').value);
         if (isNaN(minutes) || minutes <= 0) {
@@ -625,20 +644,33 @@ export class QwcGoblinDashboard extends LitElement {
             } else {
                 this._showToast(r.result.error, 'error');
             }
-        });
+        }).catch(e => this._showToast(`Auto-off not started: ${e && e.message ? e.message : e}`, 'error'));
     }
 
     _cancelAutoOff() {
-        this.jsonRpc.cancelAutoOff().then(() => this._syncAutoOff(0));
+        this.jsonRpc.cancelAutoOff()
+            .then(() => this._syncAutoOff(0))
+            .catch(e => this._showToast(`Auto-off not cancelled: ${e && e.message ? e.message : e}`, 'error'));
     }
 
-    _syncAutoOff(remainingMs) {
+    /**
+     * Mirrors the server auto-off. When a pending auto-off disappears while the server reports chaos inactive, the
+     * engine switched chaos off: say so, whichever of the poll or the countdown noticed it first.
+     *
+     * @param remainingMs the time left before the auto-off, 0 when none is pending
+     * @param active the server active flag, when known
+     */
+    _syncAutoOff(remainingMs, active) {
         if (remainingMs > 0) {
             this._autoOffDeadline = Date.now() + remainingMs;
             this._tick();
-        } else {
-            this._autoOffDeadline = null;
-            this._autoOffRemaining = 0;
+            return;
+        }
+        const wasPending = !!this._autoOffDeadline;
+        this._autoOffDeadline = null;
+        this._autoOffRemaining = 0;
+        if (wasPending && active === false) {
+            this._showToast('Chaos auto-disabled', 'info');
         }
     }
 
@@ -653,15 +685,9 @@ export class QwcGoblinDashboard extends LitElement {
         if (this._autoOffRemaining !== remaining) {
             this._autoOffRemaining = remaining;
         }
-        if (remaining === 0) {
-            this._autoOffDeadline = null;
-            // reading the status makes the engine apply the elapsed deadline
-            this.jsonRpc.getStatus().then(r => {
-                this._status = {...r.result};
-                if (!r.result.active) {
-                    this._showToast('Chaos auto-disabled', 'info');
-                }
-            });
+        if (remaining === 0 && !this._autoOffChecking) {
+            this._autoOffChecking = true;
+            this._loadStatus().finally(() => { this._autoOffChecking = false; });
         }
     }
 
@@ -1035,7 +1061,7 @@ export class QwcGoblinDashboard extends LitElement {
     // ==================== danger zone ====================
 
     _resetDefaults() {
-        if (confirm('Reset all assaults and parameters to their application.properties defaults?')) {
+        if (confirm('Reset all assaults and parameters to the built-in defaults (not application.properties)?')) {
             this.jsonRpc.resetDefaults().then(r => {
                 if (r.result.ok) {
                     this._applyConfigResult(r.result, '*');

@@ -53,10 +53,24 @@ public class AssaultEngine {
     private volatile Set<ChaosLayer> optionalHooks = Collections.emptySet();
 
     /**
-     * JVM-wide system property holding the auto-off deadline (epoch milliseconds). A system property rather than a field
-     * so a pending auto-off survives dev-mode live reloads, which recreate the engine but keep the JVM.
+     * JVM-wide system property holding the dev-mode auto-off state: a deadline in epoch milliseconds while an auto-off is
+     * pending, {@link #AUTO_OFF_FIRED} once it switched chaos off. A system property rather than a field so the state
+     * survives dev-mode live reloads, which recreate the engine but keep the JVM. Only the dev-mode engine uses it: a
+     * test-mode engine running in the same JVM (continuous testing) keeps its own state in {@link #localAutoOff}.
      */
     static final String AUTO_OFF_DEADLINE_PROPERTY = "goblin.auto-off.deadline";
+
+    /** Auto-off state: nothing pending. */
+    static final long AUTO_OFF_NONE = 0;
+
+    /** Auto-off state: the deadline elapsed and chaos was switched off; kept so a live reload does not revive chaos. */
+    static final long AUTO_OFF_FIRED = -1;
+
+    /** Longest accepted auto-off delay: 24 hours. */
+    public static final long MAX_AUTO_OFF_MILLIS = 24L * 60 * 60 * 1000;
+
+    private volatile boolean devMode;
+    private final AtomicLong localAutoOff = new AtomicLong(AUTO_OFF_NONE);
 
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
@@ -126,6 +140,7 @@ public class AssaultEngine {
      * @param mode the launch mode the application started under
      */
     void initialize(LaunchMode mode) {
+        this.devMode = mode == LaunchMode.DEVELOPMENT;
         if (mode != LaunchMode.DEVELOPMENT && mode != LaunchMode.TEST) {
             this.active = false;
             return;
@@ -153,13 +168,12 @@ public class AssaultEngine {
         this.mutableConfig.validateAndFix();
         if (mode == LaunchMode.DEVELOPMENT) {
             this.mutableConfig.setOnChange(this::persistConfig);
-            if (autoOffDeadline() > 0 && autoOffElapsed()) {
-                clearAutoOff();
+            long autoOff = readAutoOff();
+            if (active && (autoOff == AUTO_OFF_FIRED || autoOffElapsed(autoOff))) {
+                writeAutoOff(AUTO_OFF_FIRED);
                 this.active = false;
-                LOG.info("Goblin chaos auto-disabled: the auto-off deadline elapsed during the restart");
+                LOG.info("Goblin chaos stays off after the restart: the Dev UI auto-off switched it off");
             }
-        } else {
-            clearAutoOff();
         }
         if (active) {
             MutableAssaultConfig mutableConfig = this.mutableConfig.snapshot();
@@ -188,51 +202,90 @@ public class AssaultEngine {
      * @return {@code true} when chaos is active
      */
     public boolean isActive() {
-        if (active && autoOffElapsed()) {
-            synchronized (this) {
-                if (active && autoOffElapsed()) {
-                    LOG.warn("Goblin chaos auto-disabled: the auto-off deadline elapsed");
-                    setActive(false);
-                }
-            }
+        if (active && autoOffElapsed(readAutoOff())) {
+            expireAutoOff();
         }
         return active;
     }
 
     /**
-     * Activates or deactivates chaos. Deactivating also cancels any pending auto-off.
+     * Activates or deactivates chaos. Deactivating cancels any pending auto-off; activating forgets an auto-off that
+     * already fired but keeps a pending one.
      *
      * @param active the new active flag
      */
     public void setActive(boolean active) {
-        this.active = active;
-        if (!active) {
-            clearAutoOff();
+        synchronized (this) {
+            this.active = active;
+            if (!active || readAutoOff() == AUTO_OFF_FIRED) {
+                writeAutoOff(AUTO_OFF_NONE);
+            }
         }
         notifyObservers(observer -> observer.onActiveChange(active));
     }
 
     /**
-     * Schedules chaos to switch itself off after the given delay, replacing any pending auto-off. The engine enforces it
-     * on its own (see {@link #isActive()}), independently of the Dev UI, and the deadline survives dev-mode live reloads.
+     * Flips the active flag. When the auto-off deadline has just elapsed, the caller saw chaos active and asked to turn
+     * it off: the elapsed auto-off is applied and chaos stays off, instead of being switched back on.
      *
-     * @param delayMillis the delay before chaos is deactivated, strictly positive
+     * @return the new active flag
+     */
+    public boolean toggleActive() {
+        boolean target;
+        synchronized (this) {
+            if (active && autoOffElapsed(readAutoOff())) {
+                target = false;
+            } else {
+                target = !active;
+            }
+        }
+        setActive(target);
+        return target;
+    }
+
+    /**
+     * Switches chaos off once the auto-off deadline elapsed. The decision is taken under the lock and the observers are
+     * notified after it is released, so an observer never runs while the engine lock is held.
+     */
+    private void expireAutoOff() {
+        boolean fired;
+        synchronized (this) {
+            fired = active && autoOffElapsed(readAutoOff());
+            if (fired) {
+                active = false;
+                writeAutoOff(AUTO_OFF_FIRED);
+            }
+        }
+        if (fired) {
+            LOG.warn("Goblin chaos auto-disabled: the auto-off deadline elapsed");
+            notifyObservers(observer -> observer.onActiveChange(false));
+        }
+    }
+
+    /**
+     * Schedules chaos to switch itself off after the given delay, replacing any pending auto-off. The engine enforces it
+     * on its own (see {@link #isActive()}), independently of the Dev UI; in dev mode the deadline survives live reloads.
+     *
+     * @param delayMillis the delay before chaos is deactivated, between 1 ms and {@link #MAX_AUTO_OFF_MILLIS}
      * @return the deadline, in epoch milliseconds
      */
     public long scheduleAutoOff(long delayMillis) {
-        if (delayMillis <= 0) {
-            throw new IllegalArgumentException("Auto-off delay must be positive, got " + delayMillis);
+        if (delayMillis <= 0 || delayMillis > MAX_AUTO_OFF_MILLIS) {
+            throw new IllegalArgumentException(
+                    "Auto-off delay must be between 1 and " + MAX_AUTO_OFF_MILLIS + " ms, got " + delayMillis);
         }
         long deadline = System.currentTimeMillis() + delayMillis;
-        System.setProperty(AUTO_OFF_DEADLINE_PROPERTY, Long.toString(deadline));
+        writeAutoOff(deadline);
         return deadline;
     }
 
     /**
      * Cancels any pending auto-off; chaos stays in its current state.
      */
-    public void cancelAutoOff() {
-        clearAutoOff();
+    public synchronized void cancelAutoOff() {
+        if (readAutoOff() > 0) {
+            writeAutoOff(AUTO_OFF_NONE);
+        }
     }
 
     /**
@@ -241,25 +294,47 @@ public class AssaultEngine {
      * @return the deadline in epoch milliseconds, or {@code 0} when no auto-off is pending
      */
     public long autoOffDeadline() {
+        return Math.max(AUTO_OFF_NONE, readAutoOff());
+    }
+
+    private static boolean autoOffElapsed(long state) {
+        return state > 0 && System.currentTimeMillis() >= state;
+    }
+
+    /**
+     * Reads the auto-off state: from the JVM-wide system property in dev mode, from this engine otherwise.
+     *
+     * @return a deadline, {@link #AUTO_OFF_NONE} or {@link #AUTO_OFF_FIRED}
+     */
+    long readAutoOff() {
+        if (!devMode) {
+            return localAutoOff.get();
+        }
         String raw = System.getProperty(AUTO_OFF_DEADLINE_PROPERTY);
         if (raw == null) {
-            return 0;
+            return AUTO_OFF_NONE;
         }
         try {
             return Long.parseLong(raw);
         } catch (NumberFormatException e) {
-            clearAutoOff();
-            return 0;
+            System.clearProperty(AUTO_OFF_DEADLINE_PROPERTY);
+            return AUTO_OFF_NONE;
         }
     }
 
-    private boolean autoOffElapsed() {
-        long deadline = autoOffDeadline();
-        return deadline > 0 && System.currentTimeMillis() >= deadline;
-    }
-
-    private static void clearAutoOff() {
-        System.clearProperty(AUTO_OFF_DEADLINE_PROPERTY);
+    /**
+     * Writes the auto-off state, see {@link #readAutoOff()}. Package-private for unit tests.
+     *
+     * @param state a deadline, {@link #AUTO_OFF_NONE} or {@link #AUTO_OFF_FIRED}
+     */
+    void writeAutoOff(long state) {
+        if (!devMode) {
+            localAutoOff.set(state);
+        } else if (state == AUTO_OFF_NONE) {
+            System.clearProperty(AUTO_OFF_DEADLINE_PROPERTY);
+        } else {
+            System.setProperty(AUTO_OFF_DEADLINE_PROPERTY, Long.toString(state));
+        }
     }
 
     public boolean shouldAssault() {

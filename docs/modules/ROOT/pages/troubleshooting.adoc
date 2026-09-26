@@ -17,6 +17,7 @@ include::../partials/attributes.adoc[]
 *Chaos is active again after a restart although I switched it off:*
 
 * The active flag is never persisted: every start takes it from `quarkus.goblin.enabled`. Set `quarkus.goblin.enabled=false` to start with chaos off.
+* The only exception is the Dev UI auto-off: once it has switched chaos off, chaos stays off across live reloads of the same dev-mode process, until you switch it on again.
 
 *Previous config is not restored on restart:*
 

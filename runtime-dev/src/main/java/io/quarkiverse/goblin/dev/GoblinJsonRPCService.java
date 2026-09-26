@@ -29,6 +29,9 @@ public class GoblinJsonRPCService {
 
     private static final Logger LOG = Logger.getLogger(GoblinJsonRPCService.class);
 
+    /** Longest auto-off delay accepted from the Dev UI, matching {@link AssaultEngine#MAX_AUTO_OFF_MILLIS}. */
+    static final int MAX_AUTO_OFF_MINUTES = 24 * 60;
+
     @Inject
     AssaultEngine engine;
 
@@ -175,9 +178,9 @@ public class GoblinJsonRPCService {
     }
 
     public JsonObject toggleActive() {
-        engine.setActive(!engine.isActive());
-        LOG.warnf("Goblin chaos %s via Dev UI", engine.isActive() ? "ACTIVATED" : "DEACTIVATED");
-        return activeResult(engine.getMutableConfig(), engine.isActive());
+        boolean active = engine.toggleActive();
+        LOG.warnf("Goblin chaos %s via Dev UI", active ? "ACTIVATED" : "DEACTIVATED");
+        return activeResult(engine.getMutableConfig(), active);
     }
 
     public JsonObject setActive(boolean active) {
@@ -190,12 +193,13 @@ public class GoblinJsonRPCService {
      * Schedules chaos to switch itself off after the given number of minutes, replacing any pending auto-off. The engine
      * enforces the deadline on its own, whether or not the Dev UI is open.
      *
-     * @param minutes the delay in minutes, strictly positive
+     * @param minutes the delay in minutes, between 1 and {@value #MAX_AUTO_OFF_MINUTES}
      * @return {@code ok} and the {@code autoOffRemainingMs}, or {@code ok=false} with an {@code error}
      */
     public JsonObject startAutoOff(int minutes) {
-        if (minutes <= 0) {
-            return new JsonObject().put("ok", false).put("error", "Auto-off delay must be a positive number of minutes");
+        if (minutes <= 0 || minutes > MAX_AUTO_OFF_MINUTES) {
+            return new JsonObject().put("ok", false)
+                    .put("error", "Auto-off delay must be between 1 and " + MAX_AUTO_OFF_MINUTES + " minutes");
         }
         engine.scheduleAutoOff(minutes * 60_000L);
         LOG.warnf("Goblin chaos will auto-disable in %d min (Dev UI)", minutes);

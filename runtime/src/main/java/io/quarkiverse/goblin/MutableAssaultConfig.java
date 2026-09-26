@@ -44,13 +44,13 @@ public class MutableAssaultConfig {
      */
     public static final long MAX_LATENCY_MS = 300_000;
 
+    /** Reason phrase used by the {@link AssaultProfile#INTERMITTENT} profile, matching its HTTP 500. */
+    static final String INTERMITTENT_STATUS_MESSAGE = "Internal Server Error (Goblin chaos)";
+
     /**
      * A single response header injection rule: the {@link ResponseHeaderAction} applied to the named header and the
      * value written by {@code SET}.
      */
-    /** Reason phrase used by the {@link AssaultProfile#INTERMITTENT} profile, matching its HTTP 500. */
-    static final String INTERMITTENT_STATUS_MESSAGE = "Internal Server Error (Goblin chaos)";
-
     public record HeaderRule(ResponseHeaderAction action, String value) {
     }
 

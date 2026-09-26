@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -125,6 +126,129 @@ class AssaultEngineLifecycleTest {
 
         assertTrue(reloaded.isActive());
         assertEquals(deadline, reloaded.autoOffDeadline());
+    }
+
+    @Test
+    void toggleRightAfterTheAutoOffFiredTurnsChaosOffNotBackOn() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        engine.writeAutoOff(System.currentTimeMillis() - 1);
+
+        assertFalse(engine.toggleActive(), "the user saw chaos on and asked to turn it off");
+        assertFalse(engine.isActive());
+        assertTrue(engine.toggleActive(), "a later toggle switches chaos on again");
+    }
+
+    @Test
+    void autoOffThatFiredKeepsChaosOffAfterALiveReload() throws IOException {
+        isolateStateFile();
+        AssaultEngine first = devEngine();
+        first.writeAutoOff(System.currentTimeMillis() - 1);
+        assertFalse(first.isActive(), "the elapsed deadline fires on the next read");
+
+        AssaultEngine reloaded = devEngine();
+
+        assertFalse(reloaded.isActive(), "quarkus.goblin.enabled=true must not revive chaos the auto-off switched off");
+        assertEquals(AssaultEngine.AUTO_OFF_FIRED, reloaded.readAutoOff());
+    }
+
+    @Test
+    void manualReactivationAfterAnAutoOffIsKeptByTheNextReload() throws IOException {
+        isolateStateFile();
+        AssaultEngine first = devEngine();
+        first.writeAutoOff(System.currentTimeMillis() - 1);
+        assertFalse(first.isActive());
+        first.setActive(true);
+
+        AssaultEngine reloaded = devEngine();
+
+        assertTrue(reloaded.isActive(), "switching chaos on again forgets the fired auto-off");
+    }
+
+    @Test
+    void activatingChaosKeepsAPendingAutoOff() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        engine.setActive(false);
+        long deadline = engine.scheduleAutoOff(60_000);
+
+        engine.setActive(true);
+
+        assertEquals(deadline, engine.autoOffDeadline(), "an auto-off armed before activation still applies");
+    }
+
+    @Test
+    void testModeEngineNeverTouchesTheDevModeAutoOff() throws IOException {
+        isolateStateFile();
+        AssaultEngine dev = devEngine();
+        long deadline = dev.scheduleAutoOff(60_000);
+
+        // continuous testing boots a test application in the same JVM
+        AssaultEngine test = new AssaultEngine();
+        test.config = config(100, 500, true);
+        test.initialize(LaunchMode.TEST);
+        test.scheduleAutoOff(1);
+        test.writeAutoOff(System.currentTimeMillis() - 1);
+        assertFalse(test.isActive(), "the test engine applies its own auto-off");
+
+        assertEquals(deadline, dev.autoOffDeadline(), "the dev application keeps its pending auto-off");
+        assertTrue(dev.isActive());
+    }
+
+    @Test
+    void elapsedAutoOffStopsEveryEntryPoint() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        engine.getMutableConfig().setLatencyEnabled(true);
+        engine.getMutableConfig().setClientLatencyEnabled(true);
+        assertNotNull(engine.resolveAssaultLayer(), "sanity: HTTP_IN resolves while chaos is on");
+        assertTrue(engine.shouldAssaultClient(), "sanity: HTTP_OUT fires while chaos is on");
+
+        engine.writeAutoOff(System.currentTimeMillis() - 1);
+
+        assertNull(engine.resolveAssaultLayer());
+        assertFalse(engine.shouldAssaultClient());
+        assertFalse(engine.shouldAssault());
+    }
+
+    @Test
+    void schedulingAgainReplacesThePendingDeadline() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        long first = engine.scheduleAutoOff(60_000);
+
+        long second = engine.scheduleAutoOff(120_000);
+
+        assertTrue(second > first);
+        assertEquals(second, engine.autoOffDeadline());
+    }
+
+    @Test
+    void unreadableAutoOffPropertyIsDiscarded() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        System.setProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY, "not-a-number");
+
+        assertEquals(0, engine.autoOffDeadline());
+        assertNull(System.getProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY));
+        assertTrue(engine.isActive());
+    }
+
+    @Test
+    void autoOffDelayIsBounded() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+
+        assertThrows(IllegalArgumentException.class, () -> engine.scheduleAutoOff(0));
+        assertThrows(IllegalArgumentException.class,
+                () -> engine.scheduleAutoOff(AssaultEngine.MAX_AUTO_OFF_MILLIS + 1));
+    }
+
+    private AssaultEngine devEngine() {
+        AssaultEngine engine = new AssaultEngine();
+        engine.config = config(100, 500);
+        engine.initialize(LaunchMode.DEVELOPMENT);
+        return engine;
     }
 
     @Test

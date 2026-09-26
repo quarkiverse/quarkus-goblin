@@ -52,7 +52,7 @@ TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (ty
 
 == Reading the latency histogram
 
-Micrometer's Prometheus export keeps `_sum`, `_count` and the `_bucket` series **cumulative**, while `_max` is the largest delay recorded over a sliding window of about two minutes (Micrometer's default distribution expiry). When no latency is injected for that long, `_max` therefore drops back to `0` -- this is the standard Micrometer behavior, identical to Quarkus's own `http_server_requests_seconds_max`, not a broken probe. Quantiles are computed in PromQL from the `_bucket` series over the range you choose. There is no `_min` line.
+Micrometer's Prometheus export keeps `_sum`, `_count` and the `_bucket` series **cumulative**, while `_max` is the largest delay recorded over a sliding window as long as the Prometheus step (`quarkus.micrometer.export.prometheus.step`, 1 minute by default). When no latency is injected for that long, `_max` therefore drops back to `0` -- this is the standard Micrometer behavior, identical to Quarkus's own `http_server_requests_seconds_max`, not a broken probe. Quantiles are computed in PromQL from the `_bucket` series over the range you choose. There is no `_min` line.
 
 Percentile and min/max over a rolling window, e.g. per source:
 

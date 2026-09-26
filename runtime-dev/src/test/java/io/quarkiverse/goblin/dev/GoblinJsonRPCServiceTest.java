@@ -53,6 +53,8 @@ class GoblinJsonRPCServiceTest {
             assertEquals(0L, service.getStatus().getLong("autoOffRemainingMs"));
 
             assertFalse(service.startAutoOff(0).getBoolean("ok"), "a non-positive delay is rejected");
+            assertFalse(service.startAutoOff(GoblinJsonRPCService.MAX_AUTO_OFF_MINUTES + 1).getBoolean("ok"),
+                    "a delay above 24 hours is rejected");
         } finally {
             engine.cancelAutoOff();
         }
