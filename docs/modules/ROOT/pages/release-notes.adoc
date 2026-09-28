@@ -13,19 +13,29 @@ include::../partials/attributes.adoc[]
 |2026-09-25
 |===
 
-=== New Features
+=== 0.3.1 (unreleased)
+
+==== Bug Fixes
+
+* An application producing an anonymous, local or non-static inner class (for example a `MeterFilter` returned by a producer method) no longer fails to start: the SERVICE layer only weaves its binding onto classes that can be CDI beans, and never onto constructors.
+* `DATABASE` exceptions no longer corrupt the Agroal pool: the fault now fires before a connection is checked out, instead of from the acquire interceptor, which left the connection enlisted in the transaction while back in the pool ("Closing connection in incorrect state CHECKED_IN", ever-growing `agroal_active_count`).
+* A request whose entry point sits in an `exclude-packages` package is no longer assaulted on the `SERVICE`, `DATABASE`, `MESSAGING` or `HTTP_OUT` layers: the layer used to be resolved before the targeting rules were checked.
+
+=== 0.3.0
+
+==== New Features
 
 * Multi-layer chaos assaults with per-request layer resolution (`DATABASE` → `MESSAGING` → `SERVICE` → `HTTP_IN`, `HTTP_OUT` rolled per outgoing call), one check-box per layer in the Dev UI, and service-layer assaults on business beans via a CDI interceptor that runs inside the Fault Tolerance machinery -- so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` are exercised for real. The `DATABASE` layer fails or delays JDBC connection acquisition through an Agroal pool interceptor (JDBC, Hibernate ORM, Panache); the `MESSAGING` layer faults `@Incoming` consumers outside Fault Tolerance, each consumed message resolving its own layer (https://github.com/quarkiverse/quarkus-goblin/issues/54[#54]).
 * The `source` of each recorded assault, already tagged in the metrics and traces since 0.2.1 (`server`, `rest-client`, `webclient`), gains the `service`, `database` and `messaging` values, and is now also exposed in the history, the counters and the Markdown report; the Dev UI status bar counts the assaults per source.
 * The Markdown report describes the armed chaos layers and the client-side assaults.
 
-=== Breaking changes
+==== Breaking changes
 
 * Chaos no longer activates in test mode by default: set `quarkus.goblin.test.enabled=true` to assault your `@QuarkusTest` suite (or call `AssaultEngine.setActive(true)` from a test). Adding the extension therefore never slows down nor breaks an existing test suite.
 * The `quarkus-goblin-metrics` module now depends on the Micrometer API only (`quarkus-micrometer`): add the registry of your choice, e.g. `quarkus-micrometer-registry-prometheus`, to expose `/q/metrics`.
 * Java API: the targeting rules moved from `GoblinConfig.TargetConfig` to `GoblinTargetingConfig` (the property names are unchanged), and `AssaultEngine.setStaticConfig` is removed.
 
-=== Improvements
+==== Improvements
 
 * Every configuration key except the `quarkus.goblin.target.include-packages` / `exclude-packages` / `exclude-annotations` targeting rules is now read at runtime and can be overridden when the application starts. The targeting rules stay fixed at build time and are applied by a single implementation shared by every layer.
 * No chaos wiring in production builds: the service and messaging interceptor bindings, the database hook and the Dev UI JSON-RPC are only registered in dev and test.
@@ -36,7 +46,7 @@ include::../partials/attributes.adoc[]
 * The Dev UI state file is written as structured JSON; files written by earlier versions are still read.
 * Quarkus 3.38 and every later version are accepted by the build (including the ecosystem CI snapshot).
 
-=== Bug Fixes
+==== Bug Fixes
 
 * A decision left on a worker thread by a failed HTTP request no longer leaks into a later message consumer or scheduled job.
 * The Dev UI "client" counter counted nothing: assaults are now counted per source.

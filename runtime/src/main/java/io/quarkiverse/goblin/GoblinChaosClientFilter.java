@@ -49,7 +49,7 @@ public class GoblinChaosClientFilter implements ClientRequestFilter {
      */
     @Override
     public void filter(ClientRequestContext requestContext) throws IOException {
-        if (!engine.isActive() || !engine.shouldAssaultClient()) {
+        if (!engine.isActive() || ChaosRequestContext.isShielded() || !engine.shouldAssaultClient()) {
             return;
         }
 

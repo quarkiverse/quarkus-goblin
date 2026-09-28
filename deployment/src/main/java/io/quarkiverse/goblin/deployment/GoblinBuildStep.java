@@ -147,7 +147,8 @@ public class GoblinBuildStep {
      * <li>when {@code goblin.target.include-packages} is set, only matching classes are decorated;</li>
      * <li>classes or methods carrying one of the {@code goblin.target.exclude-annotations} markers are never
      * decorated, exactly like the HTTP_IN layer;</li>
-     * <li>static and private methods are never decorated, exactly as CDI interceptors ignore them;</li>
+     * <li>constructors, static initializers, synthetic (e.g. bridge) methods, and static and private methods are never
+     * decorated, exactly as CDI business-method interceptors ignore them;</li>
      * <li>methods referenced as {@code fallbackMethod} by a {@code @Fallback} (on a method or on the class) in the same
      * class, and classes implementing {@code FallbackHandler}, are never decorated, so the fallback can answer the
      * original failure instead of being assaulted itself.</li>
@@ -163,7 +164,8 @@ public class GoblinBuildStep {
         if (!isServiceEligible(clazz, rules, index)) {
             return false;
         }
-        if (Modifier.isStatic(method.flags()) || Modifier.isPrivate(method.flags())
+        if (method.isConstructor() || method.isStaticInitializer() || method.isSynthetic()
+                || Modifier.isStatic(method.flags()) || Modifier.isPrivate(method.flags())
                 || isFallbackTargetMethod(clazz, method.name())) {
             return false;
         }
@@ -241,10 +243,12 @@ public class GoblinBuildStep {
      * {@code goblin.target} rules:
      * <ul>
      * <li>classes owned by the extension itself are never decorated;</li>
-     * <li>interfaces, annotations, enums and JAX-RS resource/{@code @Provider} classes are never decorated: HTTP
-     * classes are the HTTP_IN layer, and fault-tolerance-guarded business methods always sit <em>below</em> the
-     * resource boundary -- intercepting a resource method would abort the request before the protected bean is
-     * reached;</li>
+     * <li>interfaces, annotations, enums, records, synthetic classes and JAX-RS resource/{@code @Provider} classes are
+     * never decorated: HTTP classes are the HTTP_IN layer, and fault-tolerance-guarded business methods always sit
+     * <em>below</em> the resource boundary -- intercepting a resource method would abort the request before the
+     * protected bean is reached;</li>
+     * <li>classes that can never be CDI beans -- anonymous, local and non-static inner classes -- are never decorated:
+     * ArC rejects an interceptor binding on them and the application would fail to start;</li>
      * <li>classes in a {@code goblin.target.exclude-packages} prefix are never decorated;</li>
      * <li>when {@code goblin.target.include-packages} is set, only matching classes are decorated;</li>
      * <li>classes carrying one of the {@code goblin.target.exclude-annotations} markers are never decorated.</li>
@@ -260,7 +264,10 @@ public class GoblinBuildStep {
         if (name.lastIndexOf('.') < 0) {
             return false;
         }
-        if (clazz.isInterface() || clazz.isAnnotation() || clazz.isEnum()) {
+        if (clazz.isInterface() || clazz.isAnnotation() || clazz.isEnum() || clazz.isRecord() || clazz.isSynthetic()) {
+            return false;
+        }
+        if (!canBeBeanClass(clazz)) {
             return false;
         }
         if (clazz.declaredAnnotation(JAX_RS_PATH) != null || clazz.declaredAnnotation(JAX_RS_PROVIDER) != null) {
@@ -275,6 +282,22 @@ public class GoblinBuildStep {
             return false;
         }
         return rules.isPackageTargeted(packageName) && !rules.isExcludedBy(annotationNames(clazz.declaredAnnotations()));
+    }
+
+    /**
+     * Checks the nesting rules of CDI bean classes: a top-level class or a static nested class may be a bean, an
+     * anonymous, local or non-static inner class never is (for example the anonymous {@code MeterFilter} returned by
+     * a producer method).
+     *
+     * @param clazz the class to evaluate
+     * @return {@code false} when the class can never be a CDI bean
+     */
+    private static boolean canBeBeanClass(ClassInfo clazz) {
+        return switch (clazz.nestingType()) {
+            case TOP_LEVEL -> true;
+            case INNER -> Modifier.isStatic(clazz.flags());
+            case ANONYMOUS, LOCAL -> false;
+        };
     }
 
     private static boolean isInternalPackage(String packageName) {

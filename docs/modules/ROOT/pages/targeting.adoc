@@ -20,13 +20,31 @@ By default, Goblin targets every eligible part of your application on the armed 
 | `@Incoming` consumer methods: same rules as `SERVICE` (applied at build time).
 
 | `DATABASE`
-| Not filtered by package nor annotation: every JDBC datasource is assaulted when the request resolves to this layer.
+| Not filtered by package nor annotation: every JDBC datasource is assaulted when the request resolves to this layer, unless the request entry point is excluded (see <<excluded-entry-points>>).
 
 | `HTTP_OUT`
-| Not filtered by package nor annotation: every outgoing REST Client call, and every armed Vert.x `WebClient`.
+| Not filtered by package nor annotation: every outgoing REST Client call, and every armed Vert.x `WebClient`, unless the request making the call has an excluded entry point (see <<excluded-entry-points>>).
 |===
 
 `target.level` applies to every layer.
+
+[#excluded-entry-points]
+== Excluded entry points
+
+A request whose resource class sits in an `exclude-packages` package is out of the blast radius on *every* layer:
+whatever layer is armed, nothing it calls is assaulted -- neither the targeted services, nor the datasources, nor the
+outgoing calls. Use it for the parts of the application that must stay up during a chaos session, such as a status
+page or an admin screen:
+
+[source,properties]
+----
+# the demo screen keeps rendering while the DATABASE layer takes the database down
+quarkus.goblin.target.exclude-packages=com.example.status
+----
+
+Only `exclude-packages` shields a whole request. A resource outside the `include-packages` still calls targeted
+services normally, and `exclude-annotations` only spares the annotated method (see
+<<annotation-based-exclusion,Annotation-based exclusion>>).
 
 == Percentage-based targeting
 
@@ -64,6 +82,7 @@ quarkus.goblin.target.exclude-packages=com.example.health,com.example.metrics
 
 The filter matches on the declaring class's package name using `startsWith`, so `com.example` will match `com.example.api`, `com.example.internal`, etc.
 
+[#annotation-based-exclusion]
 == Annotation-based exclusion
 
 Exclude methods (or their declaring classes) that carry specific annotations, on the `HTTP_IN`, `SERVICE` and `MESSAGING` layers. On `HTTP_IN` this is useful to leave fault-tolerant endpoints alone:

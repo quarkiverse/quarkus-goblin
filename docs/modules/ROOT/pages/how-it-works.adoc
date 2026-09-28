@@ -90,8 +90,10 @@ request resolved to the SERVICE layer.
   `@Fallback`, and the injected latency is covered by `@Timeout` and `@Bulkhead`.
 * **Eligibility.** A bean method is decorated only when the class belongs to the application root archive and the usual
   `goblin.target` rules pass (`include-packages` / `exclude-packages` / `exclude-annotations`). JAX-RS resources 
-  (`@Path`), `@Provider`s, interfaces, static and private methods are never decorated -- HTTP endpoints belong to the 
-  HTTP_IN layer and sit *above* the guarded beans (a `@Path` declared on an implemented interface counts too). Methods
+  (`@Path`), `@Provider`s, interfaces, records, static and private methods are never decorated -- HTTP endpoints belong
+  to the HTTP_IN layer and sit *above* the guarded beans (a `@Path` declared on an implemented interface counts too).
+  Neither are classes that can never be CDI beans (anonymous, local and non-static inner classes, such as the anonymous
+  `MeterFilter` a producer method returns), constructors nor synthetic methods. Methods
   named as the `fallbackMethod` of a `@Fallback` (on a method or on the class) in the same class, and `FallbackHandler`
   implementations, are skipped too, so a fallback can answer the original failure instead of being assaulted itself.
   The service-assault binding is only woven in dev and test builds, never in a production build.
@@ -112,13 +114,15 @@ The DATABASE layer injects faults where a slow or unreachable database really su
 acquired from the Agroal pool. It therefore sits below Hibernate ORM, Panache and plain JDBC code alike.
 
 * **Hook.** One Agroal pool interceptor is registered per JDBC datasource (default and named) at build time, only when
-  `quarkus-agroal` is present. Hibernate Reactive and the reactive SQL clients do not use Agroal and are not covered.
-* **Granularity.** Agroal notifies an acquisition once per `getConnection()` outside a transaction, and once per
-  transaction inside one. The first acquisition of a request uses the per-request decision; every further acquisition
-  (typically a `@Retry` attempt opening a new transaction) draws `level` again.
-* **Faults.** `latency` delays the acquisition; `exception` throws the configured exception out of `getConnection()`
-  (the connection is released back to the pool). Fault Tolerance annotations on the repository or service above observe
-  it, exactly as they would observe a real connection failure.
+  `quarkus-agroal` is present, and a call to it is woven at the very start of Agroal's connection acquisition, in dev
+  and test builds only. Hibernate Reactive and the reactive SQL clients do not use Agroal and are not covered.
+* **Granularity.** Every `getConnection()` call of the request is a candidate. The first one uses the per-request
+  decision; every further one (typically a `@Retry` attempt opening a new transaction) draws `level` again.
+* **Faults.** `latency` delays the acquisition; `exception` throws the configured exception out of `getConnection()`.
+  Both fire *before* the pool checks a connection out or enlists it in the transaction, so the pool is left exactly as
+  it was: no connection is destroyed and the pool metrics (`agroal_active_count`...) stay accurate. Fault Tolerance
+  annotations on the repository or service above observe the exception, exactly as they would observe a real
+  connection failure.
 * **History.** Records are labelled `Database <datasource> connection`, e.g. `Database <default> connection`, and
   tagged `source=database` in metrics and traces.
 * **Scope.** Only database access made within an inbound HTTP request or a consumed message is assaulted: a startup

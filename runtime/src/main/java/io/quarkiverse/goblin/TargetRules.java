@@ -44,10 +44,18 @@ public final class TargetRules {
      * @return {@code true} when classes of the package may be assaulted
      */
     public boolean isPackageTargeted(String packageName) {
-        if (matchesAnyPrefix(packageName, excludePackages)) {
+        if (isPackageExcluded(packageName)) {
             return false;
         }
         return includePackages.isEmpty() || matchesAnyPrefix(packageName, includePackages);
+    }
+
+    /**
+     * @param packageName the package of the candidate class
+     * @return {@code true} when the package matches one of the {@code exclude-packages} prefixes
+     */
+    public boolean isPackageExcluded(String packageName) {
+        return matchesAnyPrefix(packageName, excludePackages);
     }
 
     /**

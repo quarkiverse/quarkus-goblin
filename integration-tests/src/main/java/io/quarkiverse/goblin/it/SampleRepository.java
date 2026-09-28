@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
 
@@ -24,6 +25,17 @@ public class SampleRepository {
 
     @Inject
     DataSource dataSource;
+
+    /**
+     * Same query as {@link #ping()}, inside a JTA transaction: Agroal enlists the connection it hands out, which is
+     * where an acquisition failure can corrupt the pool.
+     *
+     * @return {@code 1}
+     */
+    @Transactional
+    public int pingInTransaction() {
+        return ping();
+    }
 
     public int ping() {
         LOG.debugf("SampleRepository.ping() acquiring a JDBC connection");

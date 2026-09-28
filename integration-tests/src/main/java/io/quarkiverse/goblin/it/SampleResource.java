@@ -116,6 +116,12 @@ public class SampleResource {
     }
 
     @GET
+    @Path("/db/tx-ping")
+    public String dbTransactionalPing() {
+        return sampleService.databasePingInTransaction();
+    }
+
+    @GET
     @Path("/db/retry")
     public String dbRetry() {
         return sampleService.databasePingWithRetry();

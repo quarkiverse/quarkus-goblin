@@ -169,7 +169,7 @@ NOTE: Service assaults apply to *eligible bean methods* (see xref:configuration-
 When the request -- or the consumed message -- resolves to the **DATABASE** layer, the JDBC connection acquisition fails or is delayed, exactly where an unreachable or slow database surfaces (see xref:how-it-works.adoc#database-layer-assaults[Database-layer assaults] for the mechanics):
 
 * **Database latency** -- delays `getConnection()` by a random duration within the configured `latency` range.
-* **Database exception** -- throws the configured exception out of `getConnection()`; the connection is released back to the pool. The repository fails, and the Fault Tolerance annotations of the service calling it (`@Retry`, `@Fallback`, `@CircuitBreaker`...) react to it.
+* **Database exception** -- throws the configured exception out of `getConnection()`, before any connection is checked out, so the pool stays consistent. The repository fails, and the Fault Tolerance annotations of the service calling it (`@Retry`, `@Fallback`, `@CircuitBreaker`...) react to it.
 
 The first acquisition of a request uses the per-request decision; every further acquisition (a `@Retry` attempt opening a new transaction) draws `level` again. Inside a transaction Agroal notifies a single acquisition, so a transaction is assaulted once. The layer is only offered when the application has a JDBC datasource (`quarkus-agroal`, which Hibernate ORM and Panache use); Hibernate Reactive and the reactive SQL clients are not covered. The package / annotation targeting rules do not apply: every datasource is assaulted.
 

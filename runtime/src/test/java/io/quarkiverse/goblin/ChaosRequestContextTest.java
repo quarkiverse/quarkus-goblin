@@ -72,4 +72,17 @@ class ChaosRequestContextTest {
         other.join();
         assertFalse(seen[0]);
     }
+
+    @Test
+    void aShieldedRequestArmsNoLayer() {
+        ChaosRequestContext.shield();
+        assertTrue(ChaosRequestContext.isShielded());
+        assertNull(ChaosRequestContext.assaultLayer());
+        assertFalse(ChaosRequestContext.enterService(), "no service call of a shielded request is assaulted");
+
+        ChaosRequestContext.setAssaultLayer(ChaosLayer.DATABASE);
+        assertFalse(ChaosRequestContext.isShielded(), "a new decision replaces the shield");
+        ChaosRequestContext.clear();
+        assertFalse(ChaosRequestContext.isShielded());
+    }
 }
