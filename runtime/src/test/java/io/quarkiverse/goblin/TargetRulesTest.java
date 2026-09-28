@@ -43,4 +43,11 @@ class TargetRulesTest {
         assertTrue(rules.isPackageTargeted("org.other"), "blank include prefixes must not restrict anything");
         assertFalse(rules.isPackageTargeted("com.acme.internal"), "entries are trimmed");
     }
+
+    @Test
+    void onlyExcludePrefixesMakeAPackageExcluded() {
+        TargetRules rules = new TargetRules(List.of("com.acme.orders"), List.of("com.acme.health"), List.of());
+        assertTrue(rules.isPackageExcluded("com.acme.health.checks"));
+        assertFalse(rules.isPackageExcluded("com.acme.api"), "outside the include packages is not an exclusion");
+    }
 }

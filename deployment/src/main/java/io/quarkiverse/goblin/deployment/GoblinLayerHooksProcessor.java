@@ -11,6 +11,10 @@ import org.jboss.jandex.AnnotationTransformation;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
+import org.jboss.logging.Logger;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 
 import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.GoblinLayerHooks;
@@ -30,20 +34,27 @@ import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.ApplicationArchivesBuildItem;
+import io.quarkus.deployment.builditem.BytecodeTransformerBuildItem;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
+import io.quarkus.gizmo.Gizmo;
 
 /**
  * Installs the optional layer hooks, each only when the application has the matching extension, so applications
  * without a datasource or without messaging never load the corresponding third-party API:
  * <ul>
- * <li>{@link ChaosLayer#DATABASE} -- one Agroal pool interceptor per JDBC datasource (capability
- * {@code io.quarkus.agroal});</li>
+ * <li>{@link ChaosLayer#DATABASE} -- one Agroal pool interceptor per JDBC datasource, and a call to it woven at the
+ * start of Agroal's connection acquisition (capability {@code io.quarkus.agroal});</li>
  * <li>{@link ChaosLayer#MESSAGING} -- an interceptor bound to the application's {@code @Incoming} consumer methods
  * (capability {@code io.quarkus.messaging}).</li>
  * </ul>
  * Like the rest of the chaos wiring, nothing is installed in a production build.
  */
 public class GoblinLayerHooksProcessor {
+
+    private static final Logger LOG = Logger.getLogger(GoblinLayerHooksProcessor.class);
+
+    static final String AGROAL_CONNECTION_POOL = "io.agroal.pool.ConnectionPool";
+    static final String AGROAL_BEFORE_ACQUIRE = "beforeAcquire";
 
     private static final DotName AGROAL_POOL_INTERCEPTOR = DotName.createSimple("io.agroal.api.AgroalPoolInterceptor");
     private static final DotName GOBLIN_AGROAL_POOL_INTERCEPTOR = DotName
@@ -62,12 +73,20 @@ public class GoblinLayerHooksProcessor {
      * @param capabilities the application capabilities
      * @param dataSources the JDBC datasources of the application
      * @param syntheticBeans producer for the synthetic interceptor beans
+     * @param transformers producer for the transformation weaving the database hook into Agroal's pool
      */
     @BuildStep(onlyIfNot = IsProduction.class)
     void registerDatabaseHook(Capabilities capabilities, List<JdbcDataSourceBuildItem> dataSources,
-            BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
+            BuildProducer<SyntheticBeanBuildItem> syntheticBeans, BuildProducer<BytecodeTransformerBuildItem> transformers) {
         if (!capabilities.isPresent(Capability.AGROAL)) {
             return;
+        }
+        if (!dataSources.isEmpty()) {
+            transformers.produce(new BytecodeTransformerBuildItem.Builder()
+                    .setClassToTransform(AGROAL_CONNECTION_POOL)
+                    .setCacheable(true)
+                    .setVisitorFunction((className, visitor) -> new BeforeAcquireHookVisitor(visitor))
+                    .build());
         }
         for (JdbcDataSourceBuildItem dataSource : dataSources) {
             AnnotationInstance qualifier = dataSource.isDefault()
@@ -145,5 +164,50 @@ public class GoblinLayerHooksProcessor {
                 .param(GoblinLayerHooksCreator.PARAM_LAYERS, hooks.toArray(String[]::new))
                 .creator(GoblinLayerHooksCreator.class)
                 .done());
+    }
+
+    /**
+     * Weaves {@code GoblinAgroalPoolInterceptor.beforeConnectionAcquire(this.interceptors)} at the start of
+     * {@code ConnectionPool.beforeAcquire()}, the first step of every {@code getConnection()}: a fault thrown from there
+     * leaves no connection checked out nor enlisted, so the pool accounting stays consistent. Agroal's own
+     * {@code onConnectionAcquire} interceptor callback runs too late for that (see the interceptor's Javadoc).
+     */
+    static final class BeforeAcquireHookVisitor extends ClassVisitor {
+
+        private boolean woven;
+
+        BeforeAcquireHookVisitor(ClassVisitor visitor) {
+            super(Gizmo.ASM_API_VERSION, visitor);
+        }
+
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
+                String[] exceptions) {
+            MethodVisitor visitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            if (!AGROAL_BEFORE_ACQUIRE.equals(name) || !"()J".equals(descriptor)) {
+                return visitor;
+            }
+            woven = true;
+            return new MethodVisitor(Gizmo.ASM_API_VERSION, visitor) {
+                @Override
+                public void visitCode() {
+                    super.visitCode();
+                    visitVarInsn(Opcodes.ALOAD, 0);
+                    visitFieldInsn(Opcodes.GETFIELD, AGROAL_CONNECTION_POOL.replace('.', '/'), "interceptors",
+                            "Ljava/util/List;");
+                    visitMethodInsn(Opcodes.INVOKESTATIC, GOBLIN_AGROAL_POOL_INTERCEPTOR.toString().replace('.', '/'),
+                            "beforeConnectionAcquire", "(Ljava/util/List;)V", false);
+                }
+            };
+        }
+
+        @Override
+        public void visitEnd() {
+            if (!woven) {
+                LOG.warnf("Goblin: %s.%s() not found, the DATABASE layer cannot inject faults with this Agroal version",
+                        AGROAL_CONNECTION_POOL, AGROAL_BEFORE_ACQUIRE);
+            }
+            super.visitEnd();
+        }
     }
 }

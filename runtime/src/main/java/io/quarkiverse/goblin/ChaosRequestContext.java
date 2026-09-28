@@ -22,6 +22,9 @@ import io.quarkus.arc.ManagedContext;
  * never ran because an exception escaped the resource -- and is discarded, so a later message consumer or scheduled
  * job on the same thread is never assaulted by an unrelated decision.
  * <p>
+ * A request whose entry point sits in a {@code quarkus.goblin.target.exclude-packages} package is <em>shielded</em>
+ * instead: no layer is armed and no hook on its path -- service, database, messaging or outgoing call -- assaults it.
+ * <p>
  * Besides the decision, the context tracks the nesting depth of intercepted service calls and whether the armed layer
  * already fired, so that only the outermost intercepted call is assaulted (nested bean-to-bean calls never
  * multiply the fault) and each further outermost call -- typically a {@code @Retry} attempt -- draws the target level
@@ -37,6 +40,7 @@ public final class ChaosRequestContext {
     private static final class State {
         Object owner;
         ChaosLayer layer;
+        boolean shielded;
         int serviceDepth;
         boolean fired;
     }
@@ -56,6 +60,25 @@ public final class ChaosRequestContext {
         state.owner = currentOwner();
         state.layer = assaultLayer;
         STATE.set(state);
+    }
+
+    /**
+     * Shields the current request from every layer: its entry point is excluded from the chaos, so nothing it calls is
+     * assaulted, whatever layer is armed.
+     */
+    public static void shield() {
+        State state = new State();
+        state.owner = currentOwner();
+        state.shielded = true;
+        STATE.set(state);
+    }
+
+    /**
+     * @return {@code true} when the current request was shielded by {@link #shield()}
+     */
+    public static boolean isShielded() {
+        State state = current();
+        return state != null && state.shielded;
     }
 
     /**
@@ -115,7 +138,7 @@ public final class ChaosRequestContext {
      */
     public static boolean enterService() {
         State state = current();
-        if (state == null) {
+        if (state == null || state.shielded) {
             return false;
         }
         return state.serviceDepth++ == 0;

@@ -51,6 +51,11 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
      */
     private final Map<Method, Boolean> eligibility = new ConcurrentHashMap<>();
 
+    /**
+     * Whether each resource method sits in an excluded package, computed on first use like {@link #eligibility}.
+     */
+    private final Map<Method, Boolean> excludedEntryPoints = new ConcurrentHashMap<>();
+
     private volatile TargetRules targetRules;
 
     /**
@@ -65,6 +70,13 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         // request, even when chaos is currently inactive
         ChaosRequestContext.clear();
         if (!engine.isActive()) {
+            return;
+        }
+        if (isEntryPointExcluded()) {
+            // an excluded entry point takes the whole request out of the blast radius: without the shield, the layer
+            // resolved below would still assault the included beans and datasources it calls
+            requestContext.setProperty(GATED_PROPERTY, false);
+            ChaosRequestContext.shield();
             return;
         }
         ChaosLayer assaultLayer = engine.resolveAssaultLayer();
@@ -236,6 +248,24 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
             sortedAssaults = current;
         }
         return current;
+    }
+
+    /**
+     * Returns whether the resource method sits in a {@code quarkus.goblin.target.exclude-packages} package. Unlike
+     * {@link #isTargetEligible()}, the include packages and the excluding annotations are not considered here: they
+     * select the targets of each layer (a resource outside the include packages may still call included services, and
+     * {@code exclude-annotations} spares the annotated method only), while an excluded package means "leave this part of
+     * the application alone".
+     *
+     * @return {@code true} when the request must be shielded from every layer
+     */
+    private boolean isEntryPointExcluded() {
+        Method method = resourceInfo.getResourceMethod();
+        if (method == null) {
+            return false;
+        }
+        return excludedEntryPoints.computeIfAbsent(method,
+                resourceMethod -> targetRules().isPackageExcluded(resourceMethod.getDeclaringClass().getPackageName()));
     }
 
     private boolean isTargetEligible() {

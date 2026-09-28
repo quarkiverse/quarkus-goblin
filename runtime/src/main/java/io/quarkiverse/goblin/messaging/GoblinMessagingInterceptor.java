@@ -55,9 +55,10 @@ public class GoblinMessagingInterceptor {
     @AroundInvoke
     Object aroundInvoke(InvocationContext context) throws Exception {
         MutableAssaultConfig cfg = engine.configSnapshot();
-        if (cfg == null || !engine.isActive() || ChaosRequestContext.assaultLayer() != null) {
-            // inactive, or invoked inside an already resolved pseudo-request (e.g. an in-memory channel fed from a
-            // REST call): the enclosing decision stays in charge
+        if (cfg == null || !engine.isActive() || ChaosRequestContext.assaultLayer() != null
+                || ChaosRequestContext.isShielded()) {
+            // inactive, or invoked inside an already resolved or shielded pseudo-request (e.g. an in-memory channel
+            // fed from a REST call): the enclosing decision stays in charge
             return context.proceed();
         }
         ChaosLayer layer = engine.resolveAssaultLayer(AssaultEngine.MESSAGE_LAYERS);

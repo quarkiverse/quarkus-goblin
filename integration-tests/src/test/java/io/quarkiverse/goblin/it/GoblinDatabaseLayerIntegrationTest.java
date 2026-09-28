@@ -10,6 +10,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import io.agroal.api.AgroalDataSource;
+import io.agroal.api.AgroalDataSourceMetrics;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -30,6 +32,9 @@ public class GoblinDatabaseLayerIntegrationTest {
 
     @Inject
     SampleService service;
+
+    @Inject
+    AgroalDataSource dataSource;
 
     @BeforeEach
     void resetState() {
@@ -135,5 +140,33 @@ public class GoblinDatabaseLayerIntegrationTest {
         // a direct call from the test thread has no inbound request: no layer was resolved
         assertEquals("db: 1", service.databasePing());
         assertTrue(engine.getHistory().isEmpty(), "got: " + engine.getHistory());
+    }
+
+    @Test
+    public void databaseFaultsLeaveThePoolConsistent() {
+        // warm the pool up without chaos, so the connection it needs already exists
+        engine.setActive(false);
+        RestAssured.given().get("/api/db/tx-ping").then().statusCode(200);
+        engine.setActive(true);
+        engine.getMutableConfig().setExceptionEnabled(true);
+        AgroalDataSourceMetrics metrics = dataSource.getMetrics();
+        long created = metrics.creationCount();
+        long destroyed = metrics.destroyCount();
+
+        for (int i = 0; i < 5; i++) {
+            RestAssured.given().get("/api/db/tx-ping").then().statusCode(500);
+            RestAssured.given().get("/api/db/ping").then().statusCode(500);
+        }
+
+        assertEquals(10, engine.getHistory().stream()
+                .filter(record -> DEFAULT_DATASOURCE.equals(record.method()) && "exception".equals(record.type()))
+                .count(), "every acquisition must be assaulted, got: " + engine.getHistory());
+        assertEquals(0, metrics.activeCount(), "a failed acquisition must not leave a connection counted as active");
+        assertEquals(destroyed, metrics.destroyCount(), "a failed acquisition must not destroy a pooled connection");
+        assertEquals(created, metrics.creationCount(), "a failed acquisition must not force a new connection");
+
+        engine.setActive(false);
+        RestAssured.given().get("/api/db/tx-ping").then().statusCode(200).body(org.hamcrest.Matchers.equalTo("db: 1"));
+        assertEquals(0, metrics.activeCount(), "the pool must be back to idle once chaos stops");
     }
 }

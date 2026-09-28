@@ -97,7 +97,8 @@ public final class GoblinWebClient {
             return;
         }
         AssaultEngine engine = engine();
-        if (!engine.shouldAssaultClient()) {
+        // a call prepared on the thread of a shielded request (an excluded entry point) is left alone
+        if (ChaosRequestContext.isShielded() || !engine.shouldAssaultClient()) {
             context.next();
             return;
         }

@@ -84,6 +84,12 @@ public class SampleService {
         return "db: " + repository.ping();
     }
 
+    public String databasePingInTransaction() {
+        LOG.debugf("SampleService.databasePingInTransaction() executing - the repository acquires its connection "
+                + "inside a JTA transaction");
+        return "db: " + repository.pingInTransaction();
+    }
+
     @Retry(maxRetries = 2, delay = 0, jitter = 0)
     @Fallback(fallbackMethod = "databaseFallback")
     public String databasePingWithRetry() {
