@@ -9,17 +9,29 @@ include::../partials/attributes.adoc[]
 |===
 |Version |Date
 
+|0.3.1
+|2026-09-28
+
 |0.3.0
 |2026-09-25
 |===
 
-=== 0.3.1 (unreleased)
+=== 0.3.1
+
+==== Improvements
+
+* The auto-off is held by the engine instead of the browser: chaos switches itself off at the deadline even when the Dev UI is closed, and a pending auto-off survives a dev-mode live reload. The delay is bounded to 24 hours, and deactivating chaos (master toggle or kill switch) cancels it, while a configuration reset leaves it pending.
+* New JSON-RPC methods `startAutoOff(minutes)` and `cancelAutoOff()`; `getStatus` exposes the time left in `autoOffRemainingMs`.
+* A profile other than `NONE` also turns the response body assault off and resets the messages of the assaults it enables (`INTERMITTENT` answers `Internal Server Error (Goblin chaos)`). The client-side assaults and the armed layers stay untouched.
 
 ==== Bug Fixes
 
 * An application producing an anonymous, local or non-static inner class (for example a `MeterFilter` returned by a producer method) no longer fails to start: the SERVICE layer only weaves its binding onto classes that can be CDI beans, and never onto constructors.
 * `DATABASE` exceptions no longer corrupt the Agroal pool: the fault now fires before a connection is checked out, instead of from the acquire interceptor, which left the connection enlisted in the transaction while back in the pool ("Closing connection in incorrect state CHECKED_IN", ever-growing `agroal_active_count`).
 * A request whose entry point sits in an `exclude-packages` package is no longer assaulted on the `SERVICE`, `DATABASE`, `MESSAGING` or `HTTP_OUT` layers: the layer used to be resolved before the targeting rules were checked.
+* Once the auto-off has fired, chaos stays off across live reloads until it is switched on again, and clicking the master toggle just as the deadline elapses no longer switches chaos back on.
+* A test application started by continuous testing keeps its own auto-off instead of sharing the one of the dev-mode application.
+* The Dev UI dashboard survives transport errors and out-of-order status replies, and always reports an auto-disable.
 
 === 0.3.0
 
