@@ -75,7 +75,7 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 > Theme: move Goblin from chaos *injection* to resilience *verification*, driven from the Dev UI by a human or through Dev MCP by an AI agent. Scope informed by the [quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) application and a live test where an AI agent, given only an `AGENTS.md`, found a resilience defect in the demo on its own. Saved scenarios and post-assault assertions were moved from v0.3.0.
 
-- [ ] **Keep chaos off across live reloads after a manual deactivation**
+- [x] **Keep chaos off across live reloads after a manual deactivation**
   Deactivating chaos (master toggle, `setActive(false)`) is lost on the next dev-mode live reload: the active flag is not persisted and comes back from `quarkus.goblin.enabled`, while a fired auto-off already survives a reload. Persist the manual deactivation the same way, so fixing code during a chaos session never wakes the goblin up. Found by the AI agent during the live test.
 
 - [ ] **Consistent `Content-Type` for the HTTP status and dependency degradation assaults**
