@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.ChaosLayer;
+import io.quarkiverse.goblin.DeactivationReason;
 import io.quarkiverse.goblin.Enums;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -38,12 +39,20 @@ public class GoblinJsonRPCService {
     /**
      * Returns the current assault engine status for the Dev UI.
      *
-     * @return a JSON object with the active flag, the pending auto-off, profile, assault toggles, and target level
+     * @return a JSON object with the active flag, why chaos is off, the pending auto-off, profile, assault toggles, and
+     *         target level
      */
     public JsonObject getStatus() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
+        // isActive() first: it applies an elapsed auto-off on the spot, so the reason is only the current one afterwards
+        boolean active = engine.isActive();
+        DeactivationReason inactiveReason = engine.inactiveReason();
+        // typed as Object so the null case goes through put(String, Object); the Dev UI JSON-RPC transport leaves null
+        // fields out, so the key is absent from the response while chaos is active
+        Object reasonTag = inactiveReason != null ? inactiveReason.tag() : null;
         return new JsonObject()
-                .put("active", engine.isActive())
+                .put("active", active)
+                .put("inactiveReason", reasonTag)
                 .put("autoOffRemainingMs", autoOffRemainingMs())
                 .put("profile", cfg != null ? cfg.getProfile().name() : "NONE")
                 .put("layers", cfg != null ? layersJson(cfg) : new JsonArray())

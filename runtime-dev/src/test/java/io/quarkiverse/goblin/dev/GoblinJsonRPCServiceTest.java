@@ -3,6 +3,7 @@ package io.quarkiverse.goblin.dev;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
@@ -453,6 +454,47 @@ class GoblinJsonRPCServiceTest {
         assertFalse(result.getBoolean("active"));
         assertFalse(engine.isActive());
         assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
+    }
+
+    /**
+     * The status reports why chaos is off, so neither a developer nor an AI agent has to guess between a deactivation
+     * and a misconfiguration.
+     */
+    @Test
+    void statusExplainsWhyChaosIsInactive() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+
+        assertTrue(service.getStatus().containsKey("inactiveReason"), "the status always carries the reason");
+        assertNull(service.getStatus().getString("inactiveReason"), "an engine that was never initialised has no reason");
+
+        service.setActive(false);
+        assertEquals("manual", service.getStatus().getString("inactiveReason"),
+                "a deactivation from the master toggle is reported as a manual deactivation");
+
+        service.setActive(true);
+        assertNull(service.getStatus().getString("inactiveReason"), "an active engine reports no reason");
+
+        service.setActive(true);
+        service.disableAll();
+        assertEquals("manual", service.getStatus().getString("inactiveReason"),
+                "the kill switch is a manual deactivation too");
+    }
+
+    /**
+     * An auto-off that elapses while the status is being read applies itself during {@code isActive()}, so the reason
+     * must be collected after it -- otherwise the status reports chaos off with no reason at all.
+     */
+    @Test
+    void statusExplainsAnAutoOffThatElapsesOnTheSpot() throws Exception {
+        setMutableConfig(new MutableAssaultConfig());
+        engine.setActive(true);
+        engine.scheduleAutoOff(1);
+        Thread.sleep(20);
+
+        JsonObject status = service.getStatus();
+
+        assertFalse(status.getBoolean("active"), "sanity: the elapsed deadline fired");
+        assertEquals("auto-off", status.getString("inactiveReason"));
     }
 
     /**

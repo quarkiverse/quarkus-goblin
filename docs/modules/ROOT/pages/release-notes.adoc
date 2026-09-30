@@ -2,6 +2,27 @@
 
 include::../partials/attributes.adoc[]
 
+[[version-0-4]]
+== 0.4.x
+
+[cols="1,1"]
+|===
+|Version |Date
+
+|0.4.0
+|_unreleased_
+|===
+
+=== 0.4.0
+
+==== Improvements
+
+* `getStatus` reports `inactiveReason` (`manual`, `auto-off`, `disabled`, `test-mode`, `launch-mode`; absent while active) and the Dev UI status bar shows the reason next to `Inactive`, so a silent dashboard is no longer a mystery.
+
+==== Bug Fixes
+
+* Deactivating chaos from the Dev UI (master toggle, `Disable all` kill switch, `setActive(false)` through JSON-RPC) is no longer undone by the next dev-mode live reload: a deactivation now survives the file save that follows it, and an explicit activation survives the next reload too. Like the auto-off, the decision belongs to the dev session and is kept in a JVM-wide system property, deliberately outside `.goblin-state.json`, so a new process still takes the active flag from `quarkus.goblin.enabled`. A test application started by continuous testing keeps its own decision.
+
 [[version-0-3]]
 == 0.3.x
 

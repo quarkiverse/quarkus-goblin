@@ -99,7 +99,9 @@ public final class GoblinStatePersistence {
 
     /**
      * Serialises the given configuration for persistence. The enabled/active flag is deliberately not persisted: it
-     * always comes from {@code quarkus.goblin.enabled}.
+     * always comes from {@code quarkus.goblin.enabled}. Neither is the deactivation taken during a dev session, which the
+     * engine holds in a JVM-wide system property instead (see {@link AssaultEngine#MANUAL_OFF_PROPERTY}) so it can
+     * survive a live reload without this file ever being able to arm chaos.
      *
      * @param config the configuration to persist
      * @return the JSON document

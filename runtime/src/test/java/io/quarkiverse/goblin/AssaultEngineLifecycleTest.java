@@ -22,6 +22,9 @@ import io.quarkus.runtime.LaunchMode;
  * production application always starts inactive without reading the state file (regression for a NullPointerException
  * and for silent activation in {@code NORMAL} mode), and the persisted Dev UI state is only restored in dev mode so
  * integration tests are never contaminated by a local {@code .goblin-state.json}.
+ * <p>
+ * Also guards the dev-session decisions that must survive a live reload -- the auto-off and the manual deactivation, in
+ * both directions -- and that a test application running in the same JVM keeps to its own.
  */
 class AssaultEngineLifecycleTest {
 
@@ -30,6 +33,7 @@ class AssaultEngineLifecycleTest {
     @AfterEach
     void reset() throws IOException {
         System.clearProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY);
+        System.clearProperty(AssaultEngine.MANUAL_OFF_PROPERTY);
         GoblinStatePersistence.overrideStateFile(null);
         if (stateFile != null) {
             Files.deleteIfExists(stateFile);
@@ -150,6 +154,8 @@ class AssaultEngineLifecycleTest {
 
         assertFalse(reloaded.isActive(), "quarkus.goblin.enabled=true must not revive chaos the auto-off switched off");
         assertEquals(AssaultEngine.AUTO_OFF_FIRED, reloaded.readAutoOff());
+        assertEquals(DeactivationReason.AUTO_OFF, reloaded.inactiveReason(),
+                "the reloaded engine must still know the auto-off is what switched it off");
     }
 
     @Test
@@ -163,6 +169,126 @@ class AssaultEngineLifecycleTest {
         AssaultEngine reloaded = devEngine();
 
         assertTrue(reloaded.isActive(), "switching chaos on again forgets the fired auto-off");
+    }
+
+    @Test
+    void manualDeactivationSurvivesALiveReload() throws IOException {
+        isolateStateFile();
+        AssaultEngine first = devEngine();
+        first.setActive(false);
+
+        AssaultEngine reloaded = devEngine();
+
+        assertFalse(reloaded.isActive(),
+                "quarkus.goblin.enabled=true must not re-arm chaos the Dev UI just switched off (regression: the live "
+                        + "reload that follows a file save brought the goblin back)");
+        assertEquals(DeactivationReason.MANUAL, reloaded.inactiveReason());
+    }
+
+    @Test
+    void manualDeactivationSurvivesRepeatedLiveReloads() throws IOException {
+        isolateStateFile();
+        devEngine().setActive(false);
+
+        for (int reload = 1; reload <= 3; reload++) {
+            AssaultEngine reloaded = devEngine();
+            assertFalse(reloaded.isActive(), "chaos must stay off at reload " + reload);
+            assertEquals(DeactivationReason.MANUAL, reloaded.inactiveReason());
+        }
+    }
+
+    @Test
+    void manualReactivationSurvivesTheNextLiveReload() throws IOException {
+        isolateStateFile();
+        AssaultEngine first = devEngine();
+        first.setActive(false);
+        first.setActive(true);
+
+        AssaultEngine reloaded = devEngine();
+
+        assertTrue(reloaded.isActive(), "an explicit activation must survive a live reload as well, or chaos could only "
+                + "ever be switched on for one reload");
+        assertNull(reloaded.inactiveReason());
+    }
+
+    @Test
+    void manualDeactivationNeverReachesTheStateFile() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        engine.getMutableConfig().setLatencyEnabled(true);
+        engine.setActive(false);
+
+        assertTrue(Files.exists(stateFile), "sanity: a configuration change is persisted");
+        assertFalse(Files.readString(stateFile).contains("manual-off"),
+                "the enabled/active flag is never persisted: a state file could re-arm an extension disabled with "
+                        + "quarkus.goblin.enabled=false");
+        assertEquals(Boolean.TRUE.toString(), System.getProperty(AssaultEngine.MANUAL_OFF_PROPERTY),
+                "the deactivation lives in the dev session only, so a new process takes it from the configuration");
+    }
+
+    @Test
+    void unreadableManualOffPropertyReadsAsNotDeactivated() throws IOException {
+        isolateStateFile();
+        System.setProperty(AssaultEngine.MANUAL_OFF_PROPERTY, "not-a-boolean");
+
+        AssaultEngine engine = devEngine();
+
+        assertTrue(engine.isActive(), "an unreadable value must read as \"not deactivated\", never as a stuck switch");
+    }
+
+    @Test
+    void testModeEngineNeverTouchesTheDevModeManualOff() throws IOException {
+        isolateStateFile();
+        AssaultEngine dev = devEngine();
+        dev.setActive(false);
+
+        // continuous testing boots a test application in the same JVM
+        AssaultEngine test = new AssaultEngine();
+        test.config = config(100, 500, true);
+        test.initialize(LaunchMode.TEST);
+        assertTrue(test.isActive(), "a test application is never held off by the dev session decision");
+        test.setActive(false);
+        test.setActive(true);
+
+        assertFalse(dev.isActive(), "the dev application keeps its manual deactivation");
+        assertTrue(dev.readManualOff());
+    }
+
+    @Test
+    void deactivationReasonTellsTheDevSessionCausesApart() throws IOException {
+        isolateStateFile();
+        AssaultEngine engine = devEngine();
+        engine.setActive(false);
+        assertEquals(DeactivationReason.MANUAL, engine.inactiveReason());
+
+        engine.setActive(true);
+        assertNull(engine.inactiveReason(), "an active engine has no reason to report");
+
+        engine.writeAutoOff(System.currentTimeMillis() - 1);
+        assertFalse(engine.isActive());
+        assertEquals(DeactivationReason.AUTO_OFF, engine.inactiveReason(),
+                "a fired auto-off has its own state and must not be reported as a manual deactivation");
+    }
+
+    @Test
+    void deactivationReasonTellsTheConfigurationCausesApart() throws IOException {
+        isolateStateFile();
+        AssaultEngine active = devEngine();
+        assertNull(active.inactiveReason());
+
+        AssaultEngine disabled = new AssaultEngine();
+        disabled.config = disabledConfig();
+        disabled.initialize(LaunchMode.DEVELOPMENT);
+        assertEquals(DeactivationReason.DISABLED, disabled.inactiveReason());
+
+        AssaultEngine testMode = new AssaultEngine();
+        testMode.config = config(100, 500, false);
+        testMode.initialize(LaunchMode.TEST);
+        assertEquals(DeactivationReason.TEST_MODE, testMode.inactiveReason());
+
+        AssaultEngine production = new AssaultEngine();
+        production.initialize(LaunchMode.NORMAL);
+        assertEquals(DeactivationReason.LAUNCH_MODE, production.inactiveReason());
     }
 
     @Test
@@ -314,6 +440,37 @@ class AssaultEngineLifecycleTest {
 
     private static GoblinConfig config(int latencyMin, int latencyMax) {
         return config(latencyMin, latencyMax, true);
+    }
+
+    /**
+     * A configuration with {@code quarkus.goblin.enabled=false}, delegating the rest to {@link #config(int, int)}: chaos
+     * must then be off for the whole session, and the reported reason must say so.
+     *
+     * @return a configuration that keeps chaos disabled for the session
+     */
+    private static GoblinConfig disabledConfig() {
+        GoblinConfig delegate = config(100, 500);
+        return new GoblinConfig() {
+            @Override
+            public boolean enabled() {
+                return false;
+            }
+
+            @Override
+            public TestConfig test() {
+                return delegate.test();
+            }
+
+            @Override
+            public AssaultConfig assault() {
+                return delegate.assault();
+            }
+
+            @Override
+            public TargetConfig target() {
+                return delegate.target();
+            }
+        };
     }
 
     private static GoblinConfig config(int latencyMin, int latencyMax, boolean testModeEnabled) {

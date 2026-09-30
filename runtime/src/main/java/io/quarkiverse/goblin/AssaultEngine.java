@@ -69,11 +69,27 @@ public class AssaultEngine {
     /** Longest accepted auto-off delay: 24 hours. */
     public static final long MAX_AUTO_OFF_MILLIS = 24L * 60 * 60 * 1000;
 
+    /**
+     * JVM-wide system property holding the dev-mode manual deactivation: {@code true} once chaos was switched off by an
+     * explicit action (the Dev UI master toggle, the kill switch, a JSON-RPC or Dev MCP {@code setActive(false)} call).
+     * A system property for the same reason as {@link #AUTO_OFF_DEADLINE_PROPERTY} -- a decision taken in the Dev UI must
+     * survive the live reload that recreates this engine -- and deliberately kept out of {@code .goblin-state.json}, so
+     * a new process still takes the active flag from {@code quarkus.goblin.enabled} (see
+     * {@link GoblinStatePersistence}).
+     * <p>
+     * Only a deactivation is ever recorded: the property can keep chaos off across a reload, never arm it, and an
+     * explicit activation clears it so the activation survives the next reload too. A test-mode engine never writes it:
+     * continuous testing boots a test application in the same JVM, which must neither inherit nor overwrite the dev
+     * session's decision.
+     */
+    static final String MANUAL_OFF_PROPERTY = "goblin.manual-off";
+
     private volatile boolean devMode;
     private final AtomicLong localAutoOff = new AtomicLong(AUTO_OFF_NONE);
 
     private volatile MutableAssaultConfig mutableConfig;
     private volatile boolean active;
+    private volatile DeactivationReason inactiveReason;
     private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
     private final AtomicLong totalAssaultCount = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> assaultCounts = new ConcurrentHashMap<>();
@@ -132,10 +148,12 @@ public class AssaultEngine {
      * application -- the engine stays inactive and neither the persisted state file nor the configuration is consulted.
      * In dev mode a previously persisted state file (assault toggles and parameters only -- the enabled/active flag is
      * never persisted and always comes from {@code quarkus.goblin.enabled}) is restored when present, otherwise the
-     * mutable config is built from the {@link GoblinConfig} configuration. In test mode the state file is deliberately
-     * ignored so tests always start from {@code application.properties} and can never be contaminated by local Dev UI
-     * state, and chaos is only active when {@code quarkus.goblin.test.enabled} opts in: an application's test suite is
-     * never assaulted just because the extension is on the classpath. Package-private for unit tests.
+     * mutable config is built from the {@link GoblinConfig} configuration. A deactivation taken during the current dev
+     * session -- the Dev UI master toggle, the kill switch or the auto-off -- is also restored, so the live reload that
+     * follows a file save does not re-arm chaos (see {@link #MANUAL_OFF_PROPERTY}). In test mode the state file is
+     * deliberately ignored so tests always start from {@code application.properties} and can never be contaminated by
+     * local Dev UI state, and chaos is only active when {@code quarkus.goblin.test.enabled} opts in: an application's
+     * test suite is never assaulted just because the extension is on the classpath. Package-private for unit tests.
      *
      * @param mode the launch mode the application started under
      */
@@ -143,6 +161,7 @@ public class AssaultEngine {
         this.devMode = mode == LaunchMode.DEVELOPMENT;
         if (mode != LaunchMode.DEVELOPMENT && mode != LaunchMode.TEST) {
             this.active = false;
+            this.inactiveReason = DeactivationReason.LAUNCH_MODE;
             return;
         }
         if (layerHooks != null && layerHooks.isResolvable()) {
@@ -161,6 +180,11 @@ public class AssaultEngine {
         boolean enabled = config == null || config.enabled();
         boolean testOptIn = mode != LaunchMode.TEST || config == null || config.test().enabled();
         this.active = enabled && testOptIn;
+        if (!enabled) {
+            this.inactiveReason = DeactivationReason.DISABLED;
+        } else if (!testOptIn) {
+            this.inactiveReason = DeactivationReason.TEST_MODE;
+        }
         if (enabled && !testOptIn) {
             LOG.info("Goblin chaos is inactive in test mode: set quarkus.goblin.test.enabled=true to assault the tests, "
                     + "or switch it on from a test with AssaultEngine.setActive(true)");
@@ -172,7 +196,12 @@ public class AssaultEngine {
             if (active && (autoOff == AUTO_OFF_FIRED || autoOffElapsed(autoOff))) {
                 writeAutoOff(AUTO_OFF_FIRED);
                 this.active = false;
+                this.inactiveReason = DeactivationReason.AUTO_OFF;
                 LOG.info("Goblin chaos stays off after the restart: the Dev UI auto-off switched it off");
+            } else if (active && readManualOff()) {
+                this.active = false;
+                this.inactiveReason = DeactivationReason.MANUAL;
+                LOG.info("Goblin chaos stays off after the restart: it was deactivated from the Dev UI");
             }
         }
         if (active) {
@@ -209,14 +238,29 @@ public class AssaultEngine {
     }
 
     /**
+     * Returns why chaos is currently off, so the Dev UI and an AI agent can tell a deactivation apart from a
+     * misconfiguration instead of guessing.
+     *
+     * @return the deactivation reason, or {@code null} while chaos is active
+     */
+    public DeactivationReason inactiveReason() {
+        return active ? null : inactiveReason;
+    }
+
+    /**
      * Activates or deactivates chaos. Deactivating cancels any pending auto-off; activating forgets an auto-off that
      * already fired but keeps a pending one.
+     * <p>
+     * In dev mode the decision survives a live reload, in both directions: see {@link #MANUAL_OFF_PROPERTY}.
      *
      * @param active the new active flag
      */
     public void setActive(boolean active) {
         synchronized (this) {
             this.active = active;
+            this.inactiveReason = active ? null : DeactivationReason.MANUAL;
+            // a deactivation must survive the live reload that follows the next file save, and so must an activation
+            writeManualOff(!active);
             if (!active || readAutoOff() == AUTO_OFF_FIRED) {
                 writeAutoOff(AUTO_OFF_NONE);
             }
@@ -245,7 +289,9 @@ public class AssaultEngine {
 
     /**
      * Switches chaos off once the auto-off deadline elapsed. The decision is taken under the lock and the observers are
-     * notified after it is released, so an observer never runs while the engine lock is held.
+     * notified after it is released, so an observer never runs while the engine lock is held. The auto-off has its own
+     * persisted state (see {@link #AUTO_OFF_DEADLINE_PROPERTY}), so it deliberately does not record a manual
+     * deactivation.
      */
     private void expireAutoOff() {
         boolean fired;
@@ -253,6 +299,7 @@ public class AssaultEngine {
             fired = active && autoOffElapsed(readAutoOff());
             if (fired) {
                 active = false;
+                inactiveReason = DeactivationReason.AUTO_OFF;
                 writeAutoOff(AUTO_OFF_FIRED);
             }
         }
@@ -334,6 +381,34 @@ public class AssaultEngine {
             System.clearProperty(AUTO_OFF_DEADLINE_PROPERTY);
         } else {
             System.setProperty(AUTO_OFF_DEADLINE_PROPERTY, Long.toString(state));
+        }
+    }
+
+    /**
+     * Reads the dev-mode manual deactivation, see {@link #MANUAL_OFF_PROPERTY}. Always {@code false} outside dev mode, so
+     * a test application started by continuous testing is never held off by the dev session's decision. Any value other
+     * than {@code "true"} reads as "not deactivated" and is therefore self-healing.
+     *
+     * @return whether chaos was deactivated by an explicit action in this dev session
+     */
+    boolean readManualOff() {
+        return devMode && Boolean.parseBoolean(System.getProperty(MANUAL_OFF_PROPERTY));
+    }
+
+    /**
+     * Writes the dev-mode manual deactivation, see {@link #MANUAL_OFF_PROPERTY}. A no-op outside dev mode: a test engine
+     * keeps the decision in memory for the duration of the test. Package-private for unit tests.
+     *
+     * @param manualOff whether chaos was deactivated by an explicit action
+     */
+    void writeManualOff(boolean manualOff) {
+        if (!devMode) {
+            return;
+        }
+        if (manualOff) {
+            System.setProperty(MANUAL_OFF_PROPERTY, Boolean.TRUE.toString());
+        } else {
+            System.clearProperty(MANUAL_OFF_PROPERTY);
         }
     }
 
