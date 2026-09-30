@@ -32,6 +32,10 @@ export class QwcGoblinDashboard extends LitElement {
         .status-dot.active { background: var(--lumo-success-color); }
         .status-dot.inactive { background: var(--lumo-error-color); }
         .status-text { font-weight: 500; }
+        .status-reason {
+            color: var(--lumo-contrast-60pct);
+            font-size: 12px;
+        }
         .status-sep { color: var(--lumo-contrast-30pct); }
         .status-level { display: flex; align-items: center; gap: 6px; }
         .status-level input[type="number"] {
@@ -701,6 +705,27 @@ export class QwcGoblinDashboard extends LitElement {
         return `${mm}m${ss < 10 ? '0' : ''}${ss}s`;
     }
 
+    /**
+     * Explains why chaos is off, so an inactive dashboard is never a mystery: the engine reports the cause
+     * (`inactiveReason`) and an unknown value is shown as-is rather than swallowed.
+     *
+     * @returns {string} the reason, or an empty string while chaos is active
+     */
+    _inactiveReasonLabel() {
+        const s = this._status;
+        if (!s || s.active || !s.inactiveReason) {
+            return '';
+        }
+        switch (s.inactiveReason) {
+            case 'manual': return 'deactivated in this dev session';
+            case 'auto-off': return 'the auto-off switched it off';
+            case 'disabled': return 'quarkus.goblin.enabled=false';
+            case 'test-mode': return 'quarkus.goblin.test.enabled=false';
+            case 'launch-mode': return 'dev or test mode only';
+            default: return s.inactiveReason;
+        }
+    }
+
     // ==================== assaults ====================
 
     _toggleAssault(key, rpcMethod) {
@@ -1166,6 +1191,7 @@ export class QwcGoblinDashboard extends LitElement {
             <div class="status-section">
                 <span class="status-dot ${s.active ? 'active' : 'inactive'}"></span>
                 <span class="status-text">${s.active ? 'Active' : 'Inactive'}</span>
+                ${this._inactiveReasonLabel() ? html`<span class="status-reason">(${this._inactiveReasonLabel()})</span>` : ''}
                 <span class="status-sep">|</span>
                 <div class="status-level">
                     <label>Level</label>

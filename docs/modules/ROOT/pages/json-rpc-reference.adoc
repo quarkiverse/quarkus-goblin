@@ -11,13 +11,13 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Method | Effect
 
 | `getStatus`
-| Returns `active`, `autoOffRemainingMs` (the time left before the pending auto-off, `0` when none), the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), the `availableLayers` backed by an installed hook in this application (`SERVICE`, `HTTP_OUT`, `HTTP_IN`, plus `DATABASE` with a JDBC datasource and `MESSAGING` with Quarkus Messaging), and the target `level`.
+| Returns `active`, `inactiveReason` (why chaos is off: `manual`, `auto-off`, `disabled` for `quarkus.goblin.enabled=false`, `test-mode` for a test run without `quarkus.goblin.test.enabled`, `launch-mode` outside dev/test; absent while chaos is active, the Dev UI JSON-RPC transport leaving out null fields), `autoOffRemainingMs` (the time left before the pending auto-off, `0` when none), the active `profile`, the four assault toggles, the two client-side assault toggles, the `responseBodyEnabled` and `responseHeaderEnabled` toggles, the armed chaos `layers` (array of layer names), the `availableLayers` backed by an installed hook in this application (`SERVICE`, `HTTP_OUT`, `HTTP_IN`, plus `DATABASE` with a JDBC datasource and `MESSAGING` with Quarkus Messaging), and the target `level`.
 
 | `getConfig`
 | Returns the full mutable config (profile, toggles, client-side toggles, latency range, exception config, HTTP status config, response body config, response header rules under `headers`, armed chaos `layers`, `availableLayers`, level) plus `exceptionPresets`, the exception classes offered as quick picks in the Dev UI. Every preset is validated by the engine (loadable, extends `RuntimeException`, has a single-`String` constructor) so picking one never triggers the fallback.
 
 | `toggleActive` / `setActive(boolean)`
-| Enable/disable chaos entirely. Emits a WARN log. Deactivating chaos also cancels any pending auto-off; activating it keeps a pending one. When the auto-off deadline has just elapsed, `toggleActive` leaves chaos off (the caller meant to turn it off) instead of switching it back on; `setActive` with the intended state avoids the ambiguity. Returns the full config plus `ok` and `active`.
+| Enable/disable chaos entirely. Emits a WARN log. Deactivating chaos also cancels any pending auto-off; activating it keeps a pending one. When the auto-off deadline has just elapsed, `toggleActive` leaves chaos off (the caller meant to turn it off) instead of switching it back on; `setActive` with the intended state avoids the ambiguity. In dev mode the decision belongs to the session and survives a live reload in both directions: a deactivation is not undone by the next file save, and an activation is not undone either. It is deliberately kept out of `.goblin-state.json`, so a new process still starts from `quarkus.goblin.enabled`. Returns the full config plus `ok` and `active`.
 
 | `startAutoOff(minutes)`
 | Schedule chaos to switch itself off after `minutes` (between `1` and `1440`, i.e. 24 hours), replacing any pending auto-off. The engine applies the deadline on its own, whether or not the Dev UI is open. In dev mode a pending auto-off survives a live reload (not a new start), and once it has fired chaos stays off across live reloads until it is switched on again; a test application started by continuous testing keeps its own, separate auto-off. Returns `{ ok, autoOffRemainingMs }`; a delay out of range returns `{ ok: false, error }`.
@@ -56,7 +56,7 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 | Set the percentage of affected requests (clamped to 0-100).
 
 | `disableAll()`
-| Kill switch: deactivates the engine (which cancels any pending auto-off), disables every assault type and client-side assault, and resets the profile to `NONE`. Returns `{ ok, active: false }` plus the full config.
+| Kill switch: deactivates the engine (which cancels any pending auto-off), disables every assault type and client-side assault, and resets the profile to `NONE`. The deactivation is reported as `inactiveReason: manual` and, like the master toggle, survives a live reload of the dev process. Returns `{ ok, active: false }` plus the full config.
 
 | `resetDefaults()`
 | Restore every toggle and parameter to its built-in default value, not to `application.properties`: profile `NONE`, the latency assault *on* with `100-5000` ms, every other assault and client-side assault off, HTTP status `503`, body `TRUNCATE 50%`, no header rules, layers `{HTTP_IN, HTTP_OUT}`, level `100`. The active flag and any pending auto-off are left unchanged. Returns `{ ok, warning }` plus the full config.
