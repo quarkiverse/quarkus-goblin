@@ -71,15 +71,39 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 ---
 
-## v0.4.0 -- Resilience verification, Extensions & Ecosystem
+## v0.4.0 -- Resilience verification, human or agent-driven
 
-> Moved from v0.3.0: saved scenarios and post-assault assertions.
+> Theme: move Goblin from chaos *injection* to resilience *verification*, driven from the Dev UI by a human or through Dev MCP by an AI agent. Scope informed by the [quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) application and a live test where an AI agent, given only an `AGENTS.md`, found a resilience defect in the demo on its own. Saved scenarios and post-assault assertions were moved from v0.3.0.
+
+- [ ] **Keep chaos off across live reloads after a manual deactivation**
+  Deactivating chaos (master toggle, `setActive(false)`) is lost on the next dev-mode live reload: the active flag is not persisted and comes back from `quarkus.goblin.enabled`, while a fired auto-off already survives a reload. Persist the manual deactivation the same way, so fixing code during a chaos session never wakes the goblin up. Found by the AI agent during the live test.
+
+- [ ] **Consistent `Content-Type` for the HTTP status and dependency degradation assaults**
+  Both assaults abort the request with a plain-text body but no media type, so Quarkus REST negotiates it from the resource method: a resource producing JSON answers `Service Unavailable (Goblin chaos)` with a `Content-Type: application/json` header. Declare the media type of the body the assault actually sends. Found by the AI agent during the live test.
+
+- [ ] **Dev MCP tools**
+  Expose the Goblin JSON-RPC methods as Quarkus Dev MCP tools (`@JsonRpcDescription` on methods and parameters, `@JsonRpcUsage({DEV_UI, DEV_MCP})`), so an AI agent connected to `/q/dev-mcp` can read the status, arm layers, set an auto-off, read the history and the counters. Read-only methods are enabled by default (`@DevMCPEnableByDefault`); methods that unleash chaos stay opt-in, enabled by the developer in the Dev UI.
+
+- [ ] **Configuration change notifications**
+  Add `AssaultObserver.onConfigChange` so observers see every configuration change, not only assaults and activation changes. Lets an application record the exact attack it went through (e.g. to replay it after a fix) when the configuration changes during an incident.
 
 - [ ] **Saved scenarios**
-  Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later. Store scenarios in a `.goblin/scenarios/` directory as JSON files. The Dev UI custom profiles cover part of it today, but they live in the browser only.
+  Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later, from the Dev UI, JSON-RPC and Dev MCP. Store scenarios in a `.goblin/scenarios/` directory as JSON files. The Dev UI custom profiles cover part of it today, but they live in the browser only.
 
 - [ ] **Post-assault assertions (resilience verification)**
-  Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine + JSON-RPC, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience/resilience testing*.
+  Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine, JSON-RPC and Dev MCP, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience testing*.
+
+- [ ] **Agent playbook**
+  Ship a generic playbook for AI agents with the extension: safety rules (dev mode only, auto-off before every experiment, one variable at a time, back to the initial state), what each layer means for Fault Tolerance, how to observe, the hypothesis / assault / observation / conclusion loop, and the report. Exposed as a Dev MCP resource so agents discover it on their own, and published as a documentation page with a template for the application-specific part (the resilience promises each application makes). Includes how to see a circuit breaker's state (the `ft_*` metrics), which the live test showed was missing.
+
+---
+
+## v0.5.0 -- Extensions & Ecosystem
+
+> Moved from v0.4.0 so that v0.4.0 stays focused on resilience verification.
+
+- [ ] **Chaos as Code (CI mode)**
+  Support declarative YAML/TOML scenario files that can be executed non-interactively in CI pipelines, reusing the v0.4.0 saved scenarios and post-assault assertions. Enable teams to run chaos experiments in staging environments without a browser or Dev UI.
 
 - [ ] **gRPC support**
   Implement gRPC `ServerInterceptor` and `ClientInterceptor` to inject latency and exceptions on gRPC calls. Cover both unary and streaming RPCs.
@@ -92,9 +116,6 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 - [ ] **GraalVM native compilation**
   Validate that Goblin works correctly in native mode. Fix any reflection or serialization issues. Add a native compilation integration test to the CI pipeline.
-
-- [ ] **Chaos as Code (CI mode)**
-  Support declarative YAML/TOML scenario files that can be executed non-interactively in CI pipelines. Enable teams to run chaos experiments in staging environments without a browser or Dev UI.
 
 ---
 
