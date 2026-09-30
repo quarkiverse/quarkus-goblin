@@ -1,7 +1,6 @@
 package io.quarkiverse.goblin.assault;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
 
@@ -71,9 +70,8 @@ public class HttpStatusAssault implements Assault {
         MutableAssaultConfig config = context.getConfig();
         LOG.debugf("Goblin: forcing HTTP %d on %s", config.getHttpStatusCode(), context.getMethodName());
         context.getEngine().recordAssault(context.getMethodName(), recordLabel());
-        context.getRequestContext().abortWith(Response.status(config.getHttpStatusCode())
-                .entity(config.getHttpStatusMessage())
-                .build());
+        context.getRequestContext().abortWith(AbortResponses.status(config.getHttpStatusCode(),
+                config.getHttpStatusMessage(), context.getResourceMethod(), context.getResourceClass()));
         return AssaultOutcome.ABORTED;
     }
 }

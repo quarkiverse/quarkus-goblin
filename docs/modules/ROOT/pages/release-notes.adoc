@@ -22,6 +22,7 @@ include::../partials/attributes.adoc[]
 ==== Bug Fixes
 
 * Deactivating chaos from the Dev UI (master toggle, `Disable all` kill switch, `setActive(false)` through JSON-RPC) is no longer undone by the next dev-mode live reload: a deactivation now survives the file save that follows it, and an explicit activation survives the next reload too. Like the auto-off, the decision belongs to the dev session and is kept in a JVM-wide system property, deliberately outside `.goblin-state.json`, so a new process still takes the active flag from `quarkus.goblin.enabled`. A test application started by continuous testing keeps its own decision.
+* The HTTP status and dependency degradation assaults no longer answer a plain-text body declared as `application/json`: the abort now carries an explicit content type matching the resource contract -- `application/json` with a parseable `{"message":"...","code":<status>}` body on JSON resources (a JSON `@Produces`, or no `@Produces` and a POJO, collection or map return type), `text/plain` with the raw message otherwise (https://github.com/quarkiverse/quarkus-goblin/issues/69[#69]). Clients switching on the 503 content type may observe `text/plain` where they previously (incorrectly) saw `application/json`.
 
 [[version-0-3]]
 == 0.3.x

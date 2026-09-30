@@ -98,7 +98,8 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
 
         String methodName = describeMethod();
         MutableAssaultConfig cfg = engine.configSnapshot();
-        AssaultContext context = new AssaultContext(requestContext, cfg, engine, methodName);
+        AssaultContext context = new AssaultContext(requestContext, cfg, engine, methodName,
+                resourceInfo.getResourceMethod(), resourceInfo.getResourceClass());
 
         for (Assault assault : sortedAssaults()) {
             if (!assault.isEnabled(cfg)) {
