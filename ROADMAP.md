@@ -78,7 +78,7 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 - [x] **Keep chaos off across live reloads after a manual deactivation**
   Deactivating chaos (master toggle, `setActive(false)`) is lost on the next dev-mode live reload: the active flag is not persisted and comes back from `quarkus.goblin.enabled`, while a fired auto-off already survives a reload. Persist the manual deactivation the same way, so fixing code during a chaos session never wakes the goblin up. Found by the AI agent during the live test.
 
-- [ ] **Consistent `Content-Type` for the HTTP status and dependency degradation assaults**
+- [x] **Consistent `Content-Type` for the HTTP status and dependency degradation assaults**
   Both assaults abort the request with a plain-text body but no media type, so Quarkus REST negotiates it from the resource method: a resource producing JSON answers `Service Unavailable (Goblin chaos)` with a `Content-Type: application/json` header. Declare the media type of the body the assault actually sends. Found by the AI agent during the live test.
 
 - [ ] **Dev MCP tools**

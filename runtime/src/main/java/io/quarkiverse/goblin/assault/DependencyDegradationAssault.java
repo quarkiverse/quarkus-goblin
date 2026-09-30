@@ -1,7 +1,6 @@
 package io.quarkiverse.goblin.assault;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
 
@@ -68,9 +67,8 @@ public class DependencyDegradationAssault implements Assault {
     public AssaultOutcome apply(AssaultContext context) {
         LOG.debugf("Goblin: simulating dependency degradation on %s", context.getMethodName());
         context.getEngine().recordAssault(context.getMethodName(), recordLabel());
-        context.getRequestContext().abortWith(Response.status(503)
-                .entity("Dependency unavailable (Goblin chaos)")
-                .build());
+        context.getRequestContext().abortWith(
+                AbortResponses.dependencyDegradation(context.getResourceMethod(), context.getResourceClass()));
         return AssaultOutcome.ABORTED;
     }
 }

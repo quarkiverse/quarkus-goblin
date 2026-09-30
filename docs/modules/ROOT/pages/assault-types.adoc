@@ -63,9 +63,18 @@ Common use case: verify that your frontend handles 503 responses gracefully.
 
 The status code must be in the `100`-`599` range. Out-of-range values are detected at startup (and when they come from JSON-RPC, an import or the state file) and default to `503` with an `ERROR` log; the Dev UI form refuses them before saving.
 
+The abort body is always valid for its declared content type, in the representation the endpoint answers when it is not assaulted:
+
+* **JSON endpoints** answer `Content-Type: application/json` with a parseable body `{"message":"...","code":<status>}`, where `message` is the configured message and `code` echoes the status;
+* **other endpoints** answer `Content-Type: text/plain` with the raw message.
+
+An endpoint is a JSON endpoint when its closest `@Produces` -- the method's, else the resource class's -- declares `application/json` or a `*+json` type; a `text/plain` method therefore stays text even in a JSON resource class. Without any `@Produces`, Goblin follows the Quarkus REST default for the return type: a POJO, a collection or a map, also wrapped in `Uni`, `Multi`, `CompletionStage` or `RestResponse`, is JSON; a `String`, a primitive, `void` or a raw `Response` (whose representation is only known once it runs) is text.
+
+NOTE: The exception assault is a different path (an exception thrown before the endpoint runs, rendered by the Quarkus REST exception mapper, typically `application/json` with a `details`/`stack` shape). The status and dependency assaults match the resource contract instead, so the content types may differ on a `text/plain` resource.
+
 == DEPENDENCY_DEGRADATION
 
-Returns 503 with a "Dependency unavailable" message. Designed for testing `@Fallback` and `@Retry` on outbound service calls. No additional configuration needed -- it uses a fixed 503 response.
+Returns 503 with a "Dependency unavailable" message. Designed for testing `@Fallback` and `@Retry` on outbound service calls. No additional configuration needed -- it uses a fixed 503 response. The content-type contract is the same as `HTTP_STATUS`: `application/json` with `{"message":"Dependency unavailable (Goblin chaos)","code":503}` on JSON resources, `text/plain` with the raw message otherwise.
 
 == RESPONSE_BODY
 
