@@ -81,3 +81,29 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 |===
 
 NOTE: Every mutating method except `resetCounters`, `clearHistory`, `startAutoOff` and `cancelAutoOff` returns the full configuration as `JsonObject` (the same shape as `getConfig`) plus `ok`, so the Dev UI treats the response as a single source of truth; a rejected call returns `ok: false` and an `error` (alone, or with the unchanged full config for `applyConfig`). For backward compatibility the setters also echo the values they changed as top-level keys: `setLatencyRange` (`minMilliseconds`, `maxMilliseconds`), `setExceptionConfig` and `setHttpStatusConfig` (`type` or `code`, `message`), `setResponseBodyConfig` (`mode`, `percentage`), `setTargetLevel` (`level`), `setResponseHeaderInfo` (`name`, `action`, `value`); `getConfig` itself only carries `level` at the top level.
+
+== Dev MCP exposure
+
+Every method above is also a Quarkus Dev MCP tool, so an AI agent connected to `/q/dev-mcp` can call it (see xref:dev-ui.adoc#driving-goblin-from-an-ai-agent[Driving Goblin from an AI agent]).
+
+What decides the exposure is a single rule: a method carrying a `@JsonRpcDescription` is served to both the Dev UI and MCP, and a method without one stays in the Dev UI only. A *blank* description is not enough -- it hides the method from both. A description is also the only documentation an agent gets, so every method and every parameter describes the action, the accepted values and what comes back.
+
+Being described is not the same as being enabled. A method annotated `@DevMCPEnableByDefault` is handed to the agent as soon as the Dev MCP server is on; a method without it stays out of the agent's tool list (`tools/list` only returns enabled tools) until a developer turns it on explicitly in the Dev MCP panel of the Dev UI, the only place where disabled tools are listed. The descriptions of the read-only tools say so, so an agent that only sees them knows the arming tools exist and must be enabled by a human. The split follows one rule: *reading the state or stopping chaos is enabled by default, arming or mutating chaos is opt-in*.
+
+[cols="2,3"]
+|===
+| Enabled by default | Why
+
+| `getStatus`, `getConfig`, `getHistory`, `getCounters`, `getMarkdownReport`
+| Read-only. An agent can find out what is armed and what has already happened, which is the minimum needed to work with Goblin at all.
+
+| `startAutoOff`, `cancelAutoOff`, `disableAll`
+| Stopping chaos. An agent must always be able to arm a safety net and to shut everything down, without having to ask a human first.
+
+|===
+
+Everything else is opt-in: the master switch (`toggleActive` and `setActive`), every assault toggle, every parameter setter, `setProfile`, `resetDefaults`, `applyConfig`, and the two methods that throw away evidence (`resetCounters` and `clearHistory`). `setActive` stays opt-in even when it is called with `false`, because the same tool arms chaos too; `disableAll` is the tool that turns everything off, and it needs no prior configuration.
+
+NOTE: `applyConfig` takes a free-form configuration object, and the MCP schema generated for a free-form object documents none of its keys. Its description therefore spells out every accepted key, its type and its accepted values, which makes it the longest description of the service.
+
+NOTE: With Quarkus 3.38, a tool that takes two parameters or more shows the description of its *first parameter* instead of its own, in the Dev MCP panel and in the tool list an agent receives: Quarkus reads the method description with a lookup that also matches the parameter annotations. This affects `setLatencyRange`, `setExceptionConfig`, `setHttpStatusConfig`, `setResponseBodyConfig` and `setResponseHeaderInfo`, which are all opt-in. Their parameter descriptions stay correct, and the tools behave as documented in the table above; none of the tools enabled by default is affected, since they take at most one parameter.

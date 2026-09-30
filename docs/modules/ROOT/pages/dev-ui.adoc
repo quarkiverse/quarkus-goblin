@@ -39,6 +39,31 @@ The Chaos Dashboard with latency enabled at 100% target level.
 
 NOTE: When chaos is deactivated, every toggle and form stays editable: you can prepare your assault configuration before turning chaos on.
 
+== Driving Goblin from an AI agent
+
+The Dev UI ships a Dev MCP server, so an AI agent can drive Goblin over MCP instead of clicking the dashboard. The Goblin JSON-RPC service is exposed as MCP tools on that server, which is reachable at `/q/dev-mcp` in dev mode.
+
+The server is opt-in, so nothing is exposed to an agent until you ask for it:
+
+[source,properties]
+----
+quarkus.dev-mcp.enabled=true
+----
+
+Once enabled, the tools that only read the state or stop chaos are available to the agent right away. The tools that arm or mutate chaos -- the master switch, the assault toggles, the parameter setters, and the two methods that discard the assault history or counters -- are *disabled*: the agent does not see them at all (they are listed, as disabled, in the Dev MCP panel of the Dev UI only), although the descriptions of the read-only tools tell it that they exist. Enable the ones you want the agent to use from that panel. Quarkus remembers the choice in `~/.quarkus/dev-mcp.properties`, in your home directory: it survives live reloads and restarts, and it applies to *every* Quarkus application on your machine that uses Goblin, not only to this project. Disable the tools again from the same panel when the experiment is over.
+
+image::dev-mcp-tools.png[Goblin tools in the Dev MCP panel of the Dev UI: the read-only and stop tools enabled by default, every tool that arms or changes chaos disabled,width=900,align=center]
+
+On the agent's side, only the enabled tools exist. Here is what an MCP client -- the https://github.com/modelcontextprotocol/inspector[MCP Inspector], connected to `http://localhost:8080/q/dev-mcp` -- sees with the default set: the eight read and stop tools, each with the description and the parameters the agent works from.
+
+image::dev-mcp-client-tools.png[The Goblin tools seen from the MCP Inspector: the eight tools enabled by default, and the description and parameter of startAutoOff,width=820,align=center]
+
+A typical session goes like this: the agent reads `getStatus` to see what is armed, calls `startAutoOff` so the session cannot outlive its own safety net, and only then arms an assault. It reads `getHistory`, `getCounters` and `getMarkdownReport` afterwards to check what actually happened, and calls `disableAll` to stop everything.
+
+NOTE: An agent can reach your application's endpoints, and enabling the assault tools lets it break them on purpose. The read-only default set is deliberately safe to leave on; keep the armed tools disabled until you have a reason to hand that over.
+
+Every method, and every parameter of every method, carries a description written for an agent: what the call does, which values it accepts, and what it returns. See xref:json-rpc-reference.adoc#dev-mcp-exposure[Dev MCP exposure] for the exact default/opt-in split.
+
 == History
 
 The History panel is a live chaos-testing console. It **auto-refreshes every 2 seconds while the panel is visible**, so new assaults appear as they happen without a manual reload.

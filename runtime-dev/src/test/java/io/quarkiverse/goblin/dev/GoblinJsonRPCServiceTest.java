@@ -7,8 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +25,8 @@ import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.AssaultSource;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseHeaderAction;
+import io.quarkus.runtime.annotations.DevMCPEnableByDefault;
+import io.quarkus.runtime.annotations.JsonRpcDescription;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -38,6 +47,84 @@ class GoblinJsonRPCServiceTest {
             "latencyEnabled", "exceptionEnabled", "httpStatusEnabled", "dependencyDegradationEnabled",
             "clientLatencyEnabled", "clientExceptionEnabled", "responseBodyEnabled", "responseHeaderEnabled",
     };
+
+    /**
+     * The tools an AI agent gets without a human having to opt in, and the only ones. The split is deliberate: reading
+     * the state or stopping chaos is free, arming or mutating chaos is opt-in. A fresh agent can therefore always
+     * observe and always stop, but cannot break the application before someone enabled the armed tools.
+     */
+    private static final Set<String> DEFAULT_ENABLED_TOOLS = Set.of(
+            "getStatus", "getConfig", "getHistory", "getCounters", "getMarkdownReport",
+            "startAutoOff", "cancelAutoOff", "disableAll");
+
+    /**
+     * Mirrors what {@code DevUIProcessor.findAllJsonRPCMethods} turns into a Dev MCP tool: a public, non-void,
+     * non-synthetic method of a registered JSON-RPC provider. A method carrying a {@code @JsonRpcDescription} is exposed
+     * to both the Dev UI and MCP, one without it stays in the Dev UI alone, and a blank description is exposed
+     * nowhere -- so both the missing and the blank case have to fail here.
+     */
+    @Test
+    void everyExposedMethodIsDescribedAndHasADeliberateMcpPolicy() {
+        List<String> missingDescription = new ArrayList<>();
+        List<String> undocumentedParameters = new ArrayList<>();
+        List<String> unnamedParameters = new ArrayList<>();
+        List<String> policyMismatches = new ArrayList<>();
+
+        for (Method method : exposedMethods()) {
+            JsonRpcDescription description = method.getAnnotation(JsonRpcDescription.class);
+            if (description == null || description.value().isBlank()) {
+                missingDescription.add(method.getName());
+            }
+            for (Parameter parameter : method.getParameters()) {
+                JsonRpcDescription parameterDescription = parameter.getAnnotation(JsonRpcDescription.class);
+                if (parameterDescription == null || parameterDescription.value().isBlank()) {
+                    undocumentedParameters.add(method.getName() + "#" + parameter.getName());
+                }
+                if (parameter.getName().matches("arg\\d+")) {
+                    unnamedParameters.add(method.getName() + "#" + parameter.getName());
+                }
+            }
+            boolean enabledByDefault = method.isAnnotationPresent(DevMCPEnableByDefault.class);
+            if (enabledByDefault != DEFAULT_ENABLED_TOOLS.contains(method.getName())) {
+                policyMismatches.add(method.getName() + " is " + (enabledByDefault
+                        ? "enabled by default but the policy makes it opt-in"
+                        : "opt-in but the policy makes it enabled by default"));
+            }
+        }
+
+        assertEquals(List.of(), missingDescription,
+                "every exposed method needs a @JsonRpcDescription, otherwise no agent can tell what it does");
+        assertEquals(List.of(), undocumentedParameters,
+                "every exposed parameter needs a @JsonRpcDescription, it is the only documentation an agent gets");
+        assertEquals(List.of(), unnamedParameters,
+                "parameter names become the MCP tool argument names; arg0/arg1 means -parameters is gone");
+        assertEquals(List.of(), policyMismatches, "unexpected Dev MCP default policy");
+    }
+
+    /**
+     * Pins the default-enabled set itself, so renaming a tool or adding one is a deliberate edit of this list rather
+     * than a silent change of what an agent can do out of the box.
+     */
+    @Test
+    void defaultEnabledToolsAreExactlyTheReadOrStopOnes() {
+        List<String> actual = exposedMethods().stream()
+                .filter(method -> method.isAnnotationPresent(DevMCPEnableByDefault.class))
+                .map(Method::getName)
+                .sorted()
+                .toList();
+
+        assertEquals(DEFAULT_ENABLED_TOOLS.stream().sorted().toList(), actual,
+                "only reading the state or stopping chaos may be exposed without an explicit opt-in");
+    }
+
+    private static List<Method> exposedMethods() {
+        return Arrays.stream(GoblinJsonRPCService.class.getDeclaredMethods())
+                .filter(method -> Modifier.isPublic(method.getModifiers()))
+                .filter(method -> !method.isSynthetic() && !method.isBridge())
+                .filter(method -> method.getReturnType() != void.class)
+                .sorted(Comparator.comparing(Method::getName))
+                .toList();
+    }
 
     @Test
     void autoOffIsScheduledReportedAndCancelledThroughJsonRpc() {
