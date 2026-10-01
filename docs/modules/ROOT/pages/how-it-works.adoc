@@ -186,8 +186,43 @@ can never break an assault. The engine
 injects `Instance<AssaultObserver>`, so any `@ApplicationScoped` implementation is picked up automatically; outside
 the CDI container (plain unit tests) the notification simply does nothing.
 
-The optional `quarkus-goblin-metrics` and `quarkus-goblin-opentelemetry` modules are the current consumers (see
-xref:metrics.adoc[] and xref:tracing.adoc[]); post-assault assertions will plug into the same hook.
+Every change of the assault configuration is broadcast too, through `onConfigChange(AssaultConfigChange)`: the event
+carries the configuration before and after the change, both read-only snapshots, and the time it was published. That
+is enough for an application or a test to record the exact attack it went through, and to replay it after a fix:
+
+[source,java]
+----
+@ApplicationScoped
+public class AttackRecorder implements AssaultObserver {
+
+    @Override
+    public void onConfigChange(AssaultConfigChange change) {
+        LOG.infof("Goblin attack changed: %s -> %s", change.previousDescription(), change.currentDescription());
+    }
+}
+----
+
+* *One change, one notification.* A single setter call (a Dev UI toggle, a JSON-RPC or Dev MCP tool) is one
+  notification. A change staged and published at once -- `applyConfig`, a Dev UI import, a profile with its
+  parameters -- is one notification too, however many fields it changes. Two changes made at the same time from two
+  threads can be folded into one notification, from the oldest previous to the latest current configuration: the
+  intermediate state is then not reported on its own.
+* *Not a request-path call.* The observer runs on the thread that changed the configuration, never on a request
+  thread. It must still return quickly: the caller waits for it.
+* *Read-only.* Both configurations are frozen snapshots: their setters throw `UnsupportedOperationException`, so an
+  observer can keep them but never changes the live configuration through them.
+* *Dev and test mode.* The notification fires in test mode as well, so a `@QuarkusTest` can assert on the configuration
+  an assault ran with, while the `.goblin-state.json` persistence stays dev-only.
+* *What is not a change.* The configuration loaded at startup, its startup validation and the profile label restored
+  from the state file are not notified: the first notification is the first change made once the application runs.
+  Activating or deactivating chaos is reported by `onActiveChange`, not here.
+* *Failures are logged, never propagated.* Unlike the request-path notifications, an observer failing on a
+  configuration change is logged at `WARN` -- it is losing the one event it exists for -- and still never reaches the
+  caller, which goes on applying its change. The other observers are notified all the same.
+
+The optional `quarkus-goblin-metrics` and `quarkus-goblin-opentelemetry` modules are the current consumers of the
+assault and activation notifications (see xref:metrics.adoc[] and xref:tracing.adoc[]); post-assault assertions and
+experiment recording plug into the same hook.
 
 == Adding your own assault type
 

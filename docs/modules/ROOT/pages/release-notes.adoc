@@ -18,6 +18,7 @@ include::../partials/attributes.adoc[]
 ==== Improvements
 
 * `getStatus` reports `inactiveReason` (`manual`, `auto-off`, `disabled`, `test-mode`, `launch-mode`; absent while active) and the Dev UI status bar shows the reason next to `Inactive`, so a silent dashboard is no longer a mystery.
+* `AssaultObserver` gains `onConfigChange(AssaultConfigChange)`: observers see every configuration change, once per published change (a whole `applyConfig` included), with the configuration before and after it as read-only snapshots, in dev and test mode -- enough to record the exact attack an application went through and replay it after a fix (https://github.com/quarkiverse/quarkus-goblin/issues/71[#71]). The method has a default no-op, so existing observers are unaffected.
 
 ==== Bug Fixes
 
