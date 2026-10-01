@@ -222,8 +222,8 @@ public class AttackRecorder implements AssaultObserver {
   caller, which goes on applying its change. The other observers are notified all the same.
 
 The optional `quarkus-goblin-metrics` and `quarkus-goblin-opentelemetry` modules are the current consumers of the
-assault and activation notifications (see xref:metrics.adoc[] and xref:tracing.adoc[]); post-assault assertions and
-experiment recording plug into the same hook.
+assault and activation notifications (see xref:metrics.adoc[] and xref:tracing.adoc[]); experiment recording plugs
+into the same hook.
 
 == Adding your own assault type
 

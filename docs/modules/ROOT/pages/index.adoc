@@ -105,11 +105,13 @@ If the configured class does not exist or has no `String` constructor, Goblin fa
 
 Yes. Runtime changes are automatically saved to a `.goblin-state.json` file in the project working directory and restored on the next startup. Add `.goblin-state.json` to your `.gitignore`: it holds your local chaos settings, and a committed copy would silently replace the `application.properties` configuration of your teammates in dev mode.
 
-== Non-goals (out of scope for V1)
+== Non-goals
 
 * **Infrastructure chaos** (pod killing, network partitioning) -- use Chaos Mesh, Litmus, or Pumba for that.
-* **Production/staging chaos** -- may be explored in a future version with a completely different safety model (explicit opt-in, time-bounded windows, audit trail).
-* **Native compilation** -- to be validated separately once the core mechanism is proven on JVM.
+* **Production or staging chaos** -- Goblin is a dev-mode tool. Chaos belongs in the hands of someone who is watching the application, with an auto-off set.
+* **CI pipelines** -- no scenario files run non-interactively. A pipeline runs where nobody is watching; saved scenarios exist to replay an experiment by hand.
+* **A rules engine** -- no declarative expectations evaluated into pass/fail. Goblin provides the signals (history, counters, metrics, spans); the agent or the human concludes.
+* **Running in native mode** -- the extension must not break a native build when it sits in the dependencies, nothing more.
 
 == Requirements
 

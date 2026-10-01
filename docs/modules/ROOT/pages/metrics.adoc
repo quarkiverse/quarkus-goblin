@@ -93,7 +93,7 @@ Typical alerts:
 * `goblin_active == 0` -- the engine is off, none of the other signals are changing.
 * Sudden spikes on `goblin_latency_injected_seconds` -- latency assault is degrading the injected delays.
 
-These metrics are also the foundation for the planned *post-assault assertions* (issue #50): declaring "inject 500 ms latency, expect a fallback to fire" becomes verifiable from the fault-tolerance signals combined with these metrics.
+These metrics are also among the signals an experiment is concluded from: combined with the MicroProfile Fault Tolerance metrics, they tell whether "inject 500 ms latency, expect a fallback to fire" actually held. Goblin does not evaluate that expectation itself -- the agent or the human running the experiment does (see the planned agent playbook, issue #72).
 
 == Internals
 
