@@ -98,9 +98,9 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 ---
 
-## v0.5.0 -- Extensions & Ecosystem
+## v0.5.0 -- Reactive Routes & native build
 
-> Moved from v0.4.0 so that v0.4.0 stays focused on resilience verification.
+> Two items, both close to the core: one more inbound HTTP entry point, and the guarantee that the extension does not break a native build. The other injection layers wait under *On demand*.
 
 - [ ] **Reactive Routes support** ([#64](https://github.com/quarkiverse/quarkus-goblin/issues/64))
   Extend Goblin beyond JAX-RS to cover Vert.x reactive routes (`@Route`-annotated methods). Use Vert.x route handlers for injection. The closest thing to the core of the project here: the same role as JAX-RS on the inbound HTTP side.
@@ -119,14 +119,14 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.
 
 - [ ] **Structured assault logs**
-  Replace the plain-text `WARN` logs with structured events a player can read -- human or agent: timestamp, method, assault type, injected value, configuration snapshot. The goal is a log you can reason about during an experiment, not log aggregation for compliance, which is a production concern Goblin does not serve.
+  Replace the plain-text `WARN` logs with structured events whoever runs the experiment can read -- human or agent: timestamp, method, assault type, injected value, configuration snapshot. The goal is a log you can reason about during an experiment, not log aggregation for compliance, which is a production concern Goblin does not serve.
 
 - [ ] **Advanced scenario-based documentation**
   Write dedicated guides for common resilience testing patterns: testing circuit breakers with `@CircuitBreaker`, testing retries with `@Retry`, testing fallbacks with `@Fallback`, and establishing performance baselines.
 
 ---
 
-## Sur demande
+## On demand
 
 > None of these betrays what Goblin is: each is a new injection layer, or a new Dev UI surface. What they share is coupling to a Quarkus area, so they are picked up when someone asks for them in an issue, not scheduled here.
 
@@ -144,9 +144,9 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 ---
 
-## Ce que Goblin n'est pas
+## What Goblin is not
 
 > Recorded so the next feature request does not relitigate them. Each of these was proposed and set aside on purpose.
 
-- **Not a CI tool.** No declarative scenarios, no non-interactive pipeline runs ([#66](https://github.com/quarkiverse/quarkus-goblin/issues/66)). Chaos belongs in the hands of someone who is watching the application, in dev mode, with an auto-off set. A pipeline runs where nobody is watching, and the safeguard meant to keep Goblin out of production is itself planned for v1.0.
+- **Not a CI tool.** No scenario files run non-interactively, no pipeline runs ([#66](https://github.com/quarkiverse/quarkus-goblin/issues/66)). Chaos belongs in the hands of someone who is watching the application, in dev mode, with an auto-off set. A pipeline runs where nobody is watching.
 - **Not a rules engine.** No declarative expectations evaluated into pass/fail ([#50](https://github.com/quarkiverse/quarkus-goblin/issues/50)). Goblin produces the signals; the agent or the human concludes. The playbook in v0.4.0 owns that step, so an experiment stays something you run rather than something you configure.
