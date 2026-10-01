@@ -87,7 +87,7 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 - [x] **Configuration change notifications**
   Add `AssaultObserver.onConfigChange` so observers see every configuration change, not only assaults and activation changes. Lets an application record the exact attack it went through (e.g. to replay it after a fix) when the configuration changes during an incident.
 
-- [ ] **Saved scenarios**
+- [x] **Saved scenarios**
   Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later, from the Dev UI, JSON-RPC and Dev MCP. Store scenarios in a `.goblin/scenarios/` directory as JSON files. The Dev UI custom profiles cover part of it today, but they live in the browser only.
 
 - [ ] **Post-assault assertions (resilience verification)**

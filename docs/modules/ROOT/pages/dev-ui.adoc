@@ -25,6 +25,7 @@ The Chaos Dashboard with latency enabled at 100% target level.
 * **Live counters** -- The status bar shows the total number of assaults since the last reset (with a `reset` action) and one chip per source that fired (`REST`, `service`, `database`, `messaging`, `REST client`, `WebClient`), refreshed every 2 seconds together with the config.
 * **Profile selector** -- Pick a predefined composite assault mode (`NONE`, `SLOW_FAILURE`, `INTERMITTENT`, `TIMEOUT`); a predefined profile other than `NONE` asks for confirmation before it is applied. It turns every server-side assault off, then enables its own assaults with their defaults (see xref:profiles.adoc[]). The active profile is shown in the status bar, with an `override` marker when a server-side toggle no longer matches the profile. Individual toggles stay overridable on top of the profile.
 * **Custom profiles** -- `Save current as profile` asks for a name and stores the current configuration in the browser (not on the server). A custom profile is re-applied from the profile selector (`Custom: <name>`) and removed with `Delete active`. The status bar keeps showing the predefined profile held by the engine (often `None (manual)`); the custom name only appears in the selector.
+* **Scenarios** -- `Save current as scenario` stores the whole assault configuration under a name, on disk; `Load` replaces the configuration by the selected scenario and `Delete` removes it. See <<scenarios>>.
 * **Assault type toggles** -- Independent on/off switches for each assault type (Latency, Exception, HTTP Status, Dependency Degradation, Response Body, Response Header). Multiple types can be active simultaneously. Enabled types are highlighted with the Quarkus primary color, and each row shows its priority.
  * **Priority badges** -- Each assault row shows when it runs: `10` latency, `20` exception, `30` HTTP status and `40` dependency degradation run in that order before the endpoint (the first aborting one short-circuits the request); `R` marks the response-phase transformations (response body, then response headers); `C` marks the client-side assaults on outgoing calls.
  * **Client-side assault toggles** -- A dedicated section controls `client latency` and `client exception`, applied to outgoing MicroProfile REST Client and Vert.x WebClient calls. They default to off and reuse the latency range and exception class/message configured above.
@@ -38,6 +39,19 @@ The Chaos Dashboard with latency enabled at 100% target level.
 * **Persistence** -- In dev mode every configuration change is written to `.goblin-state.json` in the project directory, and that file is loaded at the next start *instead of* the `quarkus.goblin.assault.*` and `quarkus.goblin.target.level` properties (the active flag excepted). The deactivation and the auto-off are deliberately kept out of that file, so it can never arm an extension you disabled with `quarkus.goblin.enabled=false`. Delete the file to start again from `application.properties` (see xref:configuration-reference.adoc[]).
 
 NOTE: When chaos is deactivated, every toggle and form stays editable: you can prepare your assault configuration before turning chaos on.
+
+[#scenarios]
+== Scenarios
+
+A scenario is a named snapshot of the whole assault configuration -- every toggle and parameter, the armed layers and the target level -- so a chaos experiment ("slow kitchen", "cave on fire", "500 storm") can be rerun in one click instead of re-clicking a dozen toggles.
+
+* *Save* -- `Save current as scenario` asks for a name (1 to 64 letters, digits, spaces, `-` or `_`) and writes `.goblin/scenarios/<name>.json` in the project directory, in the `.goblin-state.json` format. Saving under an existing name asks before replacing it.
+* *Load* -- replaces the whole configuration by the selected scenario, as a single change. A scenario never holds the active flag: loading one leaves chaos on or off as it is. An invalid value in a hand-edited file falls back to a valid one with a log, as for any other configuration change.
+* *Delete* -- removes the scenario file; the current configuration is not touched.
+
+The section shows what the selected scenario arms, its layers and its level. Unlike the custom profiles, which live in the browser, scenarios are files: they are shared by every browser, survive a cleared browser cache, and are reachable through JSON-RPC and Dev MCP, so an agent can list them and, once the developer enables `loadScenario`, rerun one.
+
+TIP: Add `.goblin/` to your `.gitignore` next to `.goblin-state.json`, unless you want to share your scenarios with your team: they are plain JSON files, and committing them is a way to version a set of chaos experiments.
 
 == Driving Goblin from an AI agent
 

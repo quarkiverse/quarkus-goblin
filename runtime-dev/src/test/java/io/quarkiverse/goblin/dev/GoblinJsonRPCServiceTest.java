@@ -55,7 +55,7 @@ class GoblinJsonRPCServiceTest {
      */
     private static final Set<String> DEFAULT_ENABLED_TOOLS = Set.of(
             "getStatus", "getConfig", "getHistory", "getCounters", "getMarkdownReport",
-            "startAutoOff", "cancelAutoOff", "disableAll");
+            "startAutoOff", "cancelAutoOff", "disableAll", "listScenarios");
 
     /**
      * Mirrors what {@code DevUIProcessor.findAllJsonRPCMethods} turns into a Dev MCP tool: a public, non-void,

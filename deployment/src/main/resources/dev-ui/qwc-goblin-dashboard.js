@@ -363,6 +363,8 @@ export class QwcGoblinDashboard extends LitElement {
         _autoOffRemaining: {state: true},
         _customProfiles: {state: true},
         _activeCustom: {state: true},
+        _scenarios: {state: true},
+        _selectedScenario: {state: true},
     };
 
     constructor() {
@@ -380,6 +382,8 @@ export class QwcGoblinDashboard extends LitElement {
         this._statusSeq = 0;
         this._customProfiles = [];
         this._activeCustom = null;
+        this._scenarios = [];
+        this._selectedScenario = '';
         this.jsonRpc = new JsonRpc(this);
     }
 
@@ -387,6 +391,7 @@ export class QwcGoblinDashboard extends LitElement {
         super.connectedCallback();
         this._loadData();
         this._loadCustomProfiles();
+        this._loadScenarios();
         this._refreshTimer = setInterval(() => this._refresh(), 2000);
         this._tickTimer = setInterval(() => this._tick(), 1000);
         this._keyHandler = (e) => {
@@ -1046,6 +1051,88 @@ export class QwcGoblinDashboard extends LitElement {
         }).catch(() => this._showToast('Profile update failed', 'error'));
     }
 
+    // ==================== scenarios ====================
+
+    /**
+     * Reloads the saved scenarios (.goblin/scenarios/), keeping the selection when it still exists.
+     */
+    _loadScenarios() {
+        this.jsonRpc.listScenarios().then(r => {
+            if (r.result && r.result.ok) {
+                this._scenarios = r.result.scenarios;
+                if (!this._scenarios.some(s => s.name === this._selectedScenario)) {
+                    this._selectedScenario = this._scenarios.length ? this._scenarios[0].name : '';
+                }
+            } else {
+                this._showToast(r.result && r.result.error || 'Cannot list the scenarios', 'error');
+            }
+        }).catch(() => this._showToast('Cannot list the scenarios', 'error'));
+    }
+
+    _selectedScenarioInfo() {
+        return this._scenarios.find(s => s.name === this._selectedScenario);
+    }
+
+    _saveScenario() {
+        if (!this._config) {
+            return;
+        }
+        const name = (prompt('Save the current configuration as a scenario (letters, digits, spaces, - and _):',
+            this._selectedScenario || '') || '').trim();
+        if (!name) {
+            return;
+        }
+        const save = (overwrite) => this.jsonRpc.saveScenario({name, overwrite}).then(r => {
+            if (r.result && r.result.ok) {
+                this._selectedScenario = r.result.scenario;
+                this._loadScenarios();
+                this._showToast(`Scenario '${r.result.scenario}' saved`, 'info');
+            } else if (!overwrite && r.result && r.result.code === 'EXISTS') {
+                // the store decides what "already exists" means (names are case-insensitive), never the browser
+                const stored = r.result.existingScenario || name;
+                if (confirm(`Scenario '${stored}' already exists. Replace it with the current configuration?`)) {
+                    save(true);
+                }
+            } else {
+                this._showToast(r.result && r.result.error || 'Scenario save failed', 'error');
+            }
+        }).catch(() => this._showToast('Scenario save failed', 'error'));
+        save(false);
+    }
+
+    _loadScenario() {
+        const scenario = this._selectedScenarioInfo();
+        if (!scenario || !confirm(`Load scenario '${scenario.name}'?\n${scenario.assaults}\n`
+            + 'It replaces the whole assault configuration; chaos stays on or off as it is.')) {
+            return;
+        }
+        this.jsonRpc.loadScenario({name: scenario.name}).then(r => {
+            if (r.result && r.result.ok) {
+                this._activeCustom = null;
+                this._applyConfigResult(r.result, '*');
+                this._showToast(`Scenario '${scenario.name}' loaded`);
+            } else {
+                this._showToast(r.result && r.result.error || 'Scenario load failed', 'error');
+                this._loadScenarios();
+            }
+        }).catch(() => this._showToast('Scenario load failed', 'error'));
+    }
+
+    _deleteScenario() {
+        const scenario = this._selectedScenarioInfo();
+        if (!scenario || !confirm(`Delete scenario '${scenario.name}'? Its file is removed from .goblin/scenarios/.`)) {
+            return;
+        }
+        this.jsonRpc.deleteScenario({name: scenario.name}).then(r => {
+            if (r.result && r.result.ok) {
+                this._loadScenarios();
+                this._showToast(`Scenario '${scenario.name}' deleted`, 'info');
+            } else {
+                this._showToast(r.result && r.result.error || 'Scenario delete failed', 'error');
+            }
+        }).catch(() => this._showToast('Scenario delete failed', 'error'));
+    }
+
     _loadCustomProfiles() {
         try {
             this._customProfiles = JSON.parse(localStorage.getItem(CUSTOM_PROFILES_KEY) || '[]');
@@ -1292,6 +1379,32 @@ export class QwcGoblinDashboard extends LitElement {
                         ${this._activeCustom ? html`<button class="toggle-btn" @click="${this._deleteCustomProfileActivate}">Delete active</button>` : ''}
                     </div>
                     <div class="helper">${this._profileDesc(c.profile)}</div>
+                </div>
+
+                <div class="section">
+                    <h4>Scenarios</h4>
+                    <div class="form-row">
+                        <label>Scenario</label>
+                        <select id="goblin-scenario" ?disabled="${this._scenarios.length === 0}"
+                                @change="${(e) => { this._selectedScenario = e.target.value; }}">
+                            ${this._scenarios.length === 0 ? html`<option value="">No saved scenario</option>` : ''}
+                            ${this._scenarios.map(s => html`
+                            <option value="${s.name}" ?selected="${this._selectedScenario === s.name}">${s.name}</option>
+                            `)}
+                        </select>
+                        <button class="toggle-btn" @click="${this._saveScenario}">Save current as scenario</button>
+                        <button class="toggle-btn" ?disabled="${!this._selectedScenarioInfo()}"
+                                @click="${this._loadScenario}">Load</button>
+                        <button class="toggle-btn" ?disabled="${!this._selectedScenarioInfo()}"
+                                @click="${this._deleteScenario}">Delete</button>
+                    </div>
+                    <div class="helper">${this._selectedScenarioInfo()
+                        ? html`${this._selectedScenarioInfo().assaults} -- layers
+                            ${this._selectedScenarioInfo().layers.join(', ') || 'none'}, level
+                            ${this._selectedScenarioInfo().level}%`
+                        : html`A scenario is a named snapshot of the whole assault configuration, saved in
+                            <code>.goblin/scenarios/</code> next to <code>.goblin-state.json</code>, so the same
+                            experiment can be rerun in one click, or by an agent through Dev MCP.`}</div>
                 </div>
 
                 <div class="section">

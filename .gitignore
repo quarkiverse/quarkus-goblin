@@ -53,6 +53,7 @@ buildNumber.properties
 
 # Goblin state
 .goblin-state.json
+.goblin/
 
 # macOS
 .DS_Store
