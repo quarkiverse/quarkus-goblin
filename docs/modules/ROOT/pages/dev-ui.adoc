@@ -64,13 +64,15 @@ The server is opt-in, so nothing is exposed to an agent until you ask for it:
 quarkus.dev-mcp.enabled=true
 ----
 
-Once enabled, the tools that only read the state or stop chaos are available to the agent right away. The tools that arm or mutate chaos -- the master switch, the assault toggles, the parameter setters, and the two methods that discard the assault history or counters -- are *disabled*: the agent does not see them at all (they are listed, as disabled, in the Dev MCP panel of the Dev UI only), although the descriptions of the read-only tools tell it that they exist. Enable the ones you want the agent to use from that panel. Quarkus remembers the choice in `~/.quarkus/dev-mcp.properties`, in your home directory: it survives live reloads and restarts, and it applies to *every* Quarkus application on your machine that uses Goblin, not only to this project. Disable the tools again from the same panel when the experiment is over.
+Once enabled, the tools that only read the state or stop chaos are available to the agent right away. The tools that arm or mutate chaos -- the master switch, the assault toggles, the parameter setters, and the two methods that discard the assault history or counters -- are *disabled*: the agent does not see them at all (they are listed, as disabled, only in the Dev MCP tools page of the Dev UI: *Settings* -- the gear icon, top right -- then the *Dev MCP* tab, then *Tools*), although the descriptions of the read-only tools tell it that they exist. Enable the ones you want the agent to use from that page. Quarkus remembers the choice in `~/.quarkus/dev-mcp.properties`, in your home directory: it survives live reloads and restarts, and it applies to *every* Quarkus application on your machine that uses Goblin, not only to this project. Disable the tools again from the same page when the experiment is over.
 
-image::dev-mcp-tools.png[Goblin tools in the Dev MCP panel of the Dev UI: the read-only and stop tools enabled by default, every tool that arms or changes chaos disabled,width=900,align=center]
+image::dev-mcp-tools.png[Goblin tools in the Dev MCP tools page of the Dev UI: the read-only and stop tools enabled by default, every tool that arms or changes chaos disabled,width=900,align=center]
 
 On the agent's side, only the enabled tools exist. Here is what an MCP client -- the https://github.com/modelcontextprotocol/inspector[MCP Inspector], connected to `http://localhost:8080/q/dev-mcp` -- sees with the default set: the eight read and stop tools, each with the description and the parameters the agent works from.
 
 image::dev-mcp-client-tools.png[The Goblin tools seen from the MCP Inspector: the eight tools enabled by default, and the description and parameter of startAutoOff,width=820,align=center]
+
+Goblin also serves two Dev MCP resources, enabled by default: `quarkus-goblin_agentPlaybook`, the safety rules and the experiment loop an agent should follow, and `quarkus-goblin_resilienceInventory`, the methods your application guards with Fault Tolerance annotations. See xref:agent-playbook.adoc[Agent playbook].
 
 A typical session goes like this: the agent reads `getStatus` to see what is armed, calls `startAutoOff` so the session cannot outlive its own safety net, and only then arms an assault. It reads `getHistory`, `getCounters` and `getMarkdownReport` afterwards to check what actually happened, and calls `disableAll` to stop everything.
 

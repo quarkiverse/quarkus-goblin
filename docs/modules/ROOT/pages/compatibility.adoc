@@ -6,7 +6,7 @@ include::../partials/attributes.adoc[]
 
 == MicroProfile Fault Tolerance
 
-Goblin is designed to work *with* Fault Tolerance, not against it, at every layer:
+Goblin is designed to work *with* Fault Tolerance, not against it, at every layer. The same mapping, written for an AI agent with the `ft_*` metrics to observe it, is in the xref:agent-playbook.adoc[Agent playbook].
 
 * **Service layer (SERVICE)** -- the interceptor runs at `@Priority(4100)`, *inside* the SmallRye Fault Tolerance
   interceptor (`4010`), so the injected fault is what your `@Retry`, `@CircuitBreaker`, `@Timeout`, `@Bulkhead` and
