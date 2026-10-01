@@ -1,0 +1,76 @@
+= Agent playbook
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+An AI agent driving Goblin through Dev MCP (see xref:dev-ui.adoc#driving-goblin-from-an-ai-agent[Driving Goblin from an AI agent]) needs to know more than the tool list: the safety rules, which layer exercises which Fault Tolerance annotation, how to observe an experiment and how to conclude. Goblin ships that knowledge with the extension, as two Dev MCP resources an agent finds on its own:
+
+[cols="1,3"]
+|===
+|Resource |Content
+
+|`quarkus-goblin_agentPlaybook`
+|The generic playbook below, in Markdown: the same text for every application.
+
+|`quarkus-goblin_resilienceInventory`
+|Where *this* application believes it is protected: its methods guarded by MicroProfile Fault Tolerance annotations, indexed at build time.
+|===
+
+Both only read, so both are enabled by default, like the read-only tools. They exist in dev mode only, once `quarkus.dev-mcp.enabled=true` is set. The `getStatus` tool description points the agent to them, so an agent that starts by reading the state is told to read the playbook first.
+
+Goblin produces the signals; the agent, or you, concludes. There is no pass/fail engine behind the playbook: it tells the agent how to run an experiment and what to put in its report.
+
+== The playbook
+
+This is exactly what the agent reads from `quarkus-goblin_agentPlaybook`:
+
+[source,markdown]
+----
+include::../examples/agent-playbook.md[]
+----
+
+The circuit breaker observations were checked against the integration-tests application: with an exception armed on `SERVICE` at `level` 100, `SampleService.guarded` (`requestVolumeThreshold = 2`) opened after two calls. Over 6 calls, `ft_circuitbreaker_state_current{state="open"}` read `1`, `ft_circuitbreaker_calls_total` counted 2 `failure` and 4 `circuitBreakerOpen`, and `getHistory` held only the two assaults that ran: the client failed 6 times, Goblin injected twice.
+
+== The resilience inventory
+
+At build time, Goblin indexes the `@Timeout`, `@Retry`, `@CircuitBreaker`, `@Fallback`, `@Bulkhead` and `@RateLimit` annotations of the application's own classes (the root archive, not the libraries). A class-level annotation applies to every business method of the class; a method-level annotation of the same type replaces it. One entry per guarded method:
+
+[source,json]
+----
+{
+  "class" : "io.quarkiverse.goblin.it.SampleService",
+  "method" : "guarded",
+  "metricMethodTag" : "io.quarkiverse.goblin.it.SampleService.guarded",
+  "annotations" : {
+    "CircuitBreaker" : {
+      "requestVolumeThreshold" : 2, "failureRatio" : 1.0, "delay" : 60, "delayUnit" : "SECONDS",
+      "successThreshold" : 1, "failOn" : [ "java.lang.Throwable" ], "skipOn" : [ ]
+    }
+  },
+  "reachableBy" : [ "SERVICE" ]
+}
+----
+
+* `annotations` -- the main parameters of each annotation, the declared values merged over the specification defaults, so the agent reads the effective value instead of guessing a default.
+* `metricMethodTag` -- the `method` tag of the `ft_*` metrics for this method.
+* `reachableBy` -- the Goblin layers *known* to reach the method inside its Fault Tolerance interceptor (`DATABASE` is never listed, see below): `SERVICE` when the method is woven by the service layer (it follows the `quarkus.goblin.target.*` rules), `HTTP_OUT` for a `@RegisterRestClient` interface. `SERVICE` means the method is woven, not that a request reaches it first: the service layer only assaults the outermost intercepted call, so a guarded method called by another application bean is shielded by its caller (see xref:compatibility.adoc[Compatibility]). An empty list comes with a `note` saying why, typically a guard declared on a JAX-RS resource, where `HTTP_IN` aborts the request before the annotation can react.
+
+Limits, stated so nobody reads more into it:
+
+* The values are the ones declared in the code. MicroProfile Config overrides (`<class>/<method>/Timeout/value` and friends) are not reflected.
+* Annotations inherited from a superclass are not listed.
+* `DATABASE` also reaches a guarded method that acquires a JDBC connection, which an annotation index cannot tell: the playbook says so instead.
+* An application without any Fault Tolerance annotation gets a single entry whose `class` and `method` are `-`, with a `note` saying so: the resource is never absent, so an agent cannot mistake "no guard" for a wrong resource name.
+* `metricMethodTag` is the fully qualified `class.method`, checked against `/q/metrics` for application beans. For a `@RegisterRestClient` interface it is not verified yet, and the playbook tells the agent to confirm it before filtering on it.
+
+== Your application's promises
+
+The playbook is generic, and the inventory only says where a guard is declared. What Goblin cannot know is what the application *promises*: its latency targets, which dependency each mechanism protects, what the client should see when it fails. The live test that motivated this page showed that an agent without that knowledge finds defects, but weaker ones than a domain expert would.
+
+Copy this template to the root of your application as `RESILIENCE.md` and fill it in. The playbook tells the agent to read it, and to ask you when it is missing. It belongs to your repository, not to the extension.
+
+[source,markdown]
+----
+include::../examples/RESILIENCE.md[]
+----

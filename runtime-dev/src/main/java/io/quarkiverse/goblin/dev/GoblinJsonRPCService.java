@@ -61,11 +61,17 @@ public class GoblinJsonRPCService {
             + "each call drawing the level on its own; HTTP_OUT armed without a client-side toggle has no effect.";
 
     /**
+     * Where a developer enables an opt-in tool, spelled out for the agent to repeat: the screen is a tab of the Dev UI
+     * settings dialog, not an entry of the main menu, and is easy to miss.
+     */
+    static final String ENABLE_PATH = "the Dev UI, Settings (gear icon, top right), Dev MCP tab, Tools page";
+
+    /**
      * Appended to the read-only tool descriptions: an agent only sees the enabled tools, and must not conclude that
      * Goblin cannot arm anything when the opt-in tools are simply not enabled yet.
      */
     static final String OPT_IN_TOOLS = " The tools that arm or change chaos exist but stay disabled, and absent "
-            + "from the tool list, until the developer enables them in the Dev UI, Dev MCP tab: setActive(active), "
+            + "from the tool list, until the developer enables them in " + ENABLE_PATH + ": setActive(active), "
             + "toggleActive, setProfile(profile), applyConfig(config), resetDefaults, the toggles toggleLatency, "
             + "toggleException, toggleHttpStatus, toggleDependencyDegradation, toggleClientLatency, "
             + "toggleClientException, toggleResponseBody, toggleResponseHeader, the setters setLatencyRange(minMs, "
@@ -82,7 +88,9 @@ public class GoblinJsonRPCService {
             + "when chaos is off (manual, auto-off, disabled, test-mode or launch-mode; absent while chaos is active), "
             + "'autoOffRemainingMs' (milliseconds left before the pending auto-off, 0 when none), the active profile, "
             + "every assault toggle, the armed chaos layers, the layers available in this application, and 'level'. "
-            + LEVEL_AND_LAYERS + " Read-only: it never changes the configuration." + OPT_IN_TOOLS)
+            + LEVEL_AND_LAYERS + " Read-only: it never changes the configuration. Before a first experiment, read the "
+            + "MCP resources quarkus-goblin_agentPlaybook (safety rules, how to observe and conclude) and "
+            + "quarkus-goblin_resilienceInventory (the methods this application guards)." + OPT_IN_TOOLS)
     public JsonObject getStatus() {
         MutableAssaultConfig cfg = engine.getMutableConfig();
         // isActive() first: it applies an elapsed auto-off on the spot, so the reason is only the current one afterwards
@@ -1033,7 +1041,7 @@ public class GoblinJsonRPCService {
             + "epoch timestamp in milliseconds of the counting window, which starts when the application starts or "
             + "live-reloads, or at the last resetCounters, a 'byType' breakdown and a 'bySource' breakdown (server, "
             + "service, rest-client, webclient, database, messaging). Read-only; zeroing them takes resetCounters, an "
-            + "opt-in tool the developer enables in the Dev UI.")
+            + "opt-in tool the developer enables in " + ENABLE_PATH + ".")
     public JsonObject getCounters() {
         JsonObject byType = new JsonObject();
         engine.getAssaultCounts().forEach(byType::put);
@@ -1089,8 +1097,8 @@ public class GoblinJsonRPCService {
     @JsonRpcDescription("List the saved chaos scenarios: named snapshots of the assault configuration, stored under "
             + ".goblin/scenarios/ in the project. Returns ok and 'scenarios', each with its 'name', 'savedAt' (epoch "
             + "milliseconds), 'assaults' (what it arms, e.g. 'latency enabled (100 - 500 ms)'), 'layers' and 'level'. "
-            + "Read-only: run a scenario with loadScenario, an opt-in tool the developer enables in the Dev UI, Dev "
-            + "MCP tab.")
+            + "Read-only: run a scenario with loadScenario, an opt-in tool the developer enables in "
+            + ENABLE_PATH + ".")
     public JsonObject listScenarios() {
         try {
             JsonArray scenarios = new JsonArray();

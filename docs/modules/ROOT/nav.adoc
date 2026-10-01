@@ -4,6 +4,7 @@
 * xref:targeting.adoc[Targeting]
 * xref:configuration-reference.adoc[Configuration reference]
 * xref:dev-ui.adoc[Dev UI panel]
+* xref:agent-playbook.adoc[Agent playbook]
 * xref:how-it-works.adoc[How it works]
 * xref:compatibility.adoc[Compatibility]
 * xref:metrics.adoc[Metrics]
