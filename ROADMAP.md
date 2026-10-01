@@ -93,8 +93,9 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 - [ ] **Post-assault assertions (resilience verification)**
   Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine, JSON-RPC and Dev MCP, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience testing*.
 
-- [ ] **Agent playbook**
+- [ ] **Agent playbook and resilience inventory**
   Ship a generic playbook for AI agents with the extension: safety rules (dev mode only, auto-off before every experiment, one variable at a time, back to the initial state), what each layer means for Fault Tolerance, how to observe, the hypothesis / assault / observation / conclusion loop, and the report. Exposed as a Dev MCP resource so agents discover it on their own, and published as a documentation page with a template for the application-specific part (the resilience promises each application makes). Includes how to see a circuit breaker's state (the `ft_*` metrics), which the live test showed was missing.
+  Next to it, a second Dev MCP resource lists where the application believes it is protected: the MicroProfile Fault Tolerance annotations (`@Timeout`, `@Retry`, `@CircuitBreaker`, `@Fallback`, `@Bulkhead`, `@RateLimit`) of the application's methods and classes, indexed at build time with their main parameters, so an agent can derive its experiments without reading the code -- the resilience inventory of the "Option B" proposed in [#7](https://github.com/quarkiverse/quarkus-goblin/issues/7). Post-assault assertions can then refer to the guarded methods it lists.
 
 ---
 
