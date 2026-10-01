@@ -18,6 +18,10 @@ import io.quarkiverse.goblin.AssaultProfile;
 import io.quarkiverse.goblin.ChaosLayer;
 import io.quarkiverse.goblin.DeactivationReason;
 import io.quarkiverse.goblin.Enums;
+import io.quarkiverse.goblin.GoblinScenarios;
+import io.quarkiverse.goblin.GoblinScenarios.LoadedScenario;
+import io.quarkiverse.goblin.GoblinScenarios.Scenario;
+import io.quarkiverse.goblin.GoblinScenarios.ScenarioException;
 import io.quarkiverse.goblin.MarkdownReportGenerator;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.ResponseBodyMode;
@@ -67,7 +71,9 @@ public class GoblinJsonRPCService {
             + "toggleClientException, toggleResponseBody, toggleResponseHeader, the setters setLatencyRange(minMs, "
             + "maxMs), setExceptionConfig(type, message), setHttpStatusConfig(code, message), "
             + "setResponseBodyConfig(mode, percentage), setResponseHeaderInfo(name, action, value), "
-            + "removeResponseHeader(name), setTargetLevel(level), and resetCounters and clearHistory. A call to one of "
+            + "removeResponseHeader(name), setTargetLevel(level), the scenario tools loadScenario(name), "
+            + "saveScenario(name, overwrite) and deleteScenario(name), and resetCounters and clearHistory. A call to "
+            + "one of "
             + "them fails with 'Method not found' until it is enabled: ask the developer to enable it.";
 
     @DevMCPEnableByDefault
@@ -1075,5 +1081,107 @@ public class GoblinJsonRPCService {
         return new JsonObject()
                 .put("markdown", report)
                 .put("generatedAt", System.currentTimeMillis());
+    }
+
+    // ==================== scenarios ====================
+
+    @DevMCPEnableByDefault
+    @JsonRpcDescription("List the saved chaos scenarios: named snapshots of the assault configuration, stored under "
+            + ".goblin/scenarios/ in the project. Returns ok and 'scenarios', each with its 'name', 'savedAt' (epoch "
+            + "milliseconds), 'assaults' (what it arms, e.g. 'latency enabled (100 - 500 ms)'), 'layers' and 'level'. "
+            + "Read-only: run a scenario with loadScenario, an opt-in tool the developer enables in the Dev UI, Dev "
+            + "MCP tab.")
+    public JsonObject listScenarios() {
+        try {
+            JsonArray scenarios = new JsonArray();
+            GoblinScenarios.list().forEach(scenario -> scenarios.add(scenarioJson(scenario)));
+            return new JsonObject().put("ok", true).put("scenarios", scenarios);
+        } catch (ScenarioException e) {
+            return scenarioError(e);
+        }
+    }
+
+    @JsonRpcDescription("Save the current assault configuration as a named scenario, to rerun the same experiment later "
+            + "with loadScenario. Saves every toggle and parameter, the armed layers and the target level, never the "
+            + "master active flag. Returns ok, 'scenario' (the stored name) and 'saved' (the scenario as "
+            + "listScenarios describes it). Names are case-insensitive. A failure returns ok=false with 'error' and a "
+            + "'code': INVALID_NAME, EXISTS when a scenario of that name already exists and overwrite is false (its "
+            + "stored name is then in 'existingScenario'), STORAGE, or NOT_INITIALISED.")
+    public JsonObject saveScenario(
+            @JsonRpcDescription("Scenario name: 1 to 64 letters, digits, spaces, '-' or '_', starting with a letter or "
+                    + "a digit, e.g. 'slow kitchen'.") String name,
+            @JsonRpcDescription("true to replace an existing scenario of the same name, false to refuse it.") boolean overwrite) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null) {
+            return notInitialised();
+        }
+        try {
+            Scenario saved = GoblinScenarios.save(name, cfg, overwrite);
+            return new JsonObject().put("ok", true).put("scenario", saved.name()).put("saved", scenarioJson(saved));
+        } catch (ScenarioException e) {
+            return scenarioError(e);
+        }
+    }
+
+    @JsonRpcDescription("Replace the whole assault configuration by a saved scenario, published at once like "
+            + "applyConfig: every toggle and parameter, the armed layers and the target level come from the scenario. "
+            + "It does not switch chaos on or off: call setActive for that. An invalid value in the file falls back to "
+            + "a valid one with a log, as for any configuration change. Names are case-insensitive. Returns the full "
+            + "configuration plus ok and 'scenario', the name as stored. A failure returns ok=false with 'error' and a "
+            + "'code': NOT_FOUND, INVALID_NAME, STORAGE when the file cannot be read, or NOT_INITIALISED.")
+    public JsonObject loadScenario(
+            @JsonRpcDescription("Name of a saved scenario, as returned by listScenarios.") String name) {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        if (cfg == null) {
+            return notInitialised();
+        }
+        try {
+            LoadedScenario scenario = GoblinScenarios.load(name);
+            cfg.replaceWith(scenario.config());
+            LOG.warnf("Goblin: scenario '%s' loaded via Dev UI: %s", scenario.name(), cfg.describeAssaults());
+            return configJson(cfg).put("ok", true).put("scenario", scenario.name());
+        } catch (ScenarioException e) {
+            return scenarioError(e);
+        }
+    }
+
+    @JsonRpcDescription("Delete a saved scenario file. The current configuration is not changed. Names are "
+            + "case-insensitive. Returns ok and 'deleted' (false when no scenario had that name). A failure returns "
+            + "ok=false with 'error' and a 'code': INVALID_NAME, or STORAGE when the file cannot be deleted.")
+    public JsonObject deleteScenario(
+            @JsonRpcDescription("Name of the scenario to delete, as returned by listScenarios.") String name) {
+        try {
+            boolean deleted = GoblinScenarios.delete(name);
+            return new JsonObject().put("ok", true).put("deleted", deleted);
+        } catch (ScenarioException e) {
+            return scenarioError(e);
+        }
+    }
+
+    /**
+     * @param e the scenario failure
+     * @return {@code ok=false}, the message, a stable 'code' (INVALID_NAME, NOT_FOUND, EXISTS, STORAGE) the Dev UI and
+     *         an agent act on instead of parsing the message, and for an EXISTS conflict the stored name of the existing
+     *         scenario in 'existingScenario' -- 'scenario' is always a name, and only ever set on success
+     */
+    private static JsonObject scenarioError(ScenarioException e) {
+        JsonObject error = new JsonObject().put("ok", false).put("error", e.getMessage()).put("code", e.failure().name());
+        if (e.scenario() != null) {
+            error.put("existingScenario", e.scenario());
+        }
+        return error;
+    }
+
+    private static JsonObject notInitialised() {
+        return new JsonObject().put("ok", false).put("error", "Engine is not initialised").put("code", "NOT_INITIALISED");
+    }
+
+    private static JsonObject scenarioJson(Scenario scenario) {
+        return new JsonObject()
+                .put("name", scenario.name())
+                .put("savedAt", scenario.savedAt())
+                .put("assaults", scenario.assaults())
+                .put("layers", new JsonArray(scenario.layers()))
+                .put("level", scenario.level());
     }
 }

@@ -19,6 +19,7 @@ include::../partials/attributes.adoc[]
 
 * `getStatus` reports `inactiveReason` (`manual`, `auto-off`, `disabled`, `test-mode`, `launch-mode`; absent while active) and the Dev UI status bar shows the reason next to `Inactive`, so a silent dashboard is no longer a mystery.
 * `AssaultObserver` gains `onConfigChange(AssaultConfigChange)`: observers see every configuration change, once per published change (a whole `applyConfig` included), with the configuration before and after it as read-only snapshots, in dev and test mode -- enough to record the exact attack an application went through and replay it after a fix (https://github.com/quarkiverse/quarkus-goblin/issues/71[#71]). The method has a default no-op, so existing observers are unaffected.
+* Saved scenarios: save the current assault configuration as a named scenario under `.goblin/scenarios/`, then load or delete it from the new Scenarios section of the Dev UI, through JSON-RPC (`listScenarios`, `saveScenario`, `loadScenario`, `deleteScenario`) or Dev MCP, where `listScenarios` is enabled by default and the three others are opt-in (https://github.com/quarkiverse/quarkus-goblin/issues/49[#49]).
 
 ==== Bug Fixes
 

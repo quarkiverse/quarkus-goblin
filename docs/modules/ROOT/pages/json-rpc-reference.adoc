@@ -78,9 +78,21 @@ The Dev UI talks to the runtime through a JSON-RPC service (`GoblinJsonRPCServic
 
 | `getMarkdownReport`
 | Return `{ markdown, generatedAt }` with a factual Markdown report of the current configuration and assault history.
+
+| `listScenarios()`
+| List the saved scenarios (`.goblin/scenarios/`). Returns `{ ok, scenarios }`, each scenario with its `name`, `savedAt` (epoch milliseconds), `assaults` (what it arms, e.g. `latency enabled (100 - 500 ms)`, or `unreadable: ...` for a file that cannot be read), `layers` and `level`. See xref:dev-ui.adoc#scenarios[Scenarios].
+
+| `saveScenario(name, overwrite)`
+| Save the current assault configuration (every toggle and parameter, the armed layers and the target level, never the active flag) as `.goblin/scenarios/<name>.json`, in the `.goblin-state.json` format. A name is 1 to 64 letters, digits, spaces, `-` or `_`, starting with a letter or a digit; names are case-insensitive. A failure returns `{ ok: false, error, code }`, `code` being `INVALID_NAME`, `EXISTS` (a scenario of that name, whatever its case, exists and `overwrite` is false; its stored name is then in `existingScenario`), `STORAGE` or `NOT_INITIALISED`. Returns `{ ok, scenario, saved }`: `scenario` is the stored name and `saved` the scenario as `listScenarios` describes it. Across the scenario operations, `scenario` is always a name, and only set on success.
+
+| `loadScenario(name)`
+| Replace the whole assault configuration by a saved scenario, published at once (one `onConfigChange` notification) and persisted to `.goblin-state.json` like any Dev UI change; an invalid value in the file falls back with a log, as for any configuration change. It never switches chaos on or off. Emits a WARN log. Returns the full config plus `{ ok, scenario }`, `scenario` being the name as stored, or `{ ok: false, error, code }` with `code` `NOT_FOUND`, `INVALID_NAME`, `STORAGE` or `NOT_INITIALISED`.
+
+| `deleteScenario(name)`
+| Delete a scenario file, leaving the current configuration untouched; names are case-insensitive. Returns `{ ok, deleted }`, `deleted` being `false` when no scenario had that name, or `{ ok: false, error, code }` with `code` `INVALID_NAME` or `STORAGE`.
 |===
 
-NOTE: Every mutating method except `resetCounters`, `clearHistory`, `startAutoOff` and `cancelAutoOff` returns the full configuration as `JsonObject` (the same shape as `getConfig`) plus `ok`, so the Dev UI treats the response as a single source of truth; a rejected call returns `ok: false` and an `error` (alone, or with the unchanged full config for `applyConfig`). For backward compatibility the setters also echo the values they changed as top-level keys: `setLatencyRange` (`minMilliseconds`, `maxMilliseconds`), `setExceptionConfig` and `setHttpStatusConfig` (`type` or `code`, `message`), `setResponseBodyConfig` (`mode`, `percentage`), `setTargetLevel` (`level`), `setResponseHeaderInfo` (`name`, `action`, `value`); `getConfig` itself only carries `level` at the top level.
+NOTE: Every mutating method except `resetCounters`, `clearHistory`, `startAutoOff`, `cancelAutoOff`, `saveScenario` and `deleteScenario` returns the full configuration as `JsonObject` (the same shape as `getConfig`) plus `ok`, so the Dev UI treats the response as a single source of truth; a rejected call returns `ok: false` and an `error` (alone, or with the unchanged full config for `applyConfig`). For backward compatibility the setters also echo the values they changed as top-level keys: `setLatencyRange` (`minMilliseconds`, `maxMilliseconds`), `setExceptionConfig` and `setHttpStatusConfig` (`type` or `code`, `message`), `setResponseBodyConfig` (`mode`, `percentage`), `setTargetLevel` (`level`), `setResponseHeaderInfo` (`name`, `action`, `value`); `getConfig` itself only carries `level` at the top level.
 
 == Dev MCP exposure
 
@@ -100,9 +112,12 @@ Being described is not the same as being enabled. A method annotated `@DevMCPEna
 | `startAutoOff`, `cancelAutoOff`, `disableAll`
 | Stopping chaos. An agent must always be able to arm a safety net and to shut everything down, without having to ask a human first.
 
+| `listScenarios`
+| Read-only. An agent discovers the saved experiments, and what each one arms, before anything is enabled.
+
 |===
 
-Everything else is opt-in: the master switch (`toggleActive` and `setActive`), every assault toggle, every parameter setter, `setProfile`, `resetDefaults`, `applyConfig`, and the two methods that throw away evidence (`resetCounters` and `clearHistory`). `setActive` stays opt-in even when it is called with `false`, because the same tool arms chaos too; `disableAll` is the tool that turns everything off, and it needs no prior configuration.
+Everything else is opt-in: the master switch (`toggleActive` and `setActive`), every assault toggle, every parameter setter, `setProfile`, `resetDefaults`, `applyConfig`, the scenario tools that load, save or delete a scenario (`loadScenario` arms the assaults the scenario holds, `saveScenario` and `deleteScenario` write to disk), and the two methods that throw away evidence (`resetCounters` and `clearHistory`). `setActive` stays opt-in even when it is called with `false`, because the same tool arms chaos too; `disableAll` is the tool that turns everything off, and it needs no prior configuration.
 
 NOTE: `applyConfig` takes a free-form configuration object, and the MCP schema generated for a free-form object documents none of its keys. Its description therefore spells out every accepted key, its type and its accepted values, which makes it the longest description of the service.
 
