@@ -84,7 +84,7 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 - [x] **Dev MCP tools**
   Expose the Goblin JSON-RPC methods as Quarkus Dev MCP tools, so an AI agent connected to `/q/dev-mcp` can read the status, arm layers, set an auto-off, read the history and the counters. Every method and parameter now carries a `@JsonRpcDescription` written for an agent; the description alone decides the MCP exposure, since Quarkus 3.38 serves a described method to both the Dev UI and MCP (and keeps an undescribed one in the Dev UI only, so `@JsonRpcUsage` is not needed). The default split follows one rule: reading the state or stopping chaos is enabled by default (`@DevMCPEnableByDefault`), arming or mutating chaos stays opt-in and is enabled by the developer in the Dev UI. A test guards the split, the descriptions and the parameter names, so a new method cannot be added without deciding which side of the line it falls on.
 
-- [ ] **Configuration change notifications**
+- [x] **Configuration change notifications**
   Add `AssaultObserver.onConfigChange` so observers see every configuration change, not only assaults and activation changes. Lets an application record the exact attack it went through (e.g. to replay it after a fix) when the configuration changes during an incident.
 
 - [ ] **Saved scenarios**
