@@ -73,7 +73,7 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 ## v0.4.0 -- Resilience verification, human or agent-driven
 
-> Theme: move Goblin from chaos *injection* to resilience *verification*, driven from the Dev UI by a human or through Dev MCP by an AI agent. Scope informed by the [quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) application and a live test where an AI agent, given only an `AGENTS.md`, found a resilience defect in the demo on its own. Saved scenarios and post-assault assertions were moved from v0.3.0.
+> Theme: move Goblin from chaos *injection* to resilience *verification*, driven from the Dev UI by a human or through Dev MCP by an AI agent. Scope informed by the [quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) application and a live test where an AI agent, given only an `AGENTS.md`, found a resilience defect in the demo on its own. Saved scenarios were moved from v0.3.0; post-assault assertions were dropped in favour of the agent playbook below, which now covers the conclusion step.
 
 - [x] **Keep chaos off across live reloads after a manual deactivation**
   Deactivating chaos (master toggle, `setActive(false)`) is lost on the next dev-mode live reload: the active flag is not persisted and comes back from `quarkus.goblin.enabled`, while a fired auto-off already survives a reload. Persist the manual deactivation the same way, so fixing code during a chaos session never wakes the goblin up. Found by the AI agent during the live test.
@@ -90,12 +90,11 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 - [x] **Saved scenarios**
   Allow users to save the current assault configuration as a named scenario (e.g. "circuit breaker test", "high latency scenario") and reload it later, from the Dev UI, JSON-RPC and Dev MCP. Store scenarios in a `.goblin/scenarios/` directory as JSON files. The Dev UI custom profiles cover part of it today, but they live in the browser only.
 
-- [ ] **Post-assault assertions (resilience verification)**
-  Turn injection into verification: after an assault is applied, evaluate declared resilience expectations against the observable signals (fault-tolerance invocation counters, client-visible outcome, latency / error-rate metrics from the Micrometer integration, recorded history) and report pass/fail per rule. Rules are declarative (e.g. "inject 500 ms latency on /api/books -> assert `@Timeout` fired and the client saw a 503 in under 1 s") and evaluated through the engine, JSON-RPC and Dev MCP, reusable later by the CI mode. This is the foundation that moves Goblin from chaos *injection* to *resilience testing*.
-
-- [ ] **Agent playbook and resilience inventory**
+- [ ] **Agent playbook and resilience inventory** ([#72](https://github.com/quarkiverse/quarkus-goblin/issues/72))
   Ship a generic playbook for AI agents with the extension: safety rules (dev mode only, auto-off before every experiment, one variable at a time, back to the initial state), what each layer means for Fault Tolerance, how to observe, the hypothesis / assault / observation / conclusion loop, and the report. Exposed as a Dev MCP resource so agents discover it on their own, and published as a documentation page with a template for the application-specific part (the resilience promises each application makes). Includes how to see a circuit breaker's state (the `ft_*` metrics), which the live test showed was missing.
-  Next to it, a second Dev MCP resource lists where the application believes it is protected: the MicroProfile Fault Tolerance annotations (`@Timeout`, `@Retry`, `@CircuitBreaker`, `@Fallback`, `@Bulkhead`, `@RateLimit`) of the application's methods and classes, indexed at build time with their main parameters, so an agent can derive its experiments without reading the code -- the resilience inventory of the "Option B" proposed in [#7](https://github.com/quarkiverse/quarkus-goblin/issues/7). Post-assault assertions can then refer to the guarded methods it lists.
+  Next to it, a second Dev MCP resource lists where the application believes it is protected: the MicroProfile Fault Tolerance annotations (`@Timeout`, `@Retry`, `@CircuitBreaker`, `@Fallback`, `@Bulkhead`, `@RateLimit`) of the application's methods and classes, indexed at build time with their main parameters, so an agent can derive its experiments without reading the code -- the resilience inventory of the "Option B" proposed in [#7](https://github.com/quarkiverse/quarkus-goblin/issues/7). An agent can then check its conclusion against the protection each method declares.
+
+  The verification report has no pass/fail engine behind it: the agent writes it -- hypothesis, configuration, observations, then a verdict for each guarded method of the inventory -- and the Markdown export is its raw material. Goblin provides the signals, the agent or the human concludes. The companion pieces are the saved scenarios ([#49](https://github.com/quarkiverse/quarkus-goblin/issues/49)), which give a rerunnable configuration, and the configuration change notifications ([#71](https://github.com/quarkiverse/quarkus-goblin/issues/71)), which record the exact attack an application went through.
 
 ---
 
@@ -103,20 +102,11 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 
 > Moved from v0.4.0 so that v0.4.0 stays focused on resilience verification.
 
-- [ ] **Chaos as Code (CI mode)**
-  Support declarative YAML/TOML scenario files that can be executed non-interactively in CI pipelines, reusing the v0.4.0 saved scenarios and post-assault assertions. Enable teams to run chaos experiments in staging environments without a browser or Dev UI.
+- [ ] **Reactive Routes support** ([#64](https://github.com/quarkiverse/quarkus-goblin/issues/64))
+  Extend Goblin beyond JAX-RS to cover Vert.x reactive routes (`@Route`-annotated methods). Use Vert.x route handlers for injection. The closest thing to the core of the project here: the same role as JAX-RS on the inbound HTTP side.
 
-- [ ] **gRPC support**
-  Implement gRPC `ServerInterceptor` and `ClientInterceptor` to inject latency and exceptions on gRPC calls. Cover both unary and streaming RPCs.
-
-- [ ] **GraphQL support**
-  Instrument Quarkus GraphQL `DataFetcher`s to inject failures on specific GraphQL fields. Allow targeting by field name or parent type.
-
-- [ ] **Reactive Routes support**
-  Extend Goblin beyond JAX-RS to cover Vert.x reactive routes (`@Route`-annotated methods). Use Vert.x route handlers for injection.
-
-- [ ] **GraalVM native compilation**
-  Validate that Goblin works correctly in native mode. Fix any reflection or serialization issues. Add a native compilation integration test to the CI pipeline.
+- [ ] **GraalVM native build: non-regression only** ([#65](https://github.com/quarkiverse/quarkus-goblin/issues/65))
+  Goblin is a dev-mode tool, so it does not have to *work* in native mode. What matters is that the extension does not break a native build when it sits in the dependencies. One non-regression test compiling a native application with the extension present, and nothing more.
 
 ---
 
@@ -128,8 +118,35 @@ Current status: **preview** (v0.3.1 released, v0.4.0 in development)
 - [ ] **Production-profile safeguard**
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.
 
-- [ ] **Structured audit trail**
-  Replace plain-text `WARN` logs with structured JSON logging for each assault event. Include timestamps, method, type, config snapshot, and request metadata for log aggregation and compliance.
+- [ ] **Structured assault logs**
+  Replace the plain-text `WARN` logs with structured events a player can read -- human or agent: timestamp, method, assault type, injected value, configuration snapshot. The goal is a log you can reason about during an experiment, not log aggregation for compliance, which is a production concern Goblin does not serve.
 
 - [ ] **Advanced scenario-based documentation**
   Write dedicated guides for common resilience testing patterns: testing circuit breakers with `@CircuitBreaker`, testing retries with `@Retry`, testing fallbacks with `@Fallback`, and establishing performance baselines.
+
+---
+
+## Sur demande
+
+> None of these betrays what Goblin is: each is a new injection layer, or a new Dev UI surface. What they share is coupling to a Quarkus area, so they are picked up when someone asks for them in an issue, not scheduled here.
+
+- [ ] **gRPC support** ([#62](https://github.com/quarkiverse/quarkus-goblin/issues/62))
+  Implement gRPC `ServerInterceptor` and `ClientInterceptor` to inject latency and exceptions on gRPC calls. Cover both unary and streaming RPCs.
+
+- [ ] **GraphQL support** ([#63](https://github.com/quarkiverse/quarkus-goblin/issues/63))
+  Instrument Quarkus GraphQL `DataFetcher`s to inject failures on specific GraphQL fields. Allow targeting by field name or parent type.
+
+- [ ] **Reactive coverage follow-ups** ([#67](https://github.com/quarkiverse/quarkus-goblin/issues/67))
+  Reactive consumers, Hibernate Reactive / reactive SQL clients, and outgoing messages (`Emitter`). Follow-ups of the multi-layer work in v0.3.0.
+
+- [ ] **Real-time charts in the Dev UI dashboard** ([#48](https://github.com/quarkiverse/quarkus-goblin/issues/48))
+  A new Dev UI surface to maintain, and a debatable one: the counters and the history table may be enough to read an experiment.
+
+---
+
+## Ce que Goblin n'est pas
+
+> Recorded so the next feature request does not relitigate them. Each of these was proposed and set aside on purpose.
+
+- **Not a CI tool.** No declarative scenarios, no non-interactive pipeline runs ([#66](https://github.com/quarkiverse/quarkus-goblin/issues/66)). Chaos belongs in the hands of someone who is watching the application, in dev mode, with an auto-off set. A pipeline runs where nobody is watching, and the safeguard meant to keep Goblin out of production is itself planned for v1.0.
+- **Not a rules engine.** No declarative expectations evaluated into pass/fail ([#50](https://github.com/quarkiverse/quarkus-goblin/issues/50)). Goblin produces the signals; the agent or the human concludes. The playbook in v0.4.0 owns that step, so an experiment stays something you run rather than something you configure.
