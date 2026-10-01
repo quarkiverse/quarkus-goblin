@@ -88,6 +88,9 @@ public class AssaultEngine {
     private final AtomicLong localAutoOff = new AtomicLong(AUTO_OFF_NONE);
 
     private volatile MutableAssaultConfig mutableConfig;
+    /** The configuration of the last change delivered to the observers, the "previous" side of the next one. */
+    private MutableAssaultConfig lastNotifiedConfig;
+    private final Object configChangeLock = new Object();
     private volatile boolean active;
     private volatile DeactivationReason inactiveReason;
     private final ConcurrentLinkedDeque<AssaultRecord> history = new ConcurrentLinkedDeque<>();
@@ -190,8 +193,13 @@ public class AssaultEngine {
                     + "or switch it on from a test with AssaultEngine.setActive(true)");
         }
         this.mutableConfig.validateAndFix();
+        // the startup configuration is the "previous" side of the first change; persistence stays dev-only, the observer
+        // notification fires in test mode too, where a test records the attack it injected
+        synchronized (configChangeLock) {
+            this.lastNotifiedConfig = this.mutableConfig.snapshot();
+        }
+        this.mutableConfig.setOnChange(this::configChanged);
         if (mode == LaunchMode.DEVELOPMENT) {
-            this.mutableConfig.setOnChange(this::persistConfig);
             long autoOff = readAutoOff();
             if (active && (autoOff == AUTO_OFF_FIRED || autoOffElapsed(autoOff))) {
                 writeAutoOff(AUTO_OFF_FIRED);
@@ -222,6 +230,51 @@ public class AssaultEngine {
 
     private void persistConfig() {
         GoblinStatePersistence.save(mutableConfig);
+    }
+
+    /**
+     * Listener of the mutable configuration: persists it in dev mode, then reports the change to the observers with the
+     * configuration before and after it. The setters publish under the configuration lock but notify outside it, so two
+     * changes racing can be folded into a single notification: the observers then see the oldest previous and the
+     * latest current, and an intermediate state is not reported on its own. A notification that finds the state
+     * already reported is skipped, so no transition is ever reported twice.
+     */
+    private void configChanged() {
+        if (devMode) {
+            persistConfig();
+        }
+        AssaultConfigChange change;
+        synchronized (configChangeLock) {
+            MutableAssaultConfig current = mutableConfig.snapshot();
+            MutableAssaultConfig previous = lastNotifiedConfig;
+            if (current.hasSameStateAs(previous)) {
+                return;
+            }
+            lastNotifiedConfig = current;
+            change = new AssaultConfigChange(previous != null ? previous : current, current, System.currentTimeMillis());
+        }
+        notifyConfigObservers(change);
+    }
+
+    /**
+     * Delivers a configuration change to every observer. Unlike the request-path notifications, a failure is logged at
+     * {@code WARN}: a configuration change is a rare, deliberate action, and an observer that cannot record it is losing
+     * the one event it exists for.
+     *
+     * @param change the change to deliver
+     */
+    private void notifyConfigObservers(AssaultConfigChange change) {
+        Instance<AssaultObserver> current = observers;
+        if (current == null) {
+            return;
+        }
+        for (AssaultObserver observer : current) {
+            try {
+                observer.onConfigChange(change);
+            } catch (RuntimeException e) {
+                LOG.warnf(e, "Goblin: assault observer %s failed on a configuration change", observer.getClass().getName());
+            }
+        }
     }
 
     /**
@@ -546,6 +599,14 @@ public class AssaultEngine {
      */
     void setMutableConfigForTests(MutableAssaultConfig config) {
         this.mutableConfig = config;
+        // the replaced configuration must not become the "previous" side of the next change, and the replacement reports
+        // its own changes like the configuration installed by initialize()
+        synchronized (configChangeLock) {
+            this.lastNotifiedConfig = config != null ? config.snapshot() : null;
+        }
+        if (config != null) {
+            config.setOnChange(this::configChanged);
+        }
     }
 
     /**

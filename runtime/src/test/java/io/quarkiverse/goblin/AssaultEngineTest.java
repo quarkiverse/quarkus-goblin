@@ -3,6 +3,8 @@ package io.quarkiverse.goblin;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.annotation.Annotation;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -14,6 +16,8 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 
 import org.junit.jupiter.api.Test;
+
+import io.quarkus.runtime.LaunchMode;
 
 class AssaultEngineTest {
 
@@ -379,6 +383,151 @@ class AssaultEngineTest {
 
         assertEquals(1, engine.getHistory().size());
         assertTrue(engine.isActive());
+    }
+
+    /** Records the configuration changes it receives. */
+    private static final class ConfigChangeRecorder implements AssaultObserver {
+        final List<AssaultConfigChange> changes = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void onConfigChange(AssaultConfigChange change) {
+            changes.add(change);
+        }
+    }
+
+    private static AssaultEngine engineIn(LaunchMode mode, AssaultObserver... observers) {
+        AssaultEngine engine = new AssaultEngine();
+        engine.setObserversForTests(new FakeInstance(observers));
+        engine.initialize(mode);
+        return engine;
+    }
+
+    @Test
+    void aConfigurationChangeIsNotifiedOnceWithTheConfigurationBeforeAndAfter() {
+        ConfigChangeRecorder recorder = new ConfigChangeRecorder();
+        AssaultEngine engine = engineIn(LaunchMode.TEST, recorder);
+        assertTrue(recorder.changes.isEmpty(), "the configuration loaded at startup is not a change");
+
+        engine.getMutableConfig().setTargetLevel(42);
+
+        assertEquals(1, recorder.changes.size(), "one setter call, one notification");
+        AssaultConfigChange change = recorder.changes.getFirst();
+        assertEquals(100, change.previous().getTargetLevel());
+        assertEquals(42, change.current().getTargetLevel());
+        assertTrue(change.timestamp() > 0);
+
+        engine.getMutableConfig().setLatencyEnabled(false);
+
+        assertEquals(2, recorder.changes.size());
+        assertEquals(42, recorder.changes.get(1).previous().getTargetLevel(),
+                "the previous side of a change is the current side of the change before it");
+        assertTrue(recorder.changes.get(1).previous().isLatencyEnabled());
+        assertFalse(recorder.changes.get(1).current().isLatencyEnabled());
+        assertEquals("no assault enabled", recorder.changes.get(1).currentDescription());
+    }
+
+    @Test
+    void aChangePublishedAtOnceIsASingleNotification() {
+        ConfigChangeRecorder recorder = new ConfigChangeRecorder();
+        AssaultEngine engine = engineIn(LaunchMode.TEST, recorder);
+
+        MutableAssaultConfig staged = engine.getMutableConfig().workingCopy();
+        staged.setLatencyEnabled(false);
+        staged.setExceptionEnabled(true);
+        staged.setTargetLevel(30);
+        staged.setLayers(Set.of(ChaosLayer.SERVICE));
+        engine.getMutableConfig().replaceWith(staged);
+
+        assertEquals(1, recorder.changes.size(), "a multi-field change staged and published at once notifies once");
+        AssaultConfigChange change = recorder.changes.getFirst();
+        assertTrue(change.previous().isLatencyEnabled());
+        assertFalse(change.previous().isExceptionEnabled());
+        assertFalse(change.current().isLatencyEnabled());
+        assertTrue(change.current().isExceptionEnabled());
+        assertEquals(30, change.current().getTargetLevel());
+        assertEquals(Set.of(ChaosLayer.SERVICE), change.current().getLayers());
+    }
+
+    @Test
+    void anObserverCannotChangeTheConfigurationItIsHanded() {
+        ConfigChangeRecorder recorder = new ConfigChangeRecorder();
+        AssaultEngine engine = engineIn(LaunchMode.TEST, recorder);
+
+        engine.getMutableConfig().setTargetLevel(10);
+
+        AssaultConfigChange change = recorder.changes.getFirst();
+        assertThrows(UnsupportedOperationException.class, () -> change.current().setTargetLevel(99));
+        assertThrows(UnsupportedOperationException.class, () -> change.previous().setLatencyEnabled(false));
+        assertEquals(10, engine.getMutableConfig().getTargetLevel());
+        assertEquals(1, recorder.changes.size(), "the rejected mutations published nothing");
+    }
+
+    @Test
+    void aFailingConfigurationObserverNeverReachesTheCaller() {
+        ConfigChangeRecorder healthy = new ConfigChangeRecorder();
+        AssaultObserver failing = new AssaultObserver() {
+            @Override
+            public void onConfigChange(AssaultConfigChange change) {
+                throw new IllegalStateException("observer exploded");
+            }
+        };
+        AssaultEngine engine = engineIn(LaunchMode.TEST, failing, healthy);
+
+        assertDoesNotThrow(() -> engine.getMutableConfig().setTargetLevel(55));
+
+        assertEquals(55, engine.getMutableConfig().getTargetLevel(), "the change applies despite the failing observer");
+        assertEquals(1, healthy.changes.size(), "the other observers are still notified");
+    }
+
+    @Test
+    void aReplacedConfigurationIsNeverThePreviousSideOfAChange() {
+        ConfigChangeRecorder recorder = new ConfigChangeRecorder();
+        AssaultEngine engine = engineIn(LaunchMode.TEST, recorder);
+        MutableAssaultConfig replacement = new MutableAssaultConfig();
+        replacement.setTargetLevel(7);
+        engine.setMutableConfigForTests(replacement);
+
+        replacement.setTargetLevel(8);
+
+        assertEquals(1, recorder.changes.size());
+        assertEquals(7, recorder.changes.getFirst().previous().getTargetLevel(),
+                "the previous side is the installed configuration, not the one it replaced");
+    }
+
+    @Test
+    void theStartupValidationIsNotAChange() {
+        ConfigChangeRecorder recorder = new ConfigChangeRecorder();
+        AssaultEngine engine = engineIn(LaunchMode.TEST, recorder);
+
+        engine.getMutableConfig().validateAndFix();
+
+        assertTrue(recorder.changes.isEmpty(), "validateAndFix publishes without notifying, as documented on the SPI");
+    }
+
+    @Test
+    void theConfigurationIsPersistedInDevModeOnlyButNotifiedInBoth() throws Exception {
+        Path dir = Files.createTempDirectory("goblin-config-change");
+        Path stateFile = dir.resolve("goblin-state.json");
+        GoblinStatePersistence.overrideStateFile(stateFile.toString());
+        try {
+            ConfigChangeRecorder testRecorder = new ConfigChangeRecorder();
+            AssaultEngine testEngine = engineIn(LaunchMode.TEST, testRecorder);
+            testEngine.getMutableConfig().setTargetLevel(20);
+            assertEquals(1, testRecorder.changes.size(), "test mode notifies the observers");
+            assertFalse(Files.exists(stateFile), "test mode never writes the state file");
+
+            ConfigChangeRecorder devRecorder = new ConfigChangeRecorder();
+            AssaultEngine devEngine = engineIn(LaunchMode.DEVELOPMENT, devRecorder);
+            devEngine.getMutableConfig().setTargetLevel(21);
+            assertEquals(1, devRecorder.changes.size(), "dev mode notifies the observers");
+            assertTrue(Files.exists(stateFile), "dev mode persists the change");
+        } finally {
+            GoblinStatePersistence.overrideStateFile(null);
+            System.clearProperty(AssaultEngine.MANUAL_OFF_PROPERTY);
+            System.clearProperty(AssaultEngine.AUTO_OFF_DEADLINE_PROPERTY);
+            Files.deleteIfExists(stateFile);
+            Files.deleteIfExists(dir);
+        }
     }
 
     private static final class FakeInstance implements Instance<AssaultObserver> {

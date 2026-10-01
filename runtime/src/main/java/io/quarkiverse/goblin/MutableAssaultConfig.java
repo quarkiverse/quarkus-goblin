@@ -314,6 +314,14 @@ public class MutableAssaultConfig {
         this.onChange = onChange;
     }
 
+    /**
+     * @param other another configuration, typically a snapshot taken earlier
+     * @return {@code true} when both hold the very same published state, i.e. no change was published in between
+     */
+    boolean hasSameStateAs(MutableAssaultConfig other) {
+        return other != null && state == other.state;
+    }
+
     public boolean isLatencyEnabled() {
         return state.latencyEnabled;
     }
@@ -890,8 +898,8 @@ public class MutableAssaultConfig {
     /**
      * Restores every field to its built-in default, not to application.properties (profile {@code NONE}, latency assault
      * on with 100-5000 ms, 503, truncate 50 %, level 100 %, layers HTTP_IN and HTTP_OUT, all client-side assaults off), as
-     * a single state. Persists the restored defaults when a change
-     * listener is installed.
+     * a single state, notified once to the change listener (which persists it in dev mode and reports it to the
+     * observers).
      *
      * @return a list of human-readable warnings for any values that were clamped during validation, empty when the defaults
      *         were clean
