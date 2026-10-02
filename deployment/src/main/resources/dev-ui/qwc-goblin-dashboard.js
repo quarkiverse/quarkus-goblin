@@ -1,6 +1,7 @@
 import {LitElement, html, css} from 'lit';
 import {live} from 'lit/directives/live.js';
 import {JsonRpc} from 'jsonrpc';
+import './goblin-active.js';
 
 const CUSTOM_PROFILES_KEY = 'goblin.customProfiles';
 
@@ -1273,6 +1274,7 @@ export class QwcGoblinDashboard extends LitElement {
         return html`
             ${this._toast ? html`<div class="toast ${this._toastClass(this._toast.kind)}">${this._toast.msg}</div>` : ''}
             <h3>Goblin Chaos Engineering</h3>
+            <goblin-active ?active="${s && s.active}"></goblin-active>
 
             ${s ? html`
             <div class="status-section">
