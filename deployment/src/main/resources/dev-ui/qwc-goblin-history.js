@@ -1,5 +1,6 @@
 import {LitElement, html, css} from 'lit';
 import {JsonRpc} from 'jsonrpc';
+import './goblin-active.js';
 
 export class QwcGoblinHistory extends LitElement {
 
@@ -257,6 +258,7 @@ export class QwcGoblinHistory extends LitElement {
         _rangeFilter: {state: true},
         _expanded: {state: true},
         _confirmClear: {state: true},
+        _active: {state: true},
     };
 
     constructor() {
@@ -268,6 +270,7 @@ export class QwcGoblinHistory extends LitElement {
         this._rangeFilter = 'all';
         this._expanded = new Set();
         this._confirmClear = false;
+        this._active = false;
         this.jsonRpc = new JsonRpc(this);
     }
 
@@ -294,6 +297,7 @@ export class QwcGoblinHistory extends LitElement {
 
     _loadHistory() {
         this.jsonRpc.getHistory().then(r => { this._history = r.result; });
+        this.jsonRpc.getStatus().then(r => { this._active = r.result.active; });
     }
 
     _clearHistory() {
@@ -497,6 +501,7 @@ export class QwcGoblinHistory extends LitElement {
         const filteredCount = this._filtered().length;
         const s = this._summary();
         return html`
+            <goblin-active ?active="${this._active}"></goblin-active>
             <div class="toolbar">
                 <h3>Assault History <span class="count">(${this._history.length})</span></h3>
                 <div class="toolbar-buttons">
