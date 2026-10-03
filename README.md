@@ -52,6 +52,10 @@ Start in dev mode:
 
 Open the Dev UI at `http://localhost:8080/q/dev` and look for the Goblin card.
 
+## Demo application
+
+[quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) -- *The Falling Whale* -- is a complete Quarkus application to try Goblin on: a medieval tavern whose services are guarded by MicroProfile Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout`, `@CircuitBreaker`, `@RateLimit`), with a database, an outgoing REST client, and an observability stack. It also ships an `AGENTS.md` to let an AI agent run the chaos experiments through Dev MCP.
+
 ## Configuration
 
 ```properties
