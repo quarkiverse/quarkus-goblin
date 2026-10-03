@@ -10,7 +10,7 @@ include::../partials/attributes.adoc[]
 |Version |Date
 
 |0.4.0
-|_unreleased_
+|2026-10-03
 |===
 
 === 0.4.0
