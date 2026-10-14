@@ -58,7 +58,7 @@ public class GoblinBuildStep {
     private static final DotName ROUTE_BASE = DotName.createSimple("io.quarkus.vertx.web.RouteBase");
     private static final DotName ROUTE_FILTER = DotName.createSimple("io.quarkus.vertx.web.RouteFilter");
 
-    @BuildStep
+    @BuildStep(onlyIfNot = IsProduction.class)
     FeatureBuildItem feature() {
         return new FeatureBuildItem(FEATURE);
     }

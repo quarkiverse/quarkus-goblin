@@ -10,6 +10,8 @@ It is designed for one specific purpose: **verifying that your resilience mechan
 
 TIP: Think of Goblin as https://github.com/codecentric/chaos-monkey-spring-boot[Chaos Monkey] for the Quarkus ecosystem -- but with stronger safety guarantees.
 
+image::goblin-demo.gif[Goblin in action: latency then an exception switched on from the Dev UI, the endpoint retries, @Fallback answers, and every assault shows up in the history,width=900,align=center]
+
 == Why Goblin?
 
 Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutiny reactive timeouts, health probes), but no built-in way to *trigger* the failures these mechanisms are supposed to handle. You end up writing fragile integration tests that mock exceptions, or worse, discovering production failure modes for the first time in production.
@@ -63,6 +65,14 @@ curl -w "\nTime: %{time_total}s\n" http://localhost:8080/api/hello
 ----
 
 You should see a response time well above your normal baseline.
+
+== See it in action
+
+https://github.com/ErwanLT/quarkus-goblin-demo[quarkus-goblin-demo] -- _The Falling Whale_ -- is a complete Quarkus application to try Goblin on: a medieval tavern whose services are guarded by MicroProfile Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout`, `@CircuitBreaker`, `@RateLimit`), with a database, an outgoing REST client, and an observability stack.
+
+The video below runs every assault on it, from latency to an HTTP `418 I'm a teapot`, with the Dev UI on one side and live requests on the other:
+
+video::jp8uL9zsnZU[youtube,width=720,height=405]
 
 == Explore the documentation
 

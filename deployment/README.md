@@ -7,7 +7,8 @@ user application.
 ## Build steps (`GoblinBuildStep`)
 
 - `feature()` -- registers the `goblin` feature so `quarkus.extension.features` lists it and the extension shows up
-  in the extension catalog.
+  in the extension catalog. Dev and test builds only: a production application does not list `goblin` among its
+  installed features.
 - `registerAssaultBeans(CombinedIndexBuildItem, ...)` -- scans the index for all implementations of
   `io.quarkiverse.goblin.assault.Assault` using `getAllKnownImplementations(...)` and registers each as an
   **unremovable** Arc bean. New assaults are picked up automatically; no manual registration.

@@ -9,6 +9,10 @@
 
 Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application without touching a single line of source code.
 
+![Goblin in action: latency then an exception switched on from the Dev UI, the endpoint retries, @Fallback answers, and every assault shows up in the history](docs/modules/ROOT/assets/images/goblin-demo.gif)
+
+<sub>Recorded on the [demo application](#demo-application): latency is switched on from the Dev UI, the merchant-guild call behind `@Timeout` + `@Retry` gives up and `@Fallback` answers `MARCHAND_ABSENT`; then the latency is swapped for a `ConnectException` on the outgoing call, which fails fast into the same fallback. Every assault lands in the history.</sub>
+
 ## Why?
 
 Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutiny reactive timeouts, health probes), but no built-in way to **trigger** the failures these mechanisms are supposed to handle. Goblin fills that gap.
@@ -56,6 +60,15 @@ Open the Dev UI at `http://localhost:8080/q/dev` and look for the Goblin card.
 ## Demo application
 
 [quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) -- *The Falling Whale* -- is a complete Quarkus application to try Goblin on: a medieval tavern whose services are guarded by MicroProfile Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout`, `@CircuitBreaker`, `@RateLimit`), with a database, an outgoing REST client, and an observability stack. It also ships an `AGENTS.md` to let an AI agent run the chaos experiments through Dev MCP.
+
+Every assault in action on the demo application, in 76 seconds:
+
+<a href="https://youtu.be/jp8uL9zsnZU"><img src="https://img.youtube.com/vi/jp8uL9zsnZU/maxresdefault.jpg" alt="Quarkus Goblin: every assault in action, from latency to 418 I'm a teapot" width="480" /></a>
+
+## They talk about it
+
+- [Quarkus Chaos Engineering: Meet Goblin, a Chaos Monkey for Quarkus](https://medium.com/javarevisited/quarkus-chaos-engineering-meet-goblin-a-chaos-monkey-for-quarkus-58360758f679) -- Erwan Le Tutour, *Javarevisited* (September 2026). The story behind the extension, by its author: why Quarkus needed an application-level Chaos Monkey, and how Goblin injects latency, exceptions, HTTP failures and dependency degradation into a running application.
+- [Quarkus Goblin: Learn Chaos Engineering on One REST Call](https://www.the-main-thread.com/p/quarkus-goblin-chaos-engineering) -- Markus Eisele, *The Main Thread* (September 2026). A hands-on tutorial: a quote API calling an inventory service, latency and HTTP 503 injected by Goblin, and SmallRye Fault Tolerance `@Timeout`/`@Retry`/`@Fallback` taking over.
 
 ## Configuration
 
