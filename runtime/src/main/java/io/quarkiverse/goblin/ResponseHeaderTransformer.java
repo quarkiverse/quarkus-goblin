@@ -33,11 +33,52 @@ public final class ResponseHeaderTransformer {
      * @param responseContext the response context whose headers are manipulated
      * @param config the current mutable assault configuration holding the rules
      * @param engine the engine recording the fired rules
-     * @param methodName the targeted endpoint method, e.g. {@code "com.example.ApiResource.hello"}
+     * @param methodName the targeted endpoint method, e.g. {@code "ApiResource.hello"}
      */
     public static void apply(ContainerResponseContext responseContext, MutableAssaultConfig config, AssaultEngine engine,
             String methodName) {
         MultivaluedMap<String, Object> headers = responseContext.getHeaders();
+        apply(new Headers() {
+            @Override
+            public boolean remove(String name) {
+                return removeIgnoringCase(headers, name);
+            }
+
+            @Override
+            public void set(String name, String value) {
+                headers.putSingle(name, value);
+            }
+        }, config, engine, methodName);
+    }
+
+    /**
+     * The response headers an assault manipulates, so the same rules apply to a JAX-RS response and to a Vert.x one
+     * (reactive routes).
+     */
+    public interface Headers {
+
+        /**
+         * @param name the header name, matched case-insensitively
+         * @return {@code true} when at least one header was removed
+         */
+        boolean remove(String name);
+
+        /**
+         * @param name the header name, absent when this is called
+         * @param value the single value to emit
+         */
+        void set(String name, String value);
+    }
+
+    /**
+     * Applies every configured header rule to the given headers and records each fired rule in the assault history.
+     *
+     * @param headers the response headers to manipulate
+     * @param config the current mutable assault configuration holding the rules
+     * @param engine the engine recording the fired rules
+     * @param methodName the targeted endpoint method
+     */
+    public static void apply(Headers headers, MutableAssaultConfig config, AssaultEngine engine, String methodName) {
         for (Map.Entry<String, MutableAssaultConfig.HeaderRule> entry : config.getResponseHeaders().entrySet()) {
             String name = entry.getKey();
             MutableAssaultConfig.HeaderRule rule = entry.getValue();
@@ -48,12 +89,12 @@ public final class ResponseHeaderTransformer {
                                 + "as an HTTP header", name, methodName);
                         continue;
                     }
-                    removeIgnoringCase(headers, name);
-                    headers.putSingle(name, rule.value());
+                    headers.remove(name);
+                    headers.set(name, rule.value());
                     record(engine, methodName, name, "set");
                 }
                 case REMOVE -> {
-                    if (removeIgnoringCase(headers, name)) {
+                    if (headers.remove(name)) {
                         record(engine, methodName, name, "remove");
                     }
                 }

@@ -37,7 +37,7 @@ Each assault produces exactly one span named `goblin.assault`, carrying the assa
 | The assault type (e.g. `latency`, `exception`, `http-status`, `dependency-degradation`, `response-body-truncate`).
 
 | `goblin.assault.source`
-| `server` for inbound REST assaults, `service` for application bean assaults, `rest-client` for outgoing REST Client calls, `webclient` for outgoing Vert.x WebClient calls, `database` for JDBC connection acquisitions, `messaging` for `@Incoming` consumers.
+| `server` for inbound REST and reactive-route assaults, `service` for application bean assaults, `rest-client` for outgoing REST Client calls, `webclient` for outgoing Vert.x WebClient calls, `database` for JDBC connection acquisitions, `messaging` for `@Incoming` consumers.
 
 | `goblin.assault.target.method`
 | The recorded method identifier: `SampleResource.hello`, `com.acme.OrderService.place` (SERVICE), `Database <default> connection`, `Messaging com.acme.OrderConsumer.consume`, `REST-Client GET http://...`, `WebClient GET http://...`.

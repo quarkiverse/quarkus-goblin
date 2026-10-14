@@ -6,8 +6,8 @@ import java.util.Set;
 
 /**
  * The single implementation of the {@code quarkus.goblin.target} package and annotation rules, shared by the build-time
- * weaving of the service / messaging bindings (Jandex names) and by the inbound REST filter at runtime (reflection
- * names), so both sides can never diverge.
+ * weaving of the service / messaging bindings (Jandex names) and by the inbound REST filter and the reactive-route
+ * hook at runtime (reflection names), so both sides can never diverge.
  */
 public final class TargetRules {
 

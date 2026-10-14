@@ -119,6 +119,29 @@ public final class AbortResponses {
         return resourceMethod != null && producesJsonByDefault(resourceMethod.getGenericReturnType());
     }
 
+    /**
+     * Returns whether a reactive route ({@code @Route}) answers JSON, the reactive-route counterpart of
+     * {@link #wantsJson(Method, Class)}.
+     * <p>
+     * The closest {@code produces} attribute decides (the route's, else the {@code @RouteBase}'s, as passed by the
+     * caller). Without one, reactive routes encode every return type as JSON except strings and buffers, so the abort
+     * follows the Quarkus REST default rule, Vert.x buffers excluded.
+     *
+     * @param produces the closest declared {@code produces} values, empty when none is declared
+     * @param returnType the generic return type of the route method
+     * @return {@code true} when the abort body must be JSON
+     */
+    public static boolean routeWantsJson(String[] produces, Type returnType) {
+        if (produces != null && produces.length > 0) {
+            return containsJson(produces);
+        }
+        Class<?> raw = rawType(unwrap(returnType));
+        if (raw != null && raw.getName().endsWith(".buffer.Buffer")) {
+            return false;
+        }
+        return producesJsonByDefault(returnType);
+    }
+
     private static Produces closestProduces(Method resourceMethod, Class<?> resourceClass) {
         if (resourceMethod != null && resourceMethod.getAnnotation(Produces.class) != null) {
             return resourceMethod.getAnnotation(Produces.class);

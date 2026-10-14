@@ -32,11 +32,11 @@ MESSAGING, then SERVICE, then HTTP_IN. Arm only the layer under test, or you wil
 | SERVICE | On application bean methods, *inside* the Fault Tolerance interceptor (priority 4100 vs 4010) | Yes: this is the layer that exercises `@Timeout`, `@Retry`, `@CircuitBreaker`, `@Fallback`, `@Bulkhead` |
 | DATABASE | On JDBC connection acquisition (Agroal), inside the method that queries | Yes, for the guarded method that acquires the connection |
 | HTTP_OUT | On outgoing REST Client and Vert.x WebClient calls, with `clientLatencyEnabled` / `clientExceptionEnabled` | Yes, for a guarded REST Client interface or a guarded method making the call |
-| HTTP_IN | On inbound JAX-RS requests, before the resource method | No: the request is aborted before any annotation can react. Use it for unprotected endpoints and client-visible behaviour |
+| HTTP_IN | On inbound JAX-RS requests and `@Route` methods, before the method runs | No: the request is aborted before any annotation can react. Use it for unprotected endpoints and client-visible behaviour |
 | MESSAGING | On `@Incoming` consumers, outside Fault Tolerance | No: it tests the channel failure strategy |
 
 - Latency and exception fire on every layer; HTTP status, dependency degradation, response body and response
-  headers on HTTP_IN only.
+  headers on HTTP_IN only (JAX-RS endpoints and `@Route` methods alike).
 - `level` is the percentage of eligible calls assaulted. On SERVICE, each retry attempt draws `level` again: at 100
   every attempt fails and `@Fallback` answers; below 100 some retries recover.
 - SERVICE assaults only the *first* application bean a request enters, not every bean below it. If the guarded

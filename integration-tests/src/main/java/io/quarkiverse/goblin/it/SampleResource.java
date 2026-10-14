@@ -43,6 +43,24 @@ public class SampleResource {
     }
 
     @GET
+    @Path("/spared/hello")
+    public String sparedHello() {
+        return "hello behind a spared pass-through route";
+    }
+
+    @GET
+    @Path("/passthrough/service")
+    public String passThroughService() {
+        return sampleService.hello();
+    }
+
+    @GET
+    @Path("/passthrough/hello")
+    public String passThroughHello() {
+        return "hello behind a pass-through route";
+    }
+
+    @GET
     @Path("/hello")
     public String hello() {
         return "hello from Goblin test app";

@@ -46,12 +46,17 @@ public class GoblinBuildStep {
             "io.quarkiverse.goblin.assault",
             "io.quarkiverse.goblin.service",
             "io.quarkiverse.goblin.dev",
+            "io.quarkiverse.goblin.route",
             "io.quarkiverse.goblin.metrics",
             "io.quarkiverse.goblin.opentelemetry"
     };
 
     private static final DotName JAX_RS_PATH = DotName.createSimple("jakarta.ws.rs.Path");
     private static final DotName JAX_RS_PROVIDER = DotName.createSimple("jakarta.ws.rs.ext.Provider");
+    private static final DotName ROUTE = DotName.createSimple("io.quarkus.vertx.web.Route");
+    private static final DotName ROUTES = DotName.createSimple("io.quarkus.vertx.web.Route$Routes");
+    private static final DotName ROUTE_BASE = DotName.createSimple("io.quarkus.vertx.web.RouteBase");
+    private static final DotName ROUTE_FILTER = DotName.createSimple("io.quarkus.vertx.web.RouteFilter");
 
     @BuildStep
     FeatureBuildItem feature() {
@@ -139,7 +144,8 @@ public class GoblinBuildStep {
      * {@code goblin.target} rules:
      * <ul>
      * <li>classes owned by the extension itself are never decorated;</li>
-     * <li>interfaces, annotations, enums and JAX-RS resource/{@code @Provider} classes are never decorated: HTTP
+     * <li>interfaces, annotations, enums, JAX-RS resource/{@code @Provider} classes and reactive-route classes are never
+     * decorated: HTTP
      * classes are the HTTP_IN layer, and fault-tolerance-guarded business methods always sit <em>below</em> the
      * resource boundary -- intercepting a resource method would abort the request before the protected bean is
      * reached;</li>
@@ -243,8 +249,9 @@ public class GoblinBuildStep {
      * {@code goblin.target} rules:
      * <ul>
      * <li>classes owned by the extension itself are never decorated;</li>
-     * <li>interfaces, annotations, enums, records, synthetic classes and JAX-RS resource/{@code @Provider} classes are
-     * never decorated: HTTP classes are the HTTP_IN layer, and fault-tolerance-guarded business methods always sit
+     * <li>interfaces, annotations, enums, records, synthetic classes, JAX-RS resource/{@code @Provider} classes and
+     * reactive-route classes are never decorated: HTTP classes are the HTTP_IN layer, and fault-tolerance-guarded business
+     * methods always sit
      * <em>below</em> the resource boundary -- intercepting a resource method would abort the request before the
      * protected bean is reached;</li>
      * <li>classes that can never be CDI beans -- anonymous, local and non-static inner classes -- are never decorated:
@@ -273,6 +280,9 @@ public class GoblinBuildStep {
         if (clazz.declaredAnnotation(JAX_RS_PATH) != null || clazz.declaredAnnotation(JAX_RS_PROVIDER) != null) {
             return false;
         }
+        if (isReactiveRouteClass(clazz)) {
+            return false;
+        }
         // resources whose @Path is declared on an implemented interface, and fault-tolerance fallback handlers
         if (hasInterface(clazz, index, MICROPROFILE_FALLBACK_HANDLER, JAX_RS_PATH)) {
             return false;
@@ -282,6 +292,18 @@ public class GoblinBuildStep {
             return false;
         }
         return rules.isPackageTargeted(packageName) && !rules.isExcludedBy(annotationNames(clazz.declaredAnnotations()));
+    }
+
+    /**
+     * Checks whether a class declares reactive routes ({@code @Route}, {@code @RouteBase}) or route filters: like a JAX-RS
+     * resource, it is an HTTP entry point, assaulted at the HTTP_IN layer by {@code GoblinRouteHook}.
+     *
+     * @param clazz the class to evaluate
+     * @return {@code true} for a reactive-route class
+     */
+    static boolean isReactiveRouteClass(ClassInfo clazz) {
+        return clazz.declaredAnnotation(ROUTE_BASE) != null || !clazz.annotations(ROUTE).isEmpty()
+                || !clazz.annotations(ROUTES).isEmpty() || !clazz.annotations(ROUTE_FILTER).isEmpty();
     }
 
     /**

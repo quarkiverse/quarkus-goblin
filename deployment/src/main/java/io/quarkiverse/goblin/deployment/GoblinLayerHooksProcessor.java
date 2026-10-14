@@ -13,6 +13,7 @@ import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
@@ -45,7 +46,9 @@ import io.quarkus.gizmo.Gizmo;
  * <li>{@link ChaosLayer#DATABASE} -- one Agroal pool interceptor per JDBC datasource, and a call to it woven at the
  * start of Agroal's connection acquisition (capability {@code io.quarkus.agroal});</li>
  * <li>{@link ChaosLayer#MESSAGING} -- an interceptor bound to the application's {@code @Incoming} consumer methods
- * (capability {@code io.quarkus.messaging}).</li>
+ * (capability {@code io.quarkus.messaging});</li>
+ * <li>{@link ChaosLayer#HTTP_IN} for reactive routes -- a call to {@code GoblinRouteHook} woven into the handler that
+ * invokes every {@code @Route} method (capability {@code io.quarkus.reactive-routes}).</li>
  * </ul>
  * Like the rest of the chaos wiring, nothing is installed in a production build.
  */
@@ -55,6 +58,12 @@ public class GoblinLayerHooksProcessor {
 
     static final String AGROAL_CONNECTION_POOL = "io.agroal.pool.ConnectionPool";
     static final String AGROAL_BEFORE_ACQUIRE = "beforeAcquire";
+
+    static final String ROUTE_HANDLER = "io.quarkus.vertx.web.runtime.RouteHandler";
+    static final String ROUTE_HANDLER_HANDLE = "handle";
+    private static final String ROUTE_HANDLER_INVOKE = "invoke";
+    private static final String ROUTING_CONTEXT_DESCRIPTOR = "(Lio/vertx/ext/web/RoutingContext;)V";
+    private static final String GOBLIN_ROUTE_HOOK = "io/quarkiverse/goblin/route/GoblinRouteHook";
 
     private static final DotName AGROAL_POOL_INTERCEPTOR = DotName.createSimple("io.agroal.api.AgroalPoolInterceptor");
     private static final DotName GOBLIN_AGROAL_POOL_INTERCEPTOR = DotName
@@ -141,6 +150,31 @@ public class GoblinLayerHooksProcessor {
     }
 
     /**
+     * Weaves the reactive-route hook into {@code RouteHandler.handle()}, the base class of the handlers Quarkus generates
+     * for {@code @Route} methods, so the HTTP_IN layer covers reactive routes without any change to the application.
+     *
+     * @param capabilities the application capabilities
+     * @param transformers producer for the transformation weaving the hook
+     */
+    @BuildStep(onlyIfNot = IsProduction.class)
+    void registerReactiveRouteHook(Capabilities capabilities, BuildProducer<BytecodeTransformerBuildItem> transformers) {
+        if (!capabilities.isPresent(Capability.REACTIVE_ROUTES)) {
+            return;
+        }
+        if (Thread.currentThread().getContextClassLoader().getResource(ROUTE_HANDLER.replace('.', '/') + ".class") == null) {
+            // a transformer for a missing class would match nothing, silently
+            LOG.warnf("Goblin: %s not found, the HTTP_IN layer cannot assault reactive routes with this Quarkus version",
+                    ROUTE_HANDLER);
+            return;
+        }
+        transformers.produce(new BytecodeTransformerBuildItem.Builder()
+                .setClassToTransform(ROUTE_HANDLER)
+                .setCacheable(true)
+                .setVisitorFunction((className, visitor) -> new RouteHandlerHookVisitor(visitor))
+                .build());
+    }
+
+    /**
      * Exposes which optional layers are backed by an installed hook as the {@link GoblinLayerHooks} synthetic bean, so
      * the Dev UI can offer them and the per-request resolution never selects a layer that cannot fire.
      *
@@ -206,6 +240,80 @@ public class GoblinLayerHooksProcessor {
             if (!woven) {
                 LOG.warnf("Goblin: %s.%s() not found, the DATABASE layer cannot inject faults with this Agroal version",
                         AGROAL_CONNECTION_POOL, AGROAL_BEFORE_ACQUIRE);
+            }
+            super.visitEnd();
+        }
+    }
+
+    /**
+     * Guards every {@code invoke(routingContext)} call of {@code RouteHandler.handle()} -- made once the CDI request
+     * context is active -- with {@code GoblinRouteHook.beforeInvoke(this, routingContext)}:
+     *
+     * <pre>{@code
+     * RoutingContext assaulted = GoblinRouteHook.beforeInvoke(this, context);
+     * if (assaulted != null) {
+     *     invoke(assaulted);
+     * }
+     * }</pre>
+     *
+     * The hook returns the context itself, or a wrapper rewriting the response body, and {@code null} when it aborted
+     * the request or deferred it behind a latency timer that invokes the route method later.
+     */
+    static final class RouteHandlerHookVisitor extends ClassVisitor {
+
+        private int woven;
+
+        RouteHandlerHookVisitor(ClassVisitor visitor) {
+            super(Gizmo.ASM_API_VERSION, visitor);
+        }
+
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
+                String[] exceptions) {
+            MethodVisitor visitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            if (!ROUTE_HANDLER_HANDLE.equals(name) || !ROUTING_CONTEXT_DESCRIPTOR.equals(descriptor)) {
+                return visitor;
+            }
+            return new MethodVisitor(Gizmo.ASM_API_VERSION, visitor) {
+                @Override
+                public void visitMethodInsn(int opcode, String owner, String methodName, String methodDescriptor,
+                        boolean isInterface) {
+                    if (opcode != Opcodes.INVOKEVIRTUAL || !ROUTE_HANDLER_INVOKE.equals(methodName)
+                            || !ROUTING_CONTEXT_DESCRIPTOR.equals(methodDescriptor)
+                            || !ROUTE_HANDLER.replace('.', '/').equals(owner)) {
+                        super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
+                        return;
+                    }
+                    woven++;
+                    Label skip = new Label();
+                    Label done = new Label();
+                    // this, context
+                    super.visitInsn(Opcodes.DUP2);
+                    // this, context, this, context -> this, context, assaulted
+                    super.visitMethodInsn(Opcodes.INVOKESTATIC, GOBLIN_ROUTE_HOOK, "beforeInvoke",
+                            "(Lio/vertx/core/Handler;Lio/vertx/ext/web/RoutingContext;)Lio/vertx/ext/web/RoutingContext;",
+                            false);
+                    super.visitInsn(Opcodes.DUP);
+                    super.visitJumpInsn(Opcodes.IFNULL, skip);
+                    // this, context, assaulted -> this, assaulted
+                    super.visitInsn(Opcodes.SWAP);
+                    super.visitInsn(Opcodes.POP);
+                    super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
+                    super.visitJumpInsn(Opcodes.GOTO, done);
+                    super.visitLabel(skip);
+                    // this, context, null
+                    super.visitInsn(Opcodes.POP);
+                    super.visitInsn(Opcodes.POP2);
+                    super.visitLabel(done);
+                }
+            };
+        }
+
+        @Override
+        public void visitEnd() {
+            if (woven == 0) {
+                LOG.warnf("Goblin: %s.%s() does not invoke the route method as expected, the HTTP_IN layer cannot "
+                        + "assault reactive routes with this Quarkus version", ROUTE_HANDLER, ROUTE_HANDLER_HANDLE);
             }
             super.visitEnd();
         }

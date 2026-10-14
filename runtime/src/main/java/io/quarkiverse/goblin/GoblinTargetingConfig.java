@@ -10,7 +10,7 @@ import io.smallrye.config.ConfigMapping;
 /**
  * Targeting rules selecting which classes chaos applies to. Fixed at build time: the service and messaging layers weave
  * their interceptor bindings from these rules, so changing them requires a rebuild (a dev-mode live reload does it).
- * The inbound REST filter applies the very same rules at runtime, through {@link TargetRules}.
+ * The inbound REST filter and the reactive-route hook apply the very same rules at runtime, through {@link TargetRules}.
  */
 @ConfigRoot(phase = ConfigPhase.BUILD_AND_RUN_TIME_FIXED)
 @ConfigMapping(prefix = "quarkus.goblin.target")

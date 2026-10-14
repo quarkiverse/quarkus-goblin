@@ -71,6 +71,12 @@
             <artifactId>jakarta.ws.rs-api</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- RouteHandler bytes and route annotations: fixtures of the reactive-route weaving tests -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-reactive-routes</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- provided in quarkus-goblin-dev: the playbook test reflects on the JSON-RPC service, whose signatures use it -->
         <dependency>
             <groupId>io.vertx</groupId>

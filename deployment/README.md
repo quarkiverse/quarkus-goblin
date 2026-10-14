@@ -23,6 +23,10 @@ user application.
   per JDBC datasource (`@Default` or `@DataSource("name")`).
 - `registerMessagingHook(...)` -- when `quarkus-messaging` is present, registers `GoblinMessagingInterceptor` and
   weaves `@GoblinMessagingAssault` onto the eligible `@Incoming` methods.
+- `registerReactiveRouteHook(...)` -- when `quarkus-reactive-routes` is present, weaves a
+  `GoblinRouteHook.beforeInvoke(this, context)` guard around each `invoke(context)` call of
+  `io.quarkus.vertx.web.runtime.RouteHandler.handle()`, so the HTTP_IN layer covers `@Route` methods (a WARN is logged
+  when the call is not found).
 - `declareOptionalHooks(...)` -- exposes the installed optional layers as the `GoblinLayerHooks` synthetic bean read by
   `AssaultEngine`.
 

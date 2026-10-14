@@ -40,8 +40,9 @@ public enum ChaosLayer {
     HTTP_OUT,
 
     /**
-     * Inbound REST endpoint layer (server-side latency, exception, HTTP status, dependency degradation, response body and
-     * header assaults). The shallowest layer: any deeper winner makes the inbound filters pass through.
+     * Inbound HTTP layer: REST endpoints and reactive routes (server-side latency, exception, HTTP status, dependency
+     * degradation, response body and header assaults). The shallowest layer: any deeper winner makes the inbound filters pass
+     * through.
      */
     HTTP_IN;
 }

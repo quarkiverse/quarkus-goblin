@@ -11,6 +11,15 @@ End-to-end `@QuarkusTest` suite exercising the extension through a real JAX-RS a
 - `/api/proxy` (a proxy that calls `SampleClient` internally) and `/api/web-proxy` (a proxy that calls back through a
   Vert.x `WebClient` armed with `GoblinWebClient.enable(...)`), handy to exercise client-side assaults in dev mode.
 
+Reactive routes (`quarkus-reactive-routes`) cover the `HTTP_IN` layer on `@Route` methods: `SampleRoutes` serves
+`/routes/hello`, `/routes/thread` (answers `event-loop` or `worker`), `/routes/blocking`, `/routes/json` and
+`/routes/service` (calls `SampleService`), plus a `type = FAILURE` handler on `/routes/*` that answers injected
+exceptions, as well as `/routes/trace` (reads the request-scoped `RouteTrace` set by a `@RouteFilter`) and the
+`POST /routes/echo` route, and the routes exercising the response body wrapper: `/routes/fluent` (fluent
+`putHeader(...).end(...)`), `/routes/json-default` (`RoutingContext.json`), `/routes/uni`, `/routes/multi` (streamed,
+left untouched) and `/routes/boom` (throws). `SampleRouteFilters` holds that `@RouteFilter` and a pass-through `@Route` in front of the
+REST endpoints `/api/passthrough/hello` and `/api/passthrough/service`, plus a `@NonBlocking` pass-through route in front of `/api/spared/hello`; `excluded/ExcludedRoutes` serves `/routes/excluded/service` for the excluded-entry-point tests.
+
 `SampleConsumer` consumes the in-memory `orders` and `audits` channels for the `MESSAGING` layer.
 `src/main/resources/application.properties` enables Goblin with latency defaults so the engine is active at boot, and
 opts the tests in with `quarkus.goblin.test.enabled=true`.
@@ -33,6 +42,9 @@ REST Client calls with latency and exceptions, and `GoblinWebClientIntegrationTe
 | `GoblinServiceLayerIntegrationTest` | The `SERVICE` layer: latency and exception injected on the bean, inside Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout` observe the faults), inert when not armed |
 | `GoblinDatabaseLayerIntegrationTest` | The `DATABASE` layer: JDBC connection acquisition failed or delayed by the Agroal interceptor, `@Retry` then `@Fallback` answering, no assault outside an armed request |
 | `GoblinMessagingLayerIntegrationTest` | The `MESSAGING` layer: a consumed message faulted at the `@Incoming` consumer or deeper, and no stale HTTP decision leaking into a consumer |
+| `GoblinReactiveRoutesIntegrationTest` | The `HTTP_IN` layer on reactive routes: latency (event loop and blocking), exception answered by the failure handler, HTTP status (text and JSON), dependency degradation, response body truncate/inflate (text and JSON, after a delay too), response header set/remove (on aborts too), aborts after the delay, request body and request context kept across the delay, `@RouteFilter` never assaulted, a pass-through route assaulting a REST request once and passing its decision (SERVICE layer, response body) to the resource behind it, a 0 ms latency draw, abort bodies rewritten, fluent chains, `RoutingContext` default methods, `Uni` and `Multi` routes, HEAD requests, the SERVICE layer below a route, REST requests assaulted once, inert when chaos is off, HTTP_IN not armed or level 0 |
+| `ReactiveRouteEventLoopIntegrationTest` | With a single event loop, concurrent delayed reactive-route requests overlap: the latency never blocks the loop |
+| `SparedPassThroughRouteTargetingTest` | `exclude-annotations` spares a pass-through `@Route` only: the REST resource behind it (`/api/spared/hello`) takes the HTTP_IN draw |
 | `TestModeWithoutOptInTest` | The test-mode default: without `quarkus.goblin.test.enabled`, a `@QuarkusTest` suite is never assaulted |
 | `AbstractPackageTargetingTest` + `ExcludePackageTargetingTest`, `IncludeNonMatchingPackageTargetingTest`, `IncludeMatchingPackageTargetingTest`, `ExcludeOverridesIncludeTargetingTest` | Package-based targeting via `include-packages` / `exclude-packages` |
 

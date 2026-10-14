@@ -6,7 +6,8 @@ import io.quarkus.arc.ManagedContext;
 
 /**
  * Carries the decided assault layer (the deepest armed layer whose target-level draw passed) for the current
- * pseudo-request, so every hook on the path -- the JAX-RS filters and the service interceptor -- agrees on which layer
+ * pseudo-request, so every hook on the path -- the JAX-RS filters, the reactive-route hook and the service interceptor --
+ * agrees on which layer
  * fires and the shallower layers pass through.
  * <p>
  * The decision is resolved once per request by {@link AssaultEngine#resolveAssaultLayer()} inside the inbound filter
@@ -16,6 +17,10 @@ import io.quarkus.arc.ManagedContext;
  * is <em>not</em> propagated to other threads: a service method run asynchronously ({@code @Asynchronous},
  * {@code ManagedExecutor}, reactive continuations) is never service-assaulted. Asynchronous / non-blocking paths are
  * out of scope for now (see issue #54).
+ * <p>
+ * A request served by a reactive route ({@code @Route}) is resolved by {@code GoblinRouteHook} instead, right before the
+ * route method runs, once the CDI request context is active. The hook never clears the decision afterwards: the next
+ * request on the thread clears it first, and the request-context binding below discards it anywhere else.
  * <p>
  * The decision is bound to the CDI request context active when it was made: a decision read from another request
  * context (or from none) is stale -- typically left on a pooled worker thread by an HTTP request whose response filter

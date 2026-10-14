@@ -18,6 +18,17 @@ stand down), the filter:
 
 Assaults are discovered automatically: no manual registration is required, adding a bean implements the SPI is enough.
 
+Reactive routes (`@Route`) never go through the JAX-RS filter. When `quarkus-reactive-routes` is present, the deployment
+module weaves a call to `route/GoblinRouteHook` into Quarkus's `RouteHandler.handle()`, right before the route method
+runs. The hook resolves the layer and applies the same targeting rules, but it does **not** use the `Assault` SPI: it
+applies the six built-in assault types itself (latency on a Vert.x timer when on the event loop, exception through
+`RoutingContext.fail()`, HTTP status, dependency degradation, and through `route/RouteResponse` the response header
+rules in a headers-end handler and the response body on a single-shot `end(...)`), with the same history labels.
+Custom `Assault` beans do not apply to reactive routes. The hook keeps its decision in the routing context
+(`GoblinRouteHook.RouteDecision`): when a `@Route` acting as a pass-through filter sits in front of a REST resource,
+`GoblinChaosFilter` applies that decision on the resource thread (layer or shield, and the response body) instead of
+drawing a second one.
+
 The same `GoblinChaosFilter` also implements a JAX-RS `ContainerResponseFilter`: on eligible responses it rewrites
 the entity when the **response body** assault is enabled (truncate/inflate) and applies the configured **response
 header** rules, so the transformations compose with every other assault instead of replacing them.
@@ -91,7 +102,8 @@ public interface Assault {
 }
 ```
 
-`Assault` must be implemented as a `@ApplicationScoped` CDI bean. `AssaultContext` carries the JAX-RS
+`Assault` must be implemented as a `@ApplicationScoped` CDI bean; it runs in the JAX-RS filter only, never on reactive
+routes. `AssaultContext` carries the JAX-RS
 `ContainerRequestContext` (may be `null` in unit tests), the current `MutableAssaultConfig`, the `AssaultEngine` (use
 `engine.recordAssault(method, label)` or `recordAssault(method, label, latencyMs)` to append to the history), and the
 targeted method name.

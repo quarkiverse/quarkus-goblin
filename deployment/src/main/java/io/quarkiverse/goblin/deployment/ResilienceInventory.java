@@ -152,6 +152,10 @@ final class ResilienceInventory {
             return "JAX-RS resource: the HTTP_IN layer aborts the request before these annotations can react, and the "
                     + "SERVICE layer never weaves resources. Move the guard to a bean the resource calls to exercise it.";
         }
+        if (GoblinBuildStep.isReactiveRouteClass(clazz)) {
+            return "Reactive route: the HTTP_IN layer aborts the request before these annotations can react, and the "
+                    + "SERVICE layer never weaves routes. Move the guard to a bean the route calls to exercise it.";
+        }
         return "Not woven by the SERVICE layer (quarkus.goblin.target rules, or a class that cannot be intercepted). "
                 + "A DATABASE fault still reaches it if the method acquires a JDBC connection.";
     }

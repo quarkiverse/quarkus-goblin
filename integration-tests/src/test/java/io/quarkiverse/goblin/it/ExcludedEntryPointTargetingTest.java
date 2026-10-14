@@ -74,8 +74,33 @@ class ExcludedEntryPointTargetingTest {
                 "a targeted entry point is still assaulted, got: " + engine.getHistory());
     }
 
+    @Test
+    void serviceLayerSparesAnExcludedReactiveRoute() {
+        engine.getMutableConfig().setLayers(List.of(ChaosLayer.SERVICE));
+
+        RestAssured.given().get("/routes/excluded/service").then().statusCode(200)
+                .body(equalTo("hello from Goblin SampleService"));
+        assertTrue(engine.getHistory().isEmpty(), "got: " + engine.getHistory());
+
+        RestAssured.given().get("/routes/service").then().statusCode(500);
+        assertTrue(engine.getHistory().stream()
+                .anyMatch(record -> "io.quarkiverse.goblin.it.SampleService.hello".equals(record.method())),
+                "a targeted reactive route is still assaulted, got: " + engine.getHistory());
+    }
+
+    @Test
+    void httpInSparesAnExcludedReactiveRoute() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setExceptionEnabled(false);
+        cfg.setHttpStatusEnabled(true);
+
+        RestAssured.given().get("/routes/excluded/service").then().statusCode(200)
+                .body(equalTo("hello from Goblin SampleService"));
+        assertTrue(engine.getHistory().isEmpty(), "got: " + engine.getHistory());
+    }
+
     /**
-     * Excludes the package of {@code ExcludedResource} only.
+     * Excludes the package of {@code ExcludedResource} and {@code ExcludedRoutes} only.
      */
     public static class ExcludedEntryPointProfile implements QuarkusTestProfile {
 

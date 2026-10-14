@@ -46,7 +46,7 @@ NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin
 
 The response header assaults carry the header name and action in `type` (`response-header-set:<name>` or `response-header-remove:<name>`, with the name as configured): each header rule produces its own series, so keep the number of rules small on a long-lived Prometheus.
 
-`source` is carried by each recorded assault: inbound REST assaults (`SampleResource.hello`) are tagged `server`, application bean assaults (SERVICE layer) `service`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
+`source` is carried by each recorded assault: inbound REST and reactive-route assaults (`SampleResource.hello`) are tagged `server`, application bean assaults (SERVICE layer) `service`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
 
 TIP: Reduction: summarize by `type` only with `sum(goblin_assaults_total) by (type)`; watch a specific source with `sum(rate(goblin_latency_injected_seconds_count[5m])) by (source)`.
 
