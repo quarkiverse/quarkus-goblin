@@ -6,7 +6,7 @@ include::../partials/attributes.adoc[]
 
 This walkthrough uses the sample application of the `integration-tests` module to verify, for real, that MicroProfile Fault Tolerance annotations react to failures: a `@Timeout` on a slow business method, then a `@Retry` + `@Fallback` on a failing database.
 
-A fault injected at the inbound REST boundary (`HTTP_IN`) hits the request *before* the resource runs, so the Fault Tolerance annotations below it never see it. Both scenarios therefore arm a deeper layer -- `SERVICE` or `DATABASE` -- whose faults are injected inside or below the guarded methods (see xref:how-it-works.adoc#chaos-layers[Chaos layers]).
+A fault injected at the inbound HTTP boundary (`HTTP_IN`) hits the request *before* the resource (or route method) runs, so the Fault Tolerance annotations below it never see it. Both scenarios therefore arm a deeper layer -- `SERVICE` or `DATABASE` -- whose faults are injected inside or below the guarded methods (see xref:how-it-works.adoc#chaos-layers[Chaos layers]).
 
 == Start the sample application
 
@@ -20,13 +20,13 @@ mvn -pl integration-tests quarkus:dev
 
 Open the Dev UI at `http://localhost:8080/q/dev` and the Goblin *Chaos Dashboard*. The sample application has an in-memory H2 datasource, so every layer is available. Its `application.properties` starts with chaos active and the **Latency** assault enabled (`100`-`500` ms, level `100`).
 
-NOTE: The dashboard settings are saved to `integration-tests/.goblin-state.json` and restored at the next start instead of `application.properties`. If you already used the dashboard, the toggles, layers and parameters below may differ from the defaults: delete the file before starting, or use *Reset to defaults* in the *Danger zone* (latency on with `100`-`5000` ms, `java.lang.RuntimeException`, layers *Inbound REST* + *Outbound HTTP*).
+NOTE: The dashboard settings are saved to `integration-tests/.goblin-state.json` and restored at the next start instead of `application.properties`. If you already used the dashboard, the toggles, layers and parameters below may differ from the defaults: delete the file before starting, or use *Reset to defaults* in the *Danger zone* (latency on with `100`-`5000` ms, `java.lang.RuntimeException`, layers *Inbound HTTP* + *Outbound HTTP*).
 
 == Scenario 1: a slow service triggers `@Timeout`
 
 `SampleService.timed()` is guarded by `@Timeout(400ms)`; `GET /api/service/timeout` calls it.
 
-. In *Chaos layers*, switch **Service** on and make sure **Database** is off (the default *Inbound REST* and *Outbound HTTP* can stay on). At level `100` the deepest armed layer wins the whole request: with *Database* armed, this request -- which never touches the database -- would resolve to the database layer and not be assaulted at all.
+. In *Chaos layers*, switch **Service** on and make sure **Database** is off (the default *Inbound HTTP* and *Outbound HTTP* can stay on). At level `100` the deepest armed layer wins the whole request: with *Database* armed, this request -- which never touches the database -- would resolve to the database layer and not be assaulted at all.
 . **Latency** is already enabled: set its range to `600`-`700` ms, above the 400 ms timeout, and click `Save`. Keep the level at `100`.
 . Call the endpoint:
 +

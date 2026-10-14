@@ -2,6 +2,23 @@
 
 include::../partials/attributes.adoc[]
 
+[[version-0-5]]
+== 0.5.x
+
+[cols="1,1"]
+|===
+|Version |Date
+
+|0.5.0
+|_unreleased_
+|===
+
+=== 0.5.0
+
+==== Improvements
+
+* Reactive routes: when the application has `quarkus-reactive-routes`, the `HTTP_IN` layer also assaults `@Route` methods, with no code change: latency, exception, HTTP status, dependency degradation, response body and response header, recorded with the same labels as a REST resource (https://github.com/quarkiverse/quarkus-goblin/issues/64[#64]). On the event loop the latency uses a Vert.x timer, so the loop is never blocked; an injected exception is answered by the router's failure handlers, including `@Route(type = FAILURE)` methods, which are never assaulted themselves, and a request is assaulted once, by the first `@Route` it reaches, even when a pass-through route sits in front of a REST resource. A route is also an entry point for the `SERVICE` and `DATABASE` layers below it, and an excluded-package route shields its request like an excluded resource. Reactive-route classes are no longer woven by the `SERVICE` layer, just like JAX-RS resources. The response body is rewritten when a route ends its response in one go, streamed responses are left untouched, and custom `Assault` beans are not applied to reactive routes. In the Dev UI, the `Inbound REST` layer and the `REST` source chip are renamed `Inbound HTTP` and `inbound HTTP`, since they cover both.
+
 [[version-0-4]]
 == 0.4.x
 

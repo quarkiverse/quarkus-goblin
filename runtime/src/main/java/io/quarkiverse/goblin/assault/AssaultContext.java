@@ -8,7 +8,8 @@ import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 
 /**
- * Context passed to an {@link Assault} when it is applied to a request.
+ * Context passed to an {@link Assault} when it is applied to a request by the JAX-RS filter (reactive routes never
+ * call an {@code Assault} bean).
  * <p>
  * Carries everything an assault needs to inspect the request, read the current configuration, record the assault in
  * the history, and know which endpoint method is being targeted. The request context may be {@code null} in unit tests

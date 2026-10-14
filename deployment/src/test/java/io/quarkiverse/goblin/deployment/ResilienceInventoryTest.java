@@ -96,9 +96,17 @@ class ResilienceInventoryTest {
         }
     }
 
+    static class GuardedRoute {
+        @io.quarkus.vertx.web.Route(path = "/guarded")
+        @Timeout(value = 400, unit = ChronoUnit.MILLIS)
+        public String guarded() {
+            return "guarded";
+        }
+    }
+
     private static List<Map<String, Object>> inventory(TargetRules rules) throws IOException {
         Index index = Index.of(GuardedService.class, ClassLevelGuard.class, GuardedResource.class, GuardedClient.class,
-                RateLimited.class);
+                RateLimited.class, GuardedRoute.class);
         return ResilienceInventory.of(index, index, rules);
     }
 
@@ -124,6 +132,7 @@ class ResilienceInventoryTest {
                 ClassLevelGuard.class.getName() + "#overridden",
                 GuardedClient.class.getName() + "#call",
                 GuardedResource.class.getName() + "#get",
+                GuardedRoute.class.getName() + "#guarded",
                 GuardedService.class.getName() + "#flaky",
                 GuardedService.class.getName() + "#timed",
                 RateLimited.class.getName() + "#limited"), listed,
@@ -178,6 +187,10 @@ class ResilienceInventoryTest {
         Map<String, Object> resource = entry(inventory, GuardedResource.class, "get");
         assertEquals(List.of(), resource.get("reachableBy"));
         assertTrue(((String) resource.get("note")).startsWith("JAX-RS resource"));
+
+        Map<String, Object> route = entry(inventory, GuardedRoute.class, "guarded");
+        assertEquals(List.of(), route.get("reachableBy"));
+        assertTrue(((String) route.get("note")).startsWith("Reactive route"));
     }
 
     @Test

@@ -15,7 +15,8 @@ Goblin is designed to work *with* Fault Tolerance, not against it, at every laye
   decision; each further attempt draws `level` again, so at `level = 100` every attempt fails (and `@Fallback` answers)
   while a lower level lets some retries recover. Only the outermost intercepted call is assaulted: a bean calling
   another bean never multiplies the fault.
-* **HTTP layer (HTTP_IN)** -- endpoint-level assaults apply to the JAX-RS boundary of unprotected endpoints only;
+* **HTTP layer (HTTP_IN)** -- endpoint-level assaults apply to the JAX-RS or reactive-route boundary of unprotected
+  endpoints only;
   fault-tolerant resources are hit before their annotations can react, which is the wrong place to validate them. The
   classic workflow below remains the recommended approach for HTTP_IN.
 * **Outgoing layer (HTTP_OUT)** -- client-side latency/exceptions simulate a *downstream* service failing, the usual
@@ -34,8 +35,8 @@ machinery, while the `HTTP_IN` filter stands down. A bean method excluded by `qu
 is not woven, so keep the Fault Tolerance annotations out of that property for this workflow. The service decision is
 bound to the request thread: `@Asynchronous` methods and `ManagedExecutor` tasks are not covered yet, and for a method
 returning `Uni` / `CompletionStage` only the synchronous part of the call is. On a Vert.x event-loop thread the latency
-assaults that would block are skipped (a WARN is logged once) rather than blocking the loop; only the WebClient latency,
-which uses a Vert.x timer, still applies there.
+assaults that would block are skipped (a WARN is logged once) rather than blocking the loop; only the WebClient and
+reactive-route latencies, which use a Vert.x timer, still apply there.
 
 == Agroal / Hibernate ORM / Panache
 
@@ -53,6 +54,16 @@ assaulted.
 == Quarkus REST (RESTEasy Reactive)
 
 Goblin uses standard JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter` and targets Quarkus REST (`quarkus-rest`, formerly RESTEasy Reactive), which the extension is built and tested against. The classic RESTEasy runtime (`quarkus-resteasy`) is not tested and not supported.
+
+== Reactive routes
+
+When `quarkus-reactive-routes` is present, a hook is woven at build time into the handler Quarkus generates for each
+`@Route` method, so the `HTTP_IN` layer covers reactive routes too (see xref:assault-types.adoc#reactive-routes[Reactive
+routes]). Quarkus REST requests never go through that handler, so a REST request is still assaulted once. When a
+`@Route` acting as a pass-through filter sits in front of a REST resource, the JAX-RS filter applies the route's decision
+instead of drawing again: the route is assaulted, unless the targeting rules spare it, in which case the resource is.
+Failure handlers and `@RouteFilter` methods are not assaulted, and the response body assault leaves streamed responses
+alone. Nothing is woven in a production build, and applications without reactive routes are unaffected.
 
 == MicroProfile REST Client / Quarkus REST Client
 

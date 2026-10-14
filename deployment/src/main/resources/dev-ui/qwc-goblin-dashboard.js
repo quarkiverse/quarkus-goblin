@@ -335,7 +335,7 @@ export class QwcGoblinDashboard extends LitElement {
     static HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
     static SOURCES = [
-        {tag: 'server', label: 'REST'},
+        {tag: 'server', label: 'inbound HTTP'},
         {tag: 'service', label: 'service'},
         {tag: 'database', label: 'database'},
         {tag: 'messaging', label: 'messaging'},
@@ -350,7 +350,7 @@ export class QwcGoblinDashboard extends LitElement {
         {value: 'MESSAGING', label: 'Messaging', hint: 'Latency and exceptions on @Incoming consumers, outside Fault Tolerance: handled by the messaging failure strategy. Each consumed message rolls its own layer.', requires: 'quarkus-messaging'},
         {value: 'SERVICE', label: 'Service', hint: 'Latency and exceptions injected by GoblinServiceInterceptor on application beans, inside MicroProfile Fault Tolerance.'},
         {value: 'HTTP_OUT', label: 'Outbound HTTP', hint: 'Latency and exceptions on outgoing REST Client / WebClient calls; each call rolls its own gate.'},
-        {value: 'HTTP_IN', label: 'Inbound REST', hint: 'Server-side latency, exceptions, HTTP status, dependency, body and header assaults.'},
+        {value: 'HTTP_IN', label: 'Inbound HTTP', hint: 'Server-side latency, exceptions, HTTP status, dependency, body and header assaults on REST endpoints and reactive routes (@Route).'},
     ];
 
     static properties = {
@@ -1359,7 +1359,7 @@ export class QwcGoblinDashboard extends LitElement {
                         ${this._layerAvailable(layer.value) ? '' : html`<span class="priority">unavailable</span>`}
                     </div>
                     `)}
-                    <div class="helper">Unchecking every layer re-arms the legacy default (Inbound REST + Outbound HTTP).
+                    <div class="helper">Unchecking every layer re-arms the legacy default (Inbound HTTP + Outbound HTTP).
                         Database requires a JDBC datasource and Messaging requires quarkus-messaging; an unavailable
                         layer never fires. Outbound HTTP rolls its own gate on every outgoing call.</div>
                 </div>

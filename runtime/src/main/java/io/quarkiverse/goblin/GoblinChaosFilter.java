@@ -20,6 +20,7 @@ import org.jboss.logging.Logger;
 import io.quarkiverse.goblin.assault.Assault;
 import io.quarkiverse.goblin.assault.AssaultContext;
 import io.quarkiverse.goblin.assault.AssaultOutcome;
+import io.quarkiverse.goblin.route.GoblinRouteHook;
 
 @Provider
 @ApplicationScoped
@@ -32,6 +33,13 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
      * applies response body/header assaults to the exact same selection instead of rolling the dice a second time.
      */
     static final String GATED_PROPERTY = "io.quarkiverse.goblin.gated";
+
+    /**
+     * Request-context property naming the pass-through reactive route that selected this request for HTTP_IN assaults:
+     * the response phase then only rewrites the body, recorded under the route's name, since the route already applied
+     * the request assaults and registered the header rules.
+     */
+    static final String ROUTE_BODY_PROPERTY = "io.quarkiverse.goblin.route-body";
 
     @Inject
     Instance<Assault> assaults;
@@ -59,6 +67,12 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
     private volatile TargetRules targetRules;
 
     /**
+     * Whether the reactive-route hook can be woven in this application: without {@code quarkus-reactive-routes} the
+     * lookup of the current routing context is skipped entirely.
+     */
+    private final boolean reactiveRoutes = isReactiveRoutesPresent();
+
+    /**
      * The assault chain sorted by {@link Assault#order()}. The set of assault beans is fixed at build time, so it is
      * sorted once, lazily, instead of on every request.
      */
@@ -66,22 +80,47 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
-        // never let a decision left over on this pooled thread (e.g. a response filter that never ran) leak into this
-        // request, even when chaos is currently inactive
-        ChaosRequestContext.clear();
-        if (!engine.isActive()) {
-            return;
-        }
-        if (isEntryPointExcluded()) {
-            // an excluded entry point takes the whole request out of the blast radius: without the shield, the layer
-            // resolved below would still assault the included beans and datasources it calls
+        GoblinRouteHook.RouteDecision routeDecision = reactiveRoutes ? GoblinRouteHook.currentRequestDecision() : null;
+        ChaosLayer assaultLayer;
+        if (routeDecision != null) {
+            // a @Route reached first (e.g. a pass-through route calling next()) already made this request's decision:
+            // apply it on this thread, where the resource and the beans it calls run, and never draw a second one
             requestContext.setProperty(GATED_PROPERTY, false);
-            ChaosRequestContext.shield();
-            return;
+            if (routeDecision.shielded()) {
+                ChaosRequestContext.shield();
+                return;
+            }
+            ChaosRequestContext.setAssaultLayer(routeDecision.layer());
+            if (routeDecision.httpIn()) {
+                // the route applied the request and header assaults; the body the resource writes is rewritten here
+                requestContext.setProperty(ROUTE_BODY_PROPERTY, routeDecision.description());
+                return;
+            }
+            if (routeDecision.layer() != ChaosLayer.HTTP_IN) {
+                return;
+            }
+            // the targeting rules spared the route itself, not the resource behind it: the resource takes the route's
+            // HTTP_IN draw
+            assaultLayer = ChaosLayer.HTTP_IN;
+            requestContext.setProperty(GATED_PROPERTY, true);
+        } else {
+            // never let a decision left over on this pooled thread (e.g. a response filter that never ran) leak into
+            // this request, even when chaos is currently inactive
+            ChaosRequestContext.clear();
+            if (!engine.isActive()) {
+                return;
+            }
+            if (isEntryPointExcluded()) {
+                // an excluded entry point takes the whole request out of the blast radius: without the shield, the
+                // layer resolved below would still assault the included beans and datasources it calls
+                requestContext.setProperty(GATED_PROPERTY, false);
+                ChaosRequestContext.shield();
+                return;
+            }
+            assaultLayer = engine.resolveAssaultLayer();
+            requestContext.setProperty(GATED_PROPERTY, assaultLayer == ChaosLayer.HTTP_IN);
+            ChaosRequestContext.setAssaultLayer(assaultLayer);
         }
-        ChaosLayer assaultLayer = engine.resolveAssaultLayer();
-        requestContext.setProperty(GATED_PROPERTY, assaultLayer == ChaosLayer.HTTP_IN);
-        ChaosRequestContext.setAssaultLayer(assaultLayer);
         if (LOG.isDebugEnabled()) {
             MutableAssaultConfig cfg = engine.configSnapshot();
             if (cfg != null) {
@@ -122,6 +161,12 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
         if (cfg == null) {
             return;
         }
+        if (requestContext.getProperty(ROUTE_BODY_PROPERTY) instanceof String route) {
+            if (cfg.isResponseBodyEnabled()) {
+                transformBody(responseContext, cfg, route);
+            }
+            return;
+        }
         if (!isGated(requestContext)) {
             return;
         }
@@ -129,22 +174,34 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
             return;
         }
         if (cfg.isResponseBodyEnabled()) {
-            byte[] body = toBytes(responseContext.getEntity());
-            if (body != null) {
-                int declaredLength = declaredLength(responseContext, body);
-                byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
-                        cfg.getResponseBodyPercentage());
-                setEntity(responseContext, transformed);
-                applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
-                int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
-                LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
-                        cfg.getResponseBodyMode().name().toLowerCase(), describeMethod(), declared, transformed.length);
-                engine.recordAssault(describeMethod(), "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
-            }
+            transformBody(responseContext, cfg, describeMethod());
         }
         if (cfg.isResponseHeaderEnabled()) {
             ResponseHeaderTransformer.apply(responseContext, cfg, engine, describeMethod());
         }
+    }
+
+    /**
+     * Rewrites a bufferable response entity with the configured body assault and records it.
+     *
+     * @param responseContext the response context
+     * @param cfg the active configuration
+     * @param target the history identifier of the assaulted endpoint
+     */
+    private void transformBody(ContainerResponseContext responseContext, MutableAssaultConfig cfg, String target) {
+        byte[] body = toBytes(responseContext.getEntity());
+        if (body == null) {
+            return;
+        }
+        int declaredLength = declaredLength(responseContext, body);
+        byte[] transformed = ResponseBodyTransformer.transform(body, cfg.getResponseBodyMode(),
+                cfg.getResponseBodyPercentage());
+        setEntity(responseContext, transformed);
+        applyContentLength(responseContext, cfg.getResponseBodyMode(), declaredLength, transformed.length);
+        int declared = cfg.getResponseBodyMode() == ResponseBodyMode.INFLATE ? declaredLength : transformed.length;
+        LOG.debugf("Goblin: response body %s on %s (Content-Length %d, actual %d bytes)",
+                cfg.getResponseBodyMode().name().toLowerCase(), target, declared, transformed.length);
+        engine.recordAssault(target, "response-body-" + cfg.getResponseBodyMode().name().toLowerCase());
     }
 
     /**
@@ -240,6 +297,15 @@ public class GoblinChaosFilter implements ContainerRequestFilter, ContainerRespo
      */
     private static void setEntity(ContainerResponseContext responseContext, byte[] bytes) {
         responseContext.setEntity(bytes, null, responseContext.getMediaType());
+    }
+
+    private static boolean isReactiveRoutesPresent() {
+        try {
+            Class.forName("io.quarkus.vertx.web.runtime.RouteHandler", false, GoblinChaosFilter.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
     }
 
     private List<Assault> sortedAssaults() {

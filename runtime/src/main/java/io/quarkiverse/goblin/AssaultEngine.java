@@ -215,7 +215,7 @@ public class AssaultEngine {
         if (active) {
             MutableAssaultConfig mutableConfig = this.mutableConfig.snapshot();
             LOG.warnf(
-                    "Chaos engineering active: %d%% of REST requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s, responseBody=%s)",
+                    "Chaos engineering active: %d%% of inbound HTTP requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s, responseBody=%s)",
                     mutableConfig.getTargetLevel(),
                     mutableConfig.getProfile(),
                     mutableConfig.isLatencyEnabled(),
@@ -629,7 +629,7 @@ public class AssaultEngine {
     }
 
     /**
-     * Records an assault injected at the inbound REST boundary ({@link AssaultSource#SERVER}).
+     * Records an assault injected at the inbound HTTP boundary, REST or reactive route ({@link AssaultSource#SERVER}).
      *
      * @param method the history identifier of the assaulted target
      * @param type the assault label, e.g. {@code "exception"}
@@ -639,7 +639,7 @@ public class AssaultEngine {
     }
 
     /**
-     * Records an assault injected at the inbound REST boundary ({@link AssaultSource#SERVER}).
+     * Records an assault injected at the inbound HTTP boundary, REST or reactive route ({@link AssaultSource#SERVER}).
      *
      * @param method the history identifier of the assaulted target
      * @param type the assault label, e.g. {@code "latency"}
@@ -770,7 +770,7 @@ public class AssaultEngine {
             AssaultSource source) {
 
         /**
-         * Builds a record injected at the inbound REST boundary ({@link AssaultSource#SERVER}).
+         * Builds a record injected at the inbound HTTP boundary, REST or reactive route ({@link AssaultSource#SERVER}).
          *
          * @param method the history identifier of the assaulted target
          * @param type the assault label

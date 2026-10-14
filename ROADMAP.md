@@ -105,8 +105,9 @@ Current status: **preview** (v0.4.0 released, v0.5.0 in development)
 
 > Two items, both close to the core: one more inbound HTTP entry point, and the guarantee that the extension does not break a native build. The other injection layers wait under *On demand*.
 
-- [ ] **Reactive Routes support** ([#64](https://github.com/quarkiverse/quarkus-goblin/issues/64))
+- [x] **Reactive Routes support** ([#64](https://github.com/quarkiverse/quarkus-goblin/issues/64))
   Extend Goblin beyond JAX-RS to cover Vert.x reactive routes (`@Route`-annotated methods). Use Vert.x route handlers for injection. The closest thing to the core of the project here: the same role as JAX-RS on the inbound HTTP side.
+  Delivered as a hook woven into the generated `@Route` handler: latency (Vert.x timer on the event loop), exception, HTTP status, dependency degradation, response body and response header.
 
 - [ ] **GraalVM native build: non-regression only** ([#65](https://github.com/quarkiverse/quarkus-goblin/issues/65))
   Goblin is a dev-mode tool, so it does not have to *work* in native mode. What matters is that the extension does not break a native build when it sits in the dependencies. One non-regression test compiling a native application with the extension present, and nothing more.

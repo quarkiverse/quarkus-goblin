@@ -7,7 +7,8 @@ package io.quarkiverse.goblin;
 public enum AssaultSource {
 
     /**
-     * Inbound REST endpoint ({@link ChaosLayer#HTTP_IN}), and any custom assault recorded without an explicit source.
+     * Inbound REST endpoint or reactive route ({@link ChaosLayer#HTTP_IN}), and any custom assault recorded without an explicit
+     * source.
      */
     SERVER("server"),
 

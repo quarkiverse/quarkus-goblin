@@ -11,7 +11,7 @@ By default, Goblin targets every eligible part of your application on the armed 
 | Layer | What the targeting rules select
 
 | `HTTP_IN`
-| Resource methods: the package of the resource class, and the annotations of the resource method and of its class.
+| Resource and `@Route` methods: the package of the resource or route class, and the annotations of the method and of its class.
 
 | `SERVICE`
 | Application bean methods: the package of the bean class, and the annotations of the method and of its class (applied at build time).
@@ -31,7 +31,7 @@ By default, Goblin targets every eligible part of your application on the armed 
 [#excluded-entry-points]
 == Excluded entry points
 
-A request whose resource class sits in an `exclude-packages` package is out of the blast radius on *every* layer:
+A request whose resource or reactive-route class sits in an `exclude-packages` package is out of the blast radius on *every* layer:
 whatever layer is armed, nothing it calls is assaulted -- neither the targeted services, nor the datasources, nor the
 outgoing calls. Use it for the parts of the application that must stay up during a chaos session, such as a status
 page or an admin screen:
@@ -42,9 +42,10 @@ page or an admin screen:
 quarkus.goblin.target.exclude-packages=com.example.status
 ----
 
-Only `exclude-packages` shields a whole request. A resource outside the `include-packages` still calls targeted
+Only `exclude-packages` shields a whole request. A resource or route outside the `include-packages` still calls targeted
 services normally, and `exclude-annotations` only spares the annotated method (see
-<<annotation-based-exclusion,Annotation-based exclusion>>).
+<<annotation-based-exclusion,Annotation-based exclusion>>): a spared `@Route` acting as a pass-through filter leaves
+the resource or route behind it targeted, with the same `HTTP_IN` draw.
 
 == Percentage-based targeting
 

@@ -11,6 +11,9 @@ import io.quarkiverse.goblin.MutableAssaultConfig;
  * execution chain via {@link #order()}. When enabled, the filter applies assaults in ascending {@code order()}
  * sequence; a type that aborts the request should return {@link AssaultOutcome#ABORTED}.
  * <p>
+ * Custom assaults are applied by the JAX-RS filter only: reactive routes ({@code @Route}) apply the built-in assault
+ * types and never call an {@code Assault} bean.
+ * <p>
  * Implementations must be {@code @ApplicationScoped} beans: they are discovered automatically at build time, no
  * manual registration is required.
  */

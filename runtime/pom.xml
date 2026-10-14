@@ -56,6 +56,12 @@
             <artifactId>vertx-web-client</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- HTTP_IN hook for reactive routes: only woven when the application has quarkus-reactive-routes -->
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- DATABASE layer hook: only registered when the application has quarkus-agroal -->
         <dependency>
             <groupId>io.agroal</groupId>
