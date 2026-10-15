@@ -70,9 +70,9 @@ You should see a response time well above your normal baseline.
 
 https://github.com/ErwanLT/quarkus-goblin-demo[quarkus-goblin-demo] -- _The Falling Whale_ -- is a complete Quarkus application to try Goblin on: a medieval tavern whose services are guarded by MicroProfile Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout`, `@CircuitBreaker`, `@RateLimit`), with a database, an outgoing REST client, and an observability stack.
 
-The video below runs every assault on it, from latency to an HTTP `418 I'm a teapot`, with the Dev UI on one side and live requests on the other:
+The video below is the full tour, under real traffic: every assault layer by layer, from latency to an HTTP `418 I'm a teapot`, with the Dev UI on one side and the live tavern on the other, then Grafana, Tempo, Loki, Prometheus and the post-mortem the tavern writes on its own:
 
-video::jp8uL9zsnZU[youtube,width=720,height=405]
+video::owd2kXIM9Z4[youtube,width=720,height=405]
 
 == Explore the documentation
 

@@ -70,6 +70,15 @@ Every assault in action on the demo application, in 76 seconds:
 - [Quarkus Chaos Engineering: Meet Goblin, a Chaos Monkey for Quarkus](https://medium.com/javarevisited/quarkus-chaos-engineering-meet-goblin-a-chaos-monkey-for-quarkus-58360758f679) -- Erwan Le Tutour, *Javarevisited* (September 2026). The story behind the extension, by its author: why Quarkus needed an application-level Chaos Monkey, and how Goblin injects latency, exceptions, HTTP failures and dependency degradation into a running application.
 - [Quarkus Goblin: Learn Chaos Engineering on One REST Call](https://www.the-main-thread.com/p/quarkus-goblin-chaos-engineering) -- Markus Eisele, *The Main Thread* (September 2026). A hands-on tutorial: a quote API calling an inventory service, latency and HTTP 503 injected by Goblin, and SmallRye Fault Tolerance `@Timeout`/`@Retry`/`@Fallback` taking over.
 
+The full tour on the demo application, in three minutes: every assault layer by layer under real traffic, from latency to a `418 I'm a teapot`, then Grafana, Tempo, Loki, Prometheus and the post-mortem the tavern writes on its own:
+
+<a href="https://www.youtube.com/watch?v=owd2kXIM9Z4"><img src="https://img.youtube.com/vi/owd2kXIM9Z4/maxresdefault.jpg" alt="Quarkus Goblin, the full tour: every assault under real traffic, Grafana, Tempo, Loki and the post-mortem" width="480" /></a>
+
+## They talk about it
+
+- [Quarkus Chaos Engineering: Meet Goblin, a Chaos Monkey for Quarkus](https://medium.com/javarevisited/quarkus-chaos-engineering-meet-goblin-a-chaos-monkey-for-quarkus-58360758f679) -- Erwan Le Tutour, *Javarevisited* (September 2026). The story behind the extension, by its author: why Quarkus needed an application-level Chaos Monkey, and how Goblin injects latency, exceptions, HTTP failures and dependency degradation into a running application.
+- [Quarkus Goblin: Learn Chaos Engineering on One REST Call](https://www.the-main-thread.com/p/quarkus-goblin-chaos-engineering) -- Markus Eisele, *The Main Thread* (September 2026). A hands-on tutorial: a quote API calling an inventory service, latency and HTTP 503 injected by Goblin, and SmallRye Fault Tolerance `@Timeout`/`@Retry`/`@Fallback` taking over.
+
 ## Configuration
 
 ```properties
