@@ -61,18 +61,11 @@ Open the Dev UI at `http://localhost:8080/q/dev` and look for the Goblin card.
 
 [quarkus-goblin-demo](https://github.com/ErwanLT/quarkus-goblin-demo) -- *The Falling Whale* -- is a complete Quarkus application to try Goblin on: a medieval tavern whose services are guarded by MicroProfile Fault Tolerance (`@Retry`, `@Fallback`, `@Timeout`, `@CircuitBreaker`, `@RateLimit`), with a database, an outgoing REST client, and an observability stack. It also ships an `AGENTS.md` to let an AI agent run the chaos experiments through Dev MCP.
 
-Every assault in action on the demo application, in 76 seconds:
+The complete guide, recorded on the demo application under real traffic: every assault, the blast radius, the chaos layers, profiles, scenarios and auto-off, the history and the Markdown report, Prometheus, Grafana, Loki and Tempo, driving Goblin from an AI agent through Dev MCP, and the post-mortem the tavern writes on its own:
 
-<a href="https://youtu.be/jp8uL9zsnZU"><img src="https://img.youtube.com/vi/jp8uL9zsnZU/maxresdefault.jpg" alt="Quarkus Goblin: every assault in action, from latency to 418 I'm a teapot" width="480" /></a>
+<a href="https://youtu.be/m1r9_GVlTNs"><img src="https://img.youtube.com/vi/m1r9_GVlTNs/maxresdefault.jpg" alt="Quarkus Goblin: the complete guide to chaos engineering for Quarkus" width="480" /></a>
 
-## They talk about it
-
-- [Quarkus Chaos Engineering: Meet Goblin, a Chaos Monkey for Quarkus](https://medium.com/javarevisited/quarkus-chaos-engineering-meet-goblin-a-chaos-monkey-for-quarkus-58360758f679) -- Erwan Le Tutour, *Javarevisited* (September 2026). The story behind the extension, by its author: why Quarkus needed an application-level Chaos Monkey, and how Goblin injects latency, exceptions, HTTP failures and dependency degradation into a running application.
-- [Quarkus Goblin: Learn Chaos Engineering on One REST Call](https://www.the-main-thread.com/p/quarkus-goblin-chaos-engineering) -- Markus Eisele, *The Main Thread* (September 2026). A hands-on tutorial: a quote API calling an inventory service, latency and HTTP 503 injected by Goblin, and SmallRye Fault Tolerance `@Timeout`/`@Retry`/`@Fallback` taking over.
-
-The full tour on the demo application, in three minutes: every assault layer by layer under real traffic, from latency to a `418 I'm a teapot`, then Grafana, Tempo, Loki, Prometheus and the post-mortem the tavern writes on its own:
-
-<a href="https://www.youtube.com/watch?v=owd2kXIM9Z4"><img src="https://img.youtube.com/vi/owd2kXIM9Z4/maxresdefault.jpg" alt="Quarkus Goblin, the full tour: every assault under real traffic, Grafana, Tempo, Loki and the post-mortem" width="480" /></a>
+Short on time? The [three-minute tour](https://www.youtube.com/watch?v=owd2kXIM9Z4) goes through the same story at a faster pace.
 
 ## They talk about it
 
