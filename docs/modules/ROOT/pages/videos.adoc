@@ -1,0 +1,59 @@
+= Videos
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+Goblin in action, recorded on https://github.com/ErwanLT/quarkus-goblin-demo[quarkus-goblin-demo] -- _The Falling Whale_ -- a medieval tavern whose services are guarded by MicroProfile Fault Tolerance, running under real traffic with Prometheus, Grafana, Loki and Tempo. Every scenario can be replayed on the demo application.
+
+== The complete guide
+
+Every assault, the blast radius, the chaos layers, profiles, scenarios and auto-off, the history and the Markdown report, the observability stack, driving Goblin from an AI agent through Dev MCP, and the post-mortem the tavern writes on its own. About seven minutes.
+
+video::m1r9_GVlTNs[youtube,width=720,height=405]
+
+[horizontal]
+https://youtu.be/m1r9_GVlTNs?t=0[0:00]:: Getting started: the Dev UI and the Chaos Dashboard
+https://youtu.be/m1r9_GVlTNs?t=38[0:38]:: Server-side assaults (see xref:assault-types.adoc[])
+https://youtu.be/m1r9_GVlTNs?t=121[2:01]:: Client-side assaults
+https://youtu.be/m1r9_GVlTNs?t=153[2:33]:: Blast radius (see xref:targeting.adoc[])
+https://youtu.be/m1r9_GVlTNs?t=174[2:54]:: Chaos layers (see xref:how-it-works.adoc#chaos-layers[Chaos layers])
+https://youtu.be/m1r9_GVlTNs?t=234[3:54]:: Profiles, scenarios and auto-off (see xref:profiles.adoc[])
+https://youtu.be/m1r9_GVlTNs?t=285[4:45]:: History and Markdown report (see xref:dev-ui.adoc[])
+https://youtu.be/m1r9_GVlTNs?t=324[5:24]:: Observability: Prometheus, Grafana, Loki, Tempo (see xref:metrics.adoc[] and xref:tracing.adoc[])
+https://youtu.be/m1r9_GVlTNs?t=371[6:11]:: AI agents with Dev MCP (see xref:dev-ui.adoc#driving-goblin-from-an-ai-agent[Driving Goblin from an AI agent])
+https://youtu.be/m1r9_GVlTNs?t=384[6:24]:: Wrapping up: Disable all and the post-mortem
+
+== Testing your API timeouts with latency
+
+A slow dependency is sneakier than a failing one: it answers, just too late. This video injects latency layer by layer and watches what the timeouts really do: a timeout that never sees the latency, a timeout doing its job, the grey zone around the timeout, a service without a timeout, retries that multiply the waiting time, and an average response time that hides the tail. About six minutes.
+
+video::oo5hbIGcWUQ[youtube,width=720,height=405]
+
+[horizontal]
+https://youtu.be/oo5hbIGcWUQ?t=0[0:00]:: Introduction
+https://youtu.be/oo5hbIGcWUQ?t=93[1:33]:: Baseline: normal service
+https://youtu.be/oo5hbIGcWUQ?t=107[1:47]:: The latency the timeout never sees -- latency on the `HTTP_IN` layer
+https://youtu.be/oo5hbIGcWUQ?t=128[2:08]:: The timeout does its job -- latency on the `SERVICE` layer
+https://youtu.be/oo5hbIGcWUQ?t=154[2:34]:: The grey zone
+https://youtu.be/oo5hbIGcWUQ?t=189[3:09]:: No timeout -- latency on the `DATABASE` layer
+https://youtu.be/oo5hbIGcWUQ?t=211[3:31]:: Timeout × retries, and the circuit breaker -- client latency on the `HTTP_OUT` layer
+https://youtu.be/oo5hbIGcWUQ?t=247[4:07]:: The average lies -- latency on part of the requests
+https://youtu.be/oo5hbIGcWUQ?t=290[4:50]:: What your tools see: Grafana, Tempo
+https://youtu.be/oo5hbIGcWUQ?t=324[5:24]:: Key takeaways
+
+The key takeaways:
+
+. Put a timeout on every remote call, and check that it covers the slow part: a fault injected on the inbound HTTP boundary hits the request before the guarded method runs (see xref:how-it-works.adoc#chaos-layers[Chaos layers]).
+. Set it above your normal p99, or it cuts healthy requests.
+. Count the real budget: timeout × (retries + 1) + delays, and keep it below the timeout of your own caller.
+. Add a fallback and a circuit breaker to fail fast when the dependency stops answering.
+. Watch percentiles, not the average.
+
+To replay these scenarios on your own application, see xref:end-to-end-example.adoc[].
+
+== The three-minute tour
+
+The same story as the complete guide, at a faster pace: every assault layer by layer under real traffic, then the observability stack and the post-mortem.
+
+video::owd2kXIM9Z4[youtube,width=720,height=405]
