@@ -1,6 +1,7 @@
 package io.quarkiverse.goblin.it;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -12,9 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import io.agroal.api.AgroalDataSource;
 import io.agroal.api.AgroalDataSourceMetrics;
-import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.*;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 
@@ -71,6 +70,10 @@ public class GoblinDatabaseLayerIntegrationTest {
         assertEquals(1, records.stream()
                 .filter(record -> DEFAULT_DATASOURCE.equals(record.method()) && "exception".equals(record.type()))
                 .count(), "the connection acquisition must be exception-assaulted once, got: " + records);
+        assertTrue(records.stream().filter(record -> DEFAULT_DATASOURCE.equals(record.method()))
+                .allMatch(record -> record.assaultType() == AssaultType.EXCEPTION
+                        && record.source() == AssaultSource.DATABASE),
+                "a database exception is recorded with its type and source, got: " + records);
         assertTrue(records.stream().noneMatch(record -> record.method().startsWith("io.quarkiverse.goblin.it.")),
                 "the DATABASE layer shadows the SERVICE layer for this request, got: " + records);
     }
@@ -91,6 +94,8 @@ public class GoblinDatabaseLayerIntegrationTest {
                 .orElseThrow();
         assertTrue(latency.latencyMs() >= 100 && latency.latencyMs() <= 150,
                 "the recorded latency must match the armed range, got: " + latency.latencyMs());
+        assertEquals(AssaultType.LATENCY, latency.assaultType());
+        assertEquals(AssaultSource.DATABASE, latency.source());
     }
 
     @Test

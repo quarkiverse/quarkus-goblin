@@ -13,4 +13,5 @@
 * xref:end-to-end-example.adoc[End-to-end example]
 * xref:videos.adoc[Videos]
 * xref:json-rpc-reference.adoc[JSON-RPC reference]
+* xref:public-api.adoc[Public API and versioning]
 * xref:release-notes.adoc[Release Notes]

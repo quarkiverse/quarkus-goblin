@@ -1,21 +1,11 @@
 package io.quarkiverse.goblin.deployment;
 
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import org.jboss.jandex.AnnotationInstance;
-import org.jboss.jandex.AnnotationValue;
-import org.jboss.jandex.ClassInfo;
-import org.jboss.jandex.DotName;
-import org.jboss.jandex.IndexView;
-import org.jboss.jandex.MethodInfo;
+import org.jboss.jandex.*;
 
-import io.quarkiverse.goblin.TargetRules;
+import io.quarkiverse.goblin.internal.config.TargetRules;
 
 /**
  * Builds the resilience inventory of an application: where it believes it is protected, read from the MicroProfile

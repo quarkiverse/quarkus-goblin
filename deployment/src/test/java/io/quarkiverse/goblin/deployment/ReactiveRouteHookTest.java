@@ -1,8 +1,6 @@
 package io.quarkiverse.goblin.deployment;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,7 +24,7 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.util.CheckClassAdapter;
 
-import io.quarkiverse.goblin.TargetRules;
+import io.quarkiverse.goblin.internal.config.TargetRules;
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.Capability;
 import io.quarkus.deployment.builditem.BytecodeTransformerBuildItem;
@@ -54,7 +52,7 @@ class ReactiveRouteHookTest {
                         && method.desc.equals("(Lio/vertx/ext/web/RoutingContext;)V"))
                 .findFirst().orElseThrow();
         long invokes = calls(handle, "io/quarkus/vertx/web/runtime/RouteHandler", "invoke");
-        long hooks = calls(handle, "io/quarkiverse/goblin/route/GoblinRouteHook", "beforeInvoke");
+        long hooks = calls(handle, GoblinLayerHooksProcessor.GOBLIN_ROUTE_HOOK, "beforeInvoke");
         // handle() invokes the route on every path (today: request context already active, or activated by it)
         assertTrue(invokes >= 1, "RouteHandler.handle() must still invoke the route");
         assertEquals(invokes, hooks, "every route invocation must be guarded by the hook");
@@ -74,7 +72,7 @@ class ReactiveRouteHookTest {
         new ClassReader(weave(routeHandlerBytes())).accept(node, 0);
         for (MethodNode method : node.methods) {
             if (!method.name.equals("handle")) {
-                assertEquals(0, calls(method, "io/quarkiverse/goblin/route/GoblinRouteHook", "beforeInvoke"),
+                assertEquals(0, calls(method, GoblinLayerHooksProcessor.GOBLIN_ROUTE_HOOK, "beforeInvoke"),
                         method.name);
             }
         }
@@ -102,7 +100,7 @@ class ReactiveRouteHookTest {
         ClassNode node = new ClassNode();
         new ClassReader(weave(original)).accept(node, 0);
         for (MethodNode method : node.methods) {
-            assertEquals(0, calls(method, "io/quarkiverse/goblin/route/GoblinRouteHook", "beforeInvoke"), method.name);
+            assertEquals(0, calls(method, GoblinLayerHooksProcessor.GOBLIN_ROUTE_HOOK, "beforeInvoke"), method.name);
         }
     }
 

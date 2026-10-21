@@ -9,8 +9,11 @@ import jakarta.enterprise.inject.spi.CDI;
 
 import org.jboss.logging.Logger;
 
-import io.quarkiverse.goblin.assault.ExceptionAssault;
-import io.quarkiverse.goblin.assault.LatencySupport;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
+import io.quarkiverse.goblin.internal.ChaosRequestContext;
+import io.quarkiverse.goblin.internal.MutableAssaultConfigImpl;
+import io.quarkiverse.goblin.internal.assault.ExceptionAssault;
+import io.quarkiverse.goblin.internal.assault.LatencySupport;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import io.vertx.ext.web.client.HttpRequest;
@@ -33,7 +36,7 @@ import io.vertx.ext.web.client.impl.WebClientInternal;
  * WebClient client = GoblinWebClient.enable(WebClient.create(vertx));
  * }</pre>
  *
- * The interceptor replays the exact same behavior as {@link GoblinChaosClientFilter}: when the client latency assault
+ * The interceptor replays the exact same behavior as the REST Client path: when the client latency assault
  * is enabled a random delay within the configured latency range is applied before the request is dispatched, and when
  * the client exception assault is enabled the configured exception fails the request before it is sent -- the remote
  * service is never reached. Both assaults are recorded in the assault history with a {@code "WebClient"} prefix. A
@@ -59,7 +62,7 @@ public final class GoblinWebClient {
      * Engine override for unit tests only. The production path resolves the engine from CDI on every call, so a dev-mode
      * live reload (new application, new engine) is never served by a stale engine of the previous generation.
      */
-    private static volatile AssaultEngine testEngine;
+    private static volatile AssaultEngineImpl testEngine;
 
     private GoblinWebClient() {
     }
@@ -96,19 +99,19 @@ public final class GoblinWebClient {
             context.next();
             return;
         }
-        AssaultEngine engine = engine();
+        AssaultEngineImpl engine = engine();
         // a call prepared on the thread of a shielded request (an excluded entry point) is left alone
         if (ChaosRequestContext.isShielded() || !engine.shouldAssaultClient()) {
             context.next();
             return;
         }
-        MutableAssaultConfig config = engine.configSnapshot();
+        MutableAssaultConfigImpl config = engine.configSnapshot();
         String methodName = describeCall(context);
         if (config.isClientLatencyEnabled()) {
             long delay = LatencySupport.drawDelay(config);
             LOG.debugf("Goblin: injecting WebClient latency (%s ms) on %s", delay, methodName);
             delayThen(context, delay, () -> {
-                engine.recordAssault(AssaultSource.WEBCLIENT, methodName, "latency", delay);
+                engine.recordAssault(AssaultSource.WEBCLIENT, AssaultType.LATENCY, methodName, "latency", delay);
                 finishWithExceptionIfEnabled(context, config, methodName);
             });
             return;
@@ -127,7 +130,8 @@ public final class GoblinWebClient {
      * @param config the active configuration
      * @param methodName the history identifier of the outgoing call
      */
-    private static void finishWithExceptionIfEnabled(HttpContext<?> context, MutableAssaultConfig config, String methodName) {
+    private static void finishWithExceptionIfEnabled(HttpContext<?> context, MutableAssaultConfigImpl config,
+            String methodName) {
         if (config.isClientExceptionEnabled()) {
             failWithException(context, config, methodName);
         } else {
@@ -143,9 +147,9 @@ public final class GoblinWebClient {
      * @param config the active configuration
      * @param methodName the history identifier of the outgoing call
      */
-    private static void failWithException(HttpContext<?> context, MutableAssaultConfig config, String methodName) {
+    private static void failWithException(HttpContext<?> context, MutableAssaultConfigImpl config, String methodName) {
         LOG.debugf("Goblin: injecting WebClient exception on %s", methodName);
-        engine().recordAssault(AssaultSource.WEBCLIENT, methodName, "exception");
+        engine().recordAssault(AssaultSource.WEBCLIENT, AssaultType.EXCEPTION, methodName, "exception");
         context.fail(ExceptionAssault.createException(config));
     }
 
@@ -231,13 +235,13 @@ public final class GoblinWebClient {
     }
 
     /**
-     * Resolves the {@link AssaultEngine} of the running application from the CDI container.
+     * Resolves the {@link AssaultEngineImpl} of the running application from the CDI container.
      *
      * @return the application's assault engine, never {@code null}
      */
-    private static AssaultEngine engine() {
-        AssaultEngine current = testEngine;
-        return current != null ? current : CDI.current().select(AssaultEngine.class).get();
+    private static AssaultEngineImpl engine() {
+        AssaultEngineImpl current = testEngine;
+        return current != null ? current : CDI.current().select(AssaultEngineImpl.class).get();
     }
 
     /**
@@ -245,7 +249,7 @@ public final class GoblinWebClient {
      *
      * @param testEngine the engine to use, or {@code null} to revert to the CDI lookup
      */
-    static void setEngineForTests(AssaultEngine testEngine) {
+    static void setEngineForTests(AssaultEngineImpl testEngine) {
         GoblinWebClient.testEngine = testEngine;
     }
 }

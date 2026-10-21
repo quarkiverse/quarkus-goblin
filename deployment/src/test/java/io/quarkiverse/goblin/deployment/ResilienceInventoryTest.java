@@ -1,9 +1,6 @@
 package io.quarkiverse.goblin.deployment;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.time.temporal.ChronoUnit;
@@ -21,7 +18,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 import org.jboss.jandex.Index;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.TargetRules;
+import io.quarkiverse.goblin.internal.config.TargetRules;
 import io.smallrye.faulttolerance.api.RateLimit;
 
 class ResilienceInventoryTest {

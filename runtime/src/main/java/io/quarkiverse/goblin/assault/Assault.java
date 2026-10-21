@@ -1,22 +1,32 @@
 package io.quarkiverse.goblin.assault;
 
+import io.quarkiverse.goblin.AssaultConfig;
 import io.quarkiverse.goblin.AssaultType;
-import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.smallrye.common.annotation.Experimental;
 
 /**
  * Contract for a single chaos assault type.
  * <p>
  * Implementations declare the {@link AssaultType} they represent, whether they are enabled for the current
- * {@link MutableAssaultConfig}, the label used in the assault history and Markdown report, and their position in the
+ * {@link AssaultConfig}, the label used in the assault history and Markdown report, and their position in the
  * execution chain via {@link #order()}. When enabled, the filter applies assaults in ascending {@code order()}
  * sequence; a type that aborts the request should return {@link AssaultOutcome#ABORTED}.
  * <p>
  * Custom assaults are applied by the JAX-RS filter only: reactive routes ({@code @Route}) apply the built-in assault
  * types and never call an {@code Assault} bean.
  * <p>
- * Implementations must be {@code @ApplicationScoped} beans: they are discovered automatically at build time, no
- * manual registration is required.
+ * An assault only runs on a request that passes the per-request gate: chaos active, the {@code HTTP_IN} layer armed and
+ * drawn for this request, and at least one built-in server-side assault enabled
+ * ({@link AssaultConfig#hasAnyAssaultEnabled()}). A custom assault does not open the gate on its own: pair it with a
+ * built-in toggle, or let {@link #isEnabled(AssaultConfig)} follow one.
+ * <p>
+ * Implementations are discovered automatically at build time, no manual registration is required. They are
+ * {@code @ApplicationScoped} beans: a class without a scope annotation gets that scope.
+ * <p>
+ * Experimental: custom assaults run on the inbound JAX-RS filter only, so this SPI may change in a minor version when
+ * another layer supports them. The rest of the public API is stable.
  */
+@Experimental("Custom assaults are bound to JAX-RS; the SPI may change once another layer supports them")
 public interface Assault {
 
     /**
@@ -29,10 +39,10 @@ public interface Assault {
     /**
      * Whether this assault should run given the current configuration.
      *
-     * @param config the mutable configuration holding every assault toggle
+     * @param config a read-only snapshot of the configuration for the current request
      * @return {@code true} to run this assault on eligible requests
      */
-    boolean isEnabled(MutableAssaultConfig config);
+    boolean isEnabled(AssaultConfig config);
 
     /**
      * The label recorded in the assault history and the exported Markdown report.

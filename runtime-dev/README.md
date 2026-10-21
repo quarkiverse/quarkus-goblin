@@ -38,7 +38,7 @@ Every **public method** becomes a JSON-RPC endpoint callable from the front-end 
 
 Setter methods may return a `warning` field carrying human-readable corrections when the request could not be applied
 verbatim (e.g. an inverted latency range is swapped, an invalid status code falls back to 503). Mutations go through
-`MutableAssaultConfig`, whose setters publish the change and notify the change listener, so it is persisted to
+`MutableAssaultConfigImpl`, whose setters publish the change and notify the change listener, so it is persisted to
 `.goblin-state.json` and survives a restart automatically -- as long as the field is serialized by
 `GoblinStatePersistence`.
 
@@ -52,7 +52,7 @@ verbatim (e.g. an inverted latency range is swapped, an invalid status code fall
 3. Also expose the new toggle in `getStatus`, `getConfig` and `applyConfig`, and switch it off in `disableAll`.
 4. Persistence is not automatic for a new field: every setter notifies the change listener, but the field must also be
    written and read by `GoblinStatePersistence` (and have a place in `AssaultSettings`, `resetToDefaults()` and
-   `MutableAssaultConfig.fromConfig(...)`, see [runtime/README.md](../runtime/README.md#adding-a-new-assault)).
+   `MutableAssaultConfigImpl.fromConfig(...)`, see [runtime/README.md](../runtime/README.md#adding-a-new-assault)).
 
 ## Conventions
 

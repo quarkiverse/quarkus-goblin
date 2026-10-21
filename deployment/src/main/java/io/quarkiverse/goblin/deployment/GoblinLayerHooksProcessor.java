@@ -6,11 +6,7 @@ import java.util.List;
 import jakarta.enterprise.inject.Default;
 import jakarta.inject.Singleton;
 
-import org.jboss.jandex.AnnotationInstance;
-import org.jboss.jandex.AnnotationTransformation;
-import org.jboss.jandex.ClassInfo;
-import org.jboss.jandex.DotName;
-import org.jboss.jandex.IndexView;
+import org.jboss.jandex.*;
 import org.jboss.logging.Logger;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Label;
@@ -18,13 +14,14 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.GoblinLayerHooks;
-import io.quarkiverse.goblin.GoblinLayerHooksCreator;
-import io.quarkiverse.goblin.GoblinTargetingConfig;
-import io.quarkiverse.goblin.TargetRules;
-import io.quarkiverse.goblin.database.GoblinAgroalPoolInterceptorCreator;
-import io.quarkiverse.goblin.messaging.GoblinMessagingAssault;
-import io.quarkiverse.goblin.messaging.GoblinMessagingInterceptor;
+import io.quarkiverse.goblin.internal.GoblinLayerHooks;
+import io.quarkiverse.goblin.internal.GoblinLayerHooksCreator;
+import io.quarkiverse.goblin.internal.config.GoblinTargetingConfig;
+import io.quarkiverse.goblin.internal.config.TargetRules;
+import io.quarkiverse.goblin.internal.database.GoblinAgroalPoolInterceptorCreator;
+import io.quarkiverse.goblin.internal.messaging.GoblinMessagingAssault;
+import io.quarkiverse.goblin.internal.messaging.GoblinMessagingInterceptor;
+import io.quarkiverse.goblin.internal.route.GoblinRouteHook;
 import io.quarkus.agroal.spi.JdbcDataSourceBuildItem;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
@@ -63,11 +60,11 @@ public class GoblinLayerHooksProcessor {
     static final String ROUTE_HANDLER_HANDLE = "handle";
     private static final String ROUTE_HANDLER_INVOKE = "invoke";
     private static final String ROUTING_CONTEXT_DESCRIPTOR = "(Lio/vertx/ext/web/RoutingContext;)V";
-    private static final String GOBLIN_ROUTE_HOOK = "io/quarkiverse/goblin/route/GoblinRouteHook";
+    static final String GOBLIN_ROUTE_HOOK = GoblinRouteHook.class.getName().replace('.', '/');
 
     private static final DotName AGROAL_POOL_INTERCEPTOR = DotName.createSimple("io.agroal.api.AgroalPoolInterceptor");
     private static final DotName GOBLIN_AGROAL_POOL_INTERCEPTOR = DotName
-            .createSimple("io.quarkiverse.goblin.database.GoblinAgroalPoolInterceptor");
+            .createSimple("io.quarkiverse.goblin.internal.database.GoblinAgroalPoolInterceptor");
     private static final DotName AGROAL_DATASOURCE_QUALIFIER = DotName.createSimple("io.quarkus.agroal.DataSource");
     private static final DotName INCOMING = DotName
             .createSimple("org.eclipse.microprofile.reactive.messaging.Incoming");

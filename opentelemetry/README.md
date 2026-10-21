@@ -36,8 +36,8 @@ subscribe separately; the engine notifies every observer without breaking the as
 
 ## Adding a new attribute
 
-Derive it from the `AssaultRecord` (method, type, latencyMs, timestamp, configSnapshot) or, for injected values that
-the record does not carry (status code, exception class), from the engine's `MutableAssaultConfig`. Keep the
+Derive it from the `AssaultRecord` (method, type, assaultType, source, latencyMs, timestamp, configSnapshot) or, for injected values that
+the record does not carry (status code, exception class), from the engine's configuration snapshot (`AssaultConfig`). Keep the
 `goblin.assault.*` prefix and the exact value names documented above.
 
 ## Testing

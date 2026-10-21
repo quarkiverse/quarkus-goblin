@@ -1,6 +1,7 @@
 package io.quarkiverse.goblin.it;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -11,15 +12,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.*;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 
 /**
  * Exercises the service-layer chaos assaults (issue #54) against the single {@link SampleService} bean: latency and
- * exception injected by {@link io.quarkiverse.goblin.service.GoblinServiceInterceptor} at the business layer, and the
+ * exception injected by {@link io.quarkiverse.goblin.internal.service.GoblinServiceInterceptor} at the business layer, and the
  * proof that the interceptor runs <em>inside</em> MicroProfile Fault Tolerance so {@code @Retry}, {@code @Fallback} and
  * {@code @Timeout} all observe Goblin faults.
  */
@@ -106,6 +105,8 @@ public class GoblinServiceLayerIntegrationTest {
                 .orElseThrow();
         assertTrue(latencyRecord.latencyMs() >= 100 && latencyRecord.latencyMs() <= 150,
                 "the recorded service latency must match the armed 100-150 ms range, got: " + latencyRecord.latencyMs());
+        assertEquals(AssaultType.LATENCY, latencyRecord.assaultType());
+        assertEquals(AssaultSource.SERVICE, latencyRecord.source());
         assertTrue(records.stream().noneMatch(record -> record.method().contains("SampleResource")),
                 "the JAX-RS resource must never be service-assaulted, got: " + records);
     }

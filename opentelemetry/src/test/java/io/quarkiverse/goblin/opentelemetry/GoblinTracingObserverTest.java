@@ -20,7 +20,9 @@ import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultSource;
-import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.AssaultType;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
+import io.quarkiverse.goblin.internal.MutableAssaultConfigImpl;
 
 class GoblinTracingObserverTest {
 
@@ -29,7 +31,7 @@ class GoblinTracingObserverTest {
             .addSpanProcessor(SimpleSpanProcessor.create(exporter))
             .build();
     private final Tracer tracer = tracerProvider.get("goblin-test");
-    private final AssaultEngine engine = new AssaultEngine();
+    private final AssaultEngineImpl engine = new AssaultEngineImpl();
     private final GoblinTracingObserver observer = new GoblinTracingObserver(tracer, engine);
 
     @AfterEach
@@ -108,7 +110,7 @@ class GoblinTracingObserverTest {
 
     @Test
     void exceptionAssaultValueAttributesMarkError() {
-        MutableAssaultConfig config = new MutableAssaultConfig();
+        MutableAssaultConfigImpl config = new MutableAssaultConfigImpl();
         config.setExceptionType("java.lang.IllegalStateException");
         Span span = tracer.spanBuilder(GoblinTracingObserver.SPAN_NAME).startSpan();
         GoblinTracingObserver.applyValueAttributes(span, record("SampleResource.hello", "exception", 0), config);
@@ -121,7 +123,7 @@ class GoblinTracingObserverTest {
 
     @Test
     void httpStatusValueAttributeReflectsConfig() {
-        MutableAssaultConfig config = new MutableAssaultConfig();
+        MutableAssaultConfigImpl config = new MutableAssaultConfigImpl();
         config.setHttpStatusCode(503);
         Span span = tracer.spanBuilder(GoblinTracingObserver.SPAN_NAME).startSpan();
         GoblinTracingObserver.applyValueAttributes(span, record("SampleResource.hello", "http-status", 0), config);
@@ -190,7 +192,8 @@ class GoblinTracingObserverTest {
     }
 
     private static AssaultEngine.AssaultRecord record(AssaultSource source, String method, String type, long latencyMs) {
-        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source);
+        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source,
+                assaultType(type));
     }
 
     private static AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {
@@ -199,6 +202,12 @@ class GoblinTracingObserverTest {
 
     private static AssaultEngine.AssaultRecord record(String method, String type, long latencyMs, long timestamp,
             String configSnapshot) {
-        return new AssaultEngine.AssaultRecord(method, type, timestamp, latencyMs, configSnapshot);
+        return new AssaultEngine.AssaultRecord(method, type, timestamp, latencyMs, configSnapshot, AssaultSource.SERVER,
+                assaultType(type));
+    }
+
+    /** The assault type of a built-in label without detail, e.g. {@code "http-status"}. */
+    private static AssaultType assaultType(String label) {
+        return AssaultType.valueOf(label.toUpperCase().replace('-', '_'));
     }
 }

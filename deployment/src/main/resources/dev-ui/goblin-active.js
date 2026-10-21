@@ -1,4 +1,4 @@
-import {LitElement, html, css} from 'lit';
+import {css, html, LitElement} from 'lit';
 
 // The still frame replaces the animation for reduced motion.
 const GOBLIN_ANIMATED = new URL('goblin-active.gif', import.meta.url).href;

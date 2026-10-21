@@ -1,11 +1,6 @@
 package io.quarkiverse.goblin.dev;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -13,19 +8,15 @@ import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
-import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.AssaultProfile;
-import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.DeactivationReason;
-import io.quarkiverse.goblin.Enums;
-import io.quarkiverse.goblin.GoblinScenarios;
-import io.quarkiverse.goblin.GoblinScenarios.LoadedScenario;
-import io.quarkiverse.goblin.GoblinScenarios.Scenario;
-import io.quarkiverse.goblin.GoblinScenarios.ScenarioException;
-import io.quarkiverse.goblin.MarkdownReportGenerator;
-import io.quarkiverse.goblin.MutableAssaultConfig;
-import io.quarkiverse.goblin.ResponseBodyMode;
-import io.quarkiverse.goblin.ResponseHeaderAction;
+import io.quarkiverse.goblin.*;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
+import io.quarkiverse.goblin.internal.Enums;
+import io.quarkiverse.goblin.internal.MarkdownReportGenerator;
+import io.quarkiverse.goblin.internal.MutableAssaultConfigImpl;
+import io.quarkiverse.goblin.internal.state.GoblinScenarios;
+import io.quarkiverse.goblin.internal.state.GoblinScenarios.LoadedScenario;
+import io.quarkiverse.goblin.internal.state.GoblinScenarios.Scenario;
+import io.quarkiverse.goblin.internal.state.GoblinScenarios.ScenarioException;
 import io.quarkus.runtime.annotations.DevMCPEnableByDefault;
 import io.quarkus.runtime.annotations.JsonRpcDescription;
 import io.vertx.core.json.JsonArray;
@@ -36,11 +27,11 @@ public class GoblinJsonRPCService {
 
     private static final Logger LOG = Logger.getLogger(GoblinJsonRPCService.class);
 
-    /** Longest auto-off delay accepted from the Dev UI, matching {@link AssaultEngine#MAX_AUTO_OFF_MILLIS}. */
+    /** Longest auto-off delay accepted from the Dev UI, matching {@link AssaultEngineImpl#MAX_AUTO_OFF_MILLIS}. */
     static final int MAX_AUTO_OFF_MINUTES = 24 * 60;
 
     @Inject
-    AssaultEngine engine;
+    AssaultEngineImpl engine;
 
     /**
      * Returns the current assault engine status for the Dev UI.
@@ -92,7 +83,7 @@ public class GoblinJsonRPCService {
             + "MCP resources quarkus-goblin_agentPlaybook (safety rules, how to observe and conclude) and "
             + "quarkus-goblin_resilienceInventory (the methods this application guards)." + OPT_IN_TOOLS)
     public JsonObject getStatus() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         // isActive() first: it applies an elapsed auto-off on the spot, so the reason is only the current one afterwards
         boolean active = engine.isActive();
         DeactivationReason inactiveReason = engine.inactiveReason();
@@ -130,7 +121,7 @@ public class GoblinJsonRPCService {
             + "chaos layers, the target level, and 'exceptionPresets'. " + LEVEL_AND_LAYERS + " Read-only."
             + OPT_IN_TOOLS)
     public JsonObject getConfig() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg == null) {
             return new JsonObject();
         }
@@ -155,7 +146,7 @@ public class GoblinJsonRPCService {
     public JsonObject setProfile(
             @JsonRpcDescription("Profile name: NONE, SLOW_FAILURE, INTERMITTENT or TIMEOUT (case-insensitive). "
                     + "A blank value resets to NONE.") String profile) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg == null) {
             LOG.warnf("Goblin: cannot switch profile '%s', engine is not initialised", profile);
             return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
@@ -178,7 +169,7 @@ public class GoblinJsonRPCService {
      * @param cfg the current mutable assault configuration
      * @return a JSON representation including profile, toggles, and per-assault parameters
      */
-    private JsonObject configJson(MutableAssaultConfig cfg) {
+    private JsonObject configJson(MutableAssaultConfigImpl cfg) {
         JsonObject latency = new JsonObject()
                 .put("minMilliseconds", cfg.getLatencyMinMs())
                 .put("maxMilliseconds", cfg.getLatencyMaxMs());
@@ -213,7 +204,7 @@ public class GoblinJsonRPCService {
                 .put("body", body)
                 .put("headers", headersJson(cfg))
                 .put("level", cfg.getTargetLevel())
-                .put("exceptionPresets", MutableAssaultConfig.EXCEPTION_PRESETS);
+                .put("exceptionPresets", MutableAssaultConfigImpl.EXCEPTION_PRESETS);
     }
 
     /**
@@ -223,7 +214,7 @@ public class GoblinJsonRPCService {
      * @param cfg the current mutable assault configuration
      * @return the header rules keyed by header name
      */
-    private static JsonObject headersJson(MutableAssaultConfig cfg) {
+    private static JsonObject headersJson(MutableAssaultConfigImpl cfg) {
         JsonObject result = new JsonObject();
         cfg.getResponseHeaders().forEach(
                 (name, rule) -> result.put(name,
@@ -321,7 +312,7 @@ public class GoblinJsonRPCService {
      * @param active the effective chaos active flag after the change
      * @return the full configuration plus {@code ok} and {@code active} flags
      */
-    private JsonObject activeResult(MutableAssaultConfig cfg, boolean active) {
+    private JsonObject activeResult(MutableAssaultConfigImpl cfg, boolean active) {
         return (cfg != null ? configJson(cfg) : new JsonObject())
                 .put("ok", true)
                 .put("active", active);
@@ -331,7 +322,7 @@ public class GoblinJsonRPCService {
             + "arms or disarms the assault; setLatencyRange changes its parameters. Returns the full configuration "
             + "plus ok.")
     public JsonObject toggleLatency() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setLatencyEnabled(!cfg.isLatencyEnabled());
         LOG.warnf("Goblin latency %s via Dev UI", cfg.isLatencyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -341,7 +332,7 @@ public class GoblinJsonRPCService {
             + "instead of returning. This tool only arms or disarms the assault; setExceptionConfig changes its "
             + "parameters. Returns the full configuration plus ok.")
     public JsonObject toggleException() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setExceptionEnabled(!cfg.isExceptionEnabled());
         LOG.warnf("Goblin exception %s via Dev UI", cfg.isExceptionEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -352,7 +343,7 @@ public class GoblinJsonRPCService {
             + "This tool only arms or disarms the assault; setHttpStatusConfig changes its parameters. Returns the "
             + "full configuration plus ok.")
     public JsonObject toggleHttpStatus() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setHttpStatusEnabled(!cfg.isHttpStatusEnabled());
         LOG.warnf("Goblin HTTP status %s via Dev UI", cfg.isHttpStatusEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -364,7 +355,7 @@ public class GoblinJsonRPCService {
             + "latency or exception assaults on the DATABASE or MESSAGING layers for that. Returns the full "
             + "configuration plus ok.")
     public JsonObject toggleDependencyDegradation() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setDependencyDegradationEnabled(!cfg.isDependencyDegradationEnabled());
         LOG.warnf("Goblin dependency degradation %s via Dev UI", cfg.isDependencyDegradationEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -378,7 +369,7 @@ public class GoblinJsonRPCService {
     @JsonRpcDescription("Flip the client-side latency assault, which adds extra delay to the outgoing REST Client and "
             + "Vert.x WebClient calls. Returns the full configuration plus ok.")
     public JsonObject toggleClientLatency() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setClientLatencyEnabled(!cfg.isClientLatencyEnabled());
         LOG.warnf("Goblin client latency %s via Dev UI", cfg.isClientLatencyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -392,7 +383,7 @@ public class GoblinJsonRPCService {
     @JsonRpcDescription("Flip the client-side exception assault, which makes the outgoing REST Client and Vert.x "
             + "WebClient calls throw before being dispatched. Returns the full configuration plus ok.")
     public JsonObject toggleClientException() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setClientExceptionEnabled(!cfg.isClientExceptionEnabled());
         LOG.warnf("Goblin client exception %s via Dev UI", cfg.isClientExceptionEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -407,7 +398,7 @@ public class GoblinJsonRPCService {
             + "endpoints. This tool only arms or disarms the assault; setResponseBodyConfig changes its mode and size. "
             + "Returns the full configuration plus ok.")
     public JsonObject toggleResponseBody() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setResponseBodyEnabled(!cfg.isResponseBodyEnabled());
         LOG.warnf("Goblin response body %s via Dev UI", cfg.isResponseBodyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -423,7 +414,7 @@ public class GoblinJsonRPCService {
             + "headers of emitted responses. This tool only arms or disarms the assault; setResponseHeaderInfo and "
             + "removeResponseHeader change its rules. Returns the full configuration plus ok.")
     public JsonObject toggleResponseHeader() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setResponseHeaderEnabled(!cfg.isResponseHeaderEnabled());
         LOG.warnf("Goblin response header %s via Dev UI", cfg.isResponseHeaderEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
@@ -450,7 +441,7 @@ public class GoblinJsonRPCService {
                     + "ADD and OVERRIDE labels are accepted and mapped to SET.") String action,
             @JsonRpcDescription("Header value written by SET. Must not contain CR, LF or control characters. "
                     + "REMOVE ignores it.") String value) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         ResponseHeaderAction parsed = parseHeaderAction(action);
         if (parsed == null) {
             LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s' value='%s': unknown action", name,
@@ -463,7 +454,7 @@ public class GoblinJsonRPCService {
             return new JsonObject().put("ok", false).put("error", "Response header name must not be blank");
         }
         String safeValue = value != null ? value : "";
-        if (!MutableAssaultConfig.isValidResponseHeaderValue(safeValue)) {
+        if (!MutableAssaultConfigImpl.isValidResponseHeaderValue(safeValue)) {
             LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s' value contains CR, LF or control "
                     + "characters", name, action);
             return new JsonObject().put("ok", false)
@@ -494,7 +485,7 @@ public class GoblinJsonRPCService {
             + "Returns the full configuration plus ok.")
     public JsonObject removeResponseHeader(
             @JsonRpcDescription("Name of the header rule to drop; must not be blank.") String name) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (name == null || name.isBlank()) {
             return new JsonObject().put("ok", false).put("error", "Response header name must not be blank");
         }
@@ -515,7 +506,7 @@ public class GoblinJsonRPCService {
         return layers;
     }
 
-    private static JsonArray layersJson(MutableAssaultConfig cfg) {
+    private static JsonArray layersJson(MutableAssaultConfigImpl cfg) {
         JsonArray layers = new JsonArray();
         cfg.getLayers().forEach(layer -> layers.add(layer.name()));
         return layers;
@@ -530,7 +521,7 @@ public class GoblinJsonRPCService {
      * @return the matching {@link ResponseHeaderAction}, or {@code null} when blank or unknown
      */
     private static ResponseHeaderAction parseHeaderAction(String action) {
-        return ResponseHeaderAction.parse(action).orElse(null);
+        return Enums.parseHeaderAction(action).orElse(null);
     }
 
     /**
@@ -555,7 +546,7 @@ public class GoblinJsonRPCService {
             @JsonRpcDescription("Target body size as a percentage of the original: 0-100 for TRUNCATE (the share of "
                     + "the body kept), 101-1000 for INFLATE (the padded size). A value outside the range of the chosen "
                     + "mode is clamped into it.") int percentage) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         ResponseBodyMode parsed = parseBodyMode(mode);
         if (parsed == null) {
             return new JsonObject().put("ok", false)
@@ -592,7 +583,7 @@ public class GoblinJsonRPCService {
     public JsonObject setLatencyRange(
             @JsonRpcDescription("Minimum injected delay, in milliseconds.") long minMs,
             @JsonRpcDescription("Maximum injected delay, in milliseconds.") long maxMs) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         long prevMin = cfg.getLatencyMinMs();
         long prevMax = cfg.getLatencyMaxMs();
         List<String> issues = cfg.setLatencyRange(minMs, maxMs);
@@ -614,7 +605,7 @@ public class GoblinJsonRPCService {
             @JsonRpcDescription("Exception class name; must be loadable, extend RuntimeException and expose a "
                     + "single-String constructor.") String type,
             @JsonRpcDescription("Message carried by the thrown exception.") String message) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         String prevType = cfg.getExceptionType();
         List<String> issues = cfg.setExceptionType(type);
         if (!prevType.equals(cfg.getExceptionType())) {
@@ -636,7 +627,7 @@ public class GoblinJsonRPCService {
             @JsonRpcDescription("HTTP status code of the aborted requests, 100-599; a value outside that range is "
                     + "replaced by 503.") int code,
             @JsonRpcDescription("Response body returned together with the status code.") String message) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         int prevCode = cfg.getHttpStatusCode();
         List<String> issues = cfg.setHttpStatusCode(code);
         cfg.setHttpStatusMessage(message);
@@ -654,7 +645,7 @@ public class GoblinJsonRPCService {
     public JsonObject setTargetLevel(
             @JsonRpcDescription("Percentage of eligible requests to affect, 0-100; 100 affects every eligible "
                     + "request.") int level) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         int previous = cfg.getTargetLevel();
         List<String> issues = cfg.setTargetLevel(level);
         LOG.warnf("Goblin target level changed: %d%% -> %d%%", previous, cfg.getTargetLevel());
@@ -702,7 +693,7 @@ public class GoblinJsonRPCService {
             + "armed. Returns ok, 'active' set to false, and the full configuration.")
     public JsonObject disableAll() {
         engine.setActive(false);
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg != null) {
             cfg.setLatencyEnabled(false);
             cfg.setExceptionEnabled(false);
@@ -731,7 +722,7 @@ public class GoblinJsonRPCService {
             + "level 100. The master active flag and any pending auto-off are left unchanged, so this can still leave "
             + "chaos armed. Returns the full configuration plus ok and any clamping warning.")
     public JsonObject resetDefaults() {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg == null) {
             return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
         }
@@ -771,7 +762,7 @@ public class GoblinJsonRPCService {
     public JsonObject applyConfig(
             @JsonRpcDescription("Partial configuration object. The accepted keys and their values are listed in this "
                     + "tool's description; an omitted key keeps its current value.") Map<String, Object> config) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg == null) {
             return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
         }
@@ -779,7 +770,7 @@ public class GoblinJsonRPCService {
             return new JsonObject().put("ok", false).put("error", "Missing configuration payload");
         }
         // staged on a working copy and published at once: an invalid payload never leaves a half-applied configuration
-        MutableAssaultConfig staged = cfg.workingCopy();
+        MutableAssaultConfigImpl staged = cfg.workingCopy();
         List<String> issues;
         try {
             issues = applyConfigTo(staged, toJsonObject(config));
@@ -829,7 +820,7 @@ public class GoblinJsonRPCService {
         return value;
     }
 
-    private static List<String> applyConfigTo(MutableAssaultConfig cfg, JsonObject config) {
+    private static List<String> applyConfigTo(MutableAssaultConfigImpl cfg, JsonObject config) {
         List<String> issues = new ArrayList<>();
         String profile = config.getString("profile");
         if (profile != null) {
@@ -918,7 +909,7 @@ public class GoblinJsonRPCService {
      * @param raw the {@code layers} value, or {@code null} when absent
      * @param issues collecting validation warnings
      */
-    private static void applyConfigLayers(MutableAssaultConfig cfg, Object raw, List<String> issues) {
+    private static void applyConfigLayers(MutableAssaultConfigImpl cfg, Object raw, List<String> issues) {
         if (raw == null) {
             return;
         }
@@ -989,7 +980,7 @@ public class GoblinJsonRPCService {
         return Optional.empty();
     }
 
-    private static void applyConfigHeaders(MutableAssaultConfig cfg, JsonObject headers, List<String> issues) {
+    private static void applyConfigHeaders(MutableAssaultConfigImpl cfg, JsonObject headers, List<String> issues) {
         cfg.getResponseHeaders().keySet().forEach(cfg::removeResponseHeader);
         for (Map.Entry<String, Object> entry : headers) {
             String name = entry.getKey();
@@ -1013,7 +1004,7 @@ public class GoblinJsonRPCService {
             }
             String value = rule.getString("value");
             String safeValue = value != null ? value : "";
-            if (!MutableAssaultConfig.isValidResponseHeaderValue(safeValue)) {
+            if (!MutableAssaultConfigImpl.isValidResponseHeaderValue(safeValue)) {
                 issues.add("Response header '" + name
                         + "' value contains characters that cannot be emitted in an HTTP header");
                 LOG.warnf("Goblin: skipping response header rule '%s' from applyConfig: value contains CR, LF or control "
@@ -1119,7 +1110,7 @@ public class GoblinJsonRPCService {
             @JsonRpcDescription("Scenario name: 1 to 64 letters, digits, spaces, '-' or '_', starting with a letter or "
                     + "a digit, e.g. 'slow kitchen'.") String name,
             @JsonRpcDescription("true to replace an existing scenario of the same name, false to refuse it.") boolean overwrite) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg == null) {
             return notInitialised();
         }
@@ -1139,7 +1130,7 @@ public class GoblinJsonRPCService {
             + "'code': NOT_FOUND, INVALID_NAME, STORAGE when the file cannot be read, or NOT_INITIALISED.")
     public JsonObject loadScenario(
             @JsonRpcDescription("Name of a saved scenario, as returned by listScenarios.") String name) {
-        MutableAssaultConfig cfg = engine.getMutableConfig();
+        MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         if (cfg == null) {
             return notInitialised();
         }

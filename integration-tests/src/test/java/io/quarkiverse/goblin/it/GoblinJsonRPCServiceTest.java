@@ -11,6 +11,7 @@ import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultType;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.dev.GoblinJsonRPCService;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
 import io.quarkus.test.junit.QuarkusTest;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -22,7 +23,7 @@ public class GoblinJsonRPCServiceTest {
     GoblinJsonRPCService jsonRpc;
 
     @Inject
-    AssaultEngine engine;
+    AssaultEngineImpl engine;
 
     @BeforeEach
     void resetState() {
@@ -400,7 +401,7 @@ public class GoblinJsonRPCServiceTest {
 
     @Test
     public void testClearHistory() {
-        engine.recordAssault("test", "latency");
+        engine.recordAssault(AssaultType.LATENCY, "test", "latency");
         assertFalse(engine.getHistory().isEmpty());
 
         JsonObject result = jsonRpc.clearHistory();
@@ -442,8 +443,8 @@ public class GoblinJsonRPCServiceTest {
     @Test
     public void testGetCountersAndReset() {
         engine.resetCounters();
-        engine.recordAssault("SampleResource.hello", "latency", 12);
-        engine.recordAssault("SampleResource.hello", "response-body-truncate");
+        engine.recordAssault(AssaultType.LATENCY, "SampleResource.hello", "latency", 12);
+        engine.recordAssault(AssaultType.RESPONSE_BODY, "SampleResource.hello", "response-body-truncate");
 
         JsonObject counters = jsonRpc.getCounters();
         assertEquals(2, counters.getInteger("total"));
@@ -464,13 +465,13 @@ public class GoblinJsonRPCServiceTest {
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(500);
 
-        engine.recordAssault("SampleResource.hello", "latency", 423);
+        engine.recordAssault(AssaultType.LATENCY, "SampleResource.hello", "latency", 423);
         cfg.setLatencyMinMs(1000);
         cfg.setLatencyMaxMs(5000);
-        engine.recordAssault("SampleResource.hello", "latency", 3922);
+        engine.recordAssault(AssaultType.LATENCY, "SampleResource.hello", "latency", 3922);
         cfg.setHttpStatusEnabled(true);
         cfg.setHttpStatusCode(503);
-        engine.recordAssault("SampleResource.slow", "http-status");
+        engine.recordAssault(AssaultType.HTTP_STATUS, "SampleResource.slow", "http-status");
 
         JsonObject result = jsonRpc.getMarkdownReport();
         assertNotNull(result);
@@ -502,18 +503,19 @@ public class GoblinJsonRPCServiceTest {
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(500);
 
-        engine.recordAssault("SampleResource.hello", "latency", 250);
+        engine.recordAssault(AssaultType.LATENCY, "SampleResource.hello", "latency", 250);
         AssaultEngine.AssaultRecord record = engine.getHistory().getFirst();
 
         assertEquals(250, record.latencyMs());
         assertEquals("latency", record.type());
+        assertEquals(AssaultType.LATENCY, record.assaultType());
         assertEquals("SampleResource.hello", record.method());
         assertTrue(record.configSnapshot().contains("latency enabled (100 - 500 ms)"));
         assertTrue(record.configSnapshot().contains("exception enabled"));
 
         cfg.setLatencyEnabled(false);
         cfg.setExceptionEnabled(false);
-        engine.recordAssault("SampleResource.hello", "http-status");
+        engine.recordAssault(AssaultType.HTTP_STATUS, "SampleResource.hello", "http-status");
         AssaultEngine.AssaultRecord second = engine.getHistory().get(1);
         assertEquals("no assault enabled", second.configSnapshot());
     }
