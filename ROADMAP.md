@@ -109,23 +109,20 @@ Current status: **preview** (v0.5.0 released, v1.0.0 in development)
   Extend Goblin beyond JAX-RS to cover Vert.x reactive routes (`@Route`-annotated methods). Use Vert.x route handlers for injection. The closest thing to the core of the project here: the same role as JAX-RS on the inbound HTTP side.
   Delivered as a hook woven into the generated `@Route` handler: latency (Vert.x timer on the event loop), exception, HTTP status, dependency degradation, response body and response header.
 
-- [ ] **GraalVM native build: non-regression only** ([#65](https://github.com/quarkiverse/quarkus-goblin/issues/65))
-  Goblin is a dev-mode tool, so it does not have to *work* in native mode. What matters is that the extension does not break a native build when it sits in the dependencies. One non-regression test compiling a native application with the extension present, and nothing more.
-
 ---
 
 ## v1.0.0 -- Maturity
 
-- [ ] **Stable public API**
+- [ ] **Stable public API** ([#85](https://github.com/quarkiverse/quarkus-goblin/issues/85))
   Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultEngine.AssaultRecord`, the `Assault` and `AssaultObserver` SPIs), which is currently preview and may change between minor versions. Document the API contract and versioning policy for third-party extensions.
 
-- [ ] **Production-profile safeguard**
+- [ ] **Production-profile safeguard** ([#86](https://github.com/quarkiverse/quarkus-goblin/issues/86))
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.
 
-- [ ] **Structured assault logs**
+- [ ] **Structured assault logs** ([#87](https://github.com/quarkiverse/quarkus-goblin/issues/87))
   Replace the plain-text `WARN` logs with structured events whoever runs the experiment can read -- human or agent: timestamp, method, assault type, injected value, configuration snapshot. The goal is a log you can reason about during an experiment, not log aggregation for compliance, which is a production concern Goblin does not serve.
 
-- [ ] **Advanced scenario-based documentation**
+- [ ] **Advanced scenario-based documentation** ([#88](https://github.com/quarkiverse/quarkus-goblin/issues/88))
   Write dedicated guides for common resilience testing patterns: testing circuit breakers with `@CircuitBreaker`, testing retries with `@Retry`, testing fallbacks with `@Fallback`, and establishing performance baselines.
 
 ---
@@ -136,6 +133,9 @@ Current status: **preview** (v0.5.0 released, v1.0.0 in development)
 
 - [ ] **gRPC support** ([#62](https://github.com/quarkiverse/quarkus-goblin/issues/62))
   Implement gRPC `ServerInterceptor` and `ClientInterceptor` to inject latency and exceptions on gRPC calls. Cover both unary and streaming RPCs.
+
+- [ ] **GraalVM native build: non-regression only** ([#65](https://github.com/quarkiverse/quarkus-goblin/issues/65))
+  Goblin is a dev-mode tool, so it does not have to *work* in native mode. What matters is that the extension does not break a native build when it sits in the dependencies. One non-regression test compiling a native application with the extension present, and nothing more.
 
 - [ ] **GraphQL support** ([#63](https://github.com/quarkiverse/quarkus-goblin/issues/63))
   Instrument Quarkus GraphQL `DataFetcher`s to inject failures on specific GraphQL fields. Allow targeting by field name or parent type.
