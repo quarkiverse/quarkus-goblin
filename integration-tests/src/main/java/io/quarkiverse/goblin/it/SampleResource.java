@@ -122,6 +122,18 @@ public class SampleResource {
     }
 
     @GET
+    @Path("/service/recovering")
+    public String serviceRecovering() {
+        return sampleService.recovering();
+    }
+
+    @GET
+    @Path("/service/remote")
+    public String serviceRemote() {
+        return sampleService.remoteHello();
+    }
+
+    @GET
     @Path("/service/nested")
     public String serviceNested() {
         return sampleService.nested();

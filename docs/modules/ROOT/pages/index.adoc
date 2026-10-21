@@ -91,6 +91,7 @@ Short on time? The https://www.youtube.com/watch?v=owd2kXIM9Z4[three-minute tour
 * xref:compatibility.adoc[] -- coexistence with MicroProfile Fault Tolerance (service-layer interceptor placement), Quarkus REST, reactive routes, the REST clients and the optional database and messaging hooks.
 * xref:troubleshooting.adoc[] -- common issues and their fixes.
 * xref:end-to-end-example.adoc[] -- prove that your `@Timeout` and `@Fallback` actually work.
+* Resilience testing guides, one Fault Tolerance pattern each, with a Dev UI walkthrough, a `@QuarkusTest` and the pitfalls: xref:testing-circuit-breakers.adoc[circuit breakers], xref:testing-retries.adoc[retries] and xref:testing-fallbacks.adoc[fallbacks]; and xref:performance-baselines.adoc[performance baselines], to measure the reference before injecting a known delay.
 * xref:videos.adoc[] -- the complete guide, testing API timeouts with latency, and a three-minute tour, recorded on the demo application.
 * xref:json-rpc-reference.adoc[] -- the JSON-RPC API used by the Dev UI, for scripting and CI validation.
 

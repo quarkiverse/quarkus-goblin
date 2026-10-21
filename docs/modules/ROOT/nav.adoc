@@ -12,6 +12,11 @@
 * xref:structured-logs.adoc[Structured logs]
 * xref:troubleshooting.adoc[Troubleshooting]
 * xref:end-to-end-example.adoc[End-to-end example]
+* Resilience testing guides
+** xref:testing-circuit-breakers.adoc[Circuit breakers]
+** xref:testing-retries.adoc[Retries]
+** xref:testing-fallbacks.adoc[Fallbacks]
+** xref:performance-baselines.adoc[Performance baselines]
 * xref:videos.adoc[Videos]
 * xref:json-rpc-reference.adoc[JSON-RPC reference]
 * xref:public-api.adoc[Public API and versioning]

@@ -9,6 +9,7 @@ import org.eclipse.microprofile.faulttolerance.CircuitBreaker;
 import org.eclipse.microprofile.faulttolerance.Fallback;
 import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.faulttolerance.Timeout;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
 
 /**
@@ -18,8 +19,9 @@ import org.jboss.logging.Logger;
  * assault, then the MicroProfile Fault Tolerance behaviour and the outcome.
  * <p>
  * Methods without annotations have no resilience wrapper, so a Goblin-injected exception surfaces straight to the caller.
- * The others exercise {@code @Retry}, {@code @Fallback}, both combined, {@code @Timeout} and {@code @CircuitBreaker}, and a
- * nested bean-to-bean call, and database access through {@link SampleRepository}.
+ * The others exercise {@code @Retry}, {@code @Fallback}, both combined, {@code @Timeout} and {@code @CircuitBreaker}
+ * (one that stays open, one that recovers quickly), a nested bean-to-bean call, database access through
+ * {@link SampleRepository}, and an outbound REST Client call guarded by {@code @Timeout} and {@code @Fallback}.
  */
 @ApplicationScoped
 public class SampleService {
@@ -31,6 +33,10 @@ public class SampleService {
 
     @Inject
     SampleRepository repository;
+
+    @Inject
+    @RestClient
+    SampleClient client;
 
     public String hello() {
         LOG.debugf("SampleService.hello() executing - no fault tolerance: an injected exception surfaces directly");
@@ -72,6 +78,26 @@ public class SampleService {
     public String guarded() {
         LOG.debugf("SampleService.guarded() executing - @CircuitBreaker(2 calls, 100%%): opens after two Goblin faults");
         return "guarded reply";
+    }
+
+    @CircuitBreaker(requestVolumeThreshold = 2, failureRatio = 1.0, delay = 500, delayUnit = ChronoUnit.MILLIS, successThreshold = 1)
+    public String recovering() {
+        LOG.debugf("SampleService.recovering() executing - @CircuitBreaker(2 calls, 100%%, 500 ms): opens after two "
+                + "Goblin faults, half-opens 500 ms later and closes on the first success");
+        return "recovering reply";
+    }
+
+    @Timeout(value = 400, unit = ChronoUnit.MILLIS)
+    @Fallback(fallbackMethod = "remoteFallback")
+    public String remoteHello() {
+        LOG.debugf("SampleService.remoteHello() executing - @Timeout(400ms) + @Fallback around an outbound REST Client "
+                + "call: a Goblin HTTP_OUT fault is answered by the fallback");
+        return "remote: " + client.hello();
+    }
+
+    String remoteFallback(Throwable cause) {
+        LOG.debugf("SampleService.remoteFallback() answering after %s", cause.getClass().getSimpleName());
+        return "remote fallback reply";
     }
 
     public String nested() {

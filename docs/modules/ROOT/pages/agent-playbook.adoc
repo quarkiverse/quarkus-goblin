@@ -64,6 +64,7 @@ Limits, stated so nobody reads more into it:
 * An application without any Fault Tolerance annotation gets a single entry whose `class` and `method` are `-`, with a `note` saying so: the resource is never absent, so an agent cannot mistake "no guard" for a wrong resource name.
 * `metricMethodTag` is the fully qualified `class.method`, checked against `/q/metrics` for application beans. For a `@RegisterRestClient` interface it is not verified yet, and the playbook tells the agent to confirm it before filtering on it.
 
+[#your-promises]
 == Your application's promises
 
 The playbook is generic, and the inventory only says where a guard is declared. What Goblin cannot know is what the application *promises*: its latency targets, which dependency each mechanism protects, what the client should see when it fails. The live test that motivated this page showed that an agent without that knowledge finds defects, but weaker ones than a domain expert would.

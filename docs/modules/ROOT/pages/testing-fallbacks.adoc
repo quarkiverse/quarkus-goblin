@@ -1,0 +1,111 @@
+= Testing fallbacks
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+A `@Fallback` promises a degraded but useful answer when the primary path fails. It is also the resilience code that runs the least: in development and in most test suites the primary path always works, so a fallback with a typo, a wrong signature or a hidden dependency on the very service that failed can ship unnoticed. This guide uses Goblin to make the primary path fail on demand and to check what the fallback answers.
+
+The examples use the sample application of the `integration-tests` module (see xref:end-to-end-example.adoc[] to start it):
+
+[source,java]
+----
+@Fallback(fallbackMethod = "serviceFallback")
+public String fallbackable() { ... }             // GET /api/service/fallback
+
+@Timeout(value = 400, unit = ChronoUnit.MILLIS)
+@Fallback(fallbackMethod = "remoteFallback")
+public String remoteHello() {                    // GET /api/service/remote
+    return "remote: " + client.hello();          // an outgoing REST Client call
+}
+----
+
+== Where to inject the fault
+
+The fault must happen *inside* the method carrying the `@Fallback`:
+
+* **SERVICE** -- an exception thrown on the guarded bean method itself.
+* **HTTP_OUT** -- the most common case in practice: a downstream service failing or answering too slowly behind a REST Client or WebClient call made by the guarded method.
+* **DATABASE** -- a connection acquisition failure inside the guarded method.
+
+On `HTTP_IN` the fault hits the request before the guarded method runs: the fallback never gets a chance.
+
+== A failing downstream in the Dev UI
+
+This is the scenario a fallback is usually written for: the payment API, the pricing service or the weather provider stops answering.
+
+. Start from a known state: *Reset to defaults* in the *Danger zone* (latency on with `100`-`5000` ms, every other assault off, layers *Inbound HTTP* + *Outbound HTTP*, level `100`). The dashboard settings survive a restart, so a previous experiment -- or the previous guide -- may still be armed.
+. Call the endpoint once with no client-side assault: it answers `remote: hello from Goblin test app`, the downstream's real reply. In dev mode the sample's REST Client calls the application itself (`/api/hello`).
+. Set the latency range to `600`-`700` ms and click `Save` -- the range is only editable while **Latency** is on, and the client latency used below reuses it.
+. Disable **Latency**, so the inbound request itself is not delayed. In the client-side section, enable **client exception**.
+. Call the endpoint again:
++
+[source,bash]
+----
+curl -w "\nstatus=%{http_code}\n" http://localhost:8080/api/service/remote
+----
+. The response is `200` with `remote fallback reply`. The *Assault History* shows an `exception` on `REST-Client GET http://localhost:8080/api/hello`: the outgoing call failed before it was sent, and the fallback answered.
+
+Now make the downstream *slow* instead of failing, which is the harder case:
+
+. Disable **client exception** and enable **client latency**: the outgoing call is now delayed by `600`-`700` ms, the range set above -- more than the `@Timeout(400)` of `remoteHello()`.
+. Call the endpoint again: `remote fallback reply` comes back after about 0.4 s. Without the `@Timeout`, the fallback would never trigger -- the call would just be slow -- which is why a fallback on a remote call almost always needs a timeout next to it.
+
+The Fault Tolerance metrics tell whether the fallback answered:
+
+[source]
+----
+ft_invocations_total{fallback="applied",method="...SampleService.remoteHello",result="valueReturned"} 1.0
+ft_timeout_calls_total{method="...SampleService.remoteHello",timedOut="true"} 1.0
+----
+
+`fallback="applied"` with `result="valueReturned"` is the fallback doing its job; `fallback="applied"` with `result="exceptionThrown"` is a fallback that failed too.
+
+== Prove it in a test
+
+Chaos runs in a `@QuarkusTest` only with `quarkus.goblin.test.enabled=true` in the test configuration.
+
+[source,java]
+----
+@QuarkusTest
+class FallbackTest {
+
+    @Inject
+    AssaultEngine engine;
+
+    @BeforeEach
+    void startFromAKnownState() {
+        // the engine belongs to the application, shared by every test class: another test may have switched it off
+        engine.setActive(true);
+        engine.getMutableConfig().resetToDefaults();
+        engine.clearHistory();
+    }
+
+    @AfterEach
+    void stopChaos() {
+        engine.getMutableConfig().resetToDefaults();
+    }
+
+    @Test
+    void aFailingDownstreamIsAnsweredByTheFallback() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLatencyEnabled(false);
+        cfg.setClientExceptionEnabled(true);    // HTTP_OUT is armed by default
+
+        given().get("/api/service/remote")
+                .then()
+                .statusCode(200)
+                .body(equalTo("remote fallback reply"));
+    }
+}
+----
+
+Assert on the *content* of the degraded answer, not only on the `200`: the point of a fallback is what it says to the user.
+
+== Pitfalls
+
+* **The fallback must not depend on what failed.** A fallback that reads the same database or calls the same service fails with it. In the sample, `databaseFallback` deliberately never touches the database. Arm the layer the primary path depends on and check that the fallback still answers.
+* **A fallback hides the failure.** The client sees a `200`, so a dashboard on HTTP status sees nothing. Watch `ft_invocations_total{fallback="applied"}`: a fallback answering 100% of the time in production is an outage with good manners.
+* **`applyOn` and `skipOn` filter what triggers it.** Set the Goblin exception class (`setExceptionType`) to a class in `skipOn` to prove the fallback stays out of the way.
+* **Combined with `@Retry`,** the fallback answers only once every attempt failed: at `level = 100` the history holds `maxRetries + 1` entries before the fallback reply (see `GET /api/service/retry-fallback` and xref:testing-retries.adoc[]).
+* **Several downstreams fail together.** Client-side assaults apply to every outgoing call of the request and cannot be narrowed to one client: only excluding the request's entry point spares it entirely (see xref:targeting.adoc#excluded-entry-points[Targeting]). To check the fallback of one dependency while another keeps working, call an entry point that only reaches that dependency.

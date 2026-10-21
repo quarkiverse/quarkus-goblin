@@ -143,4 +143,49 @@ public class GoblinClientAssaultIntegrationTest {
         }
         return false;
     }
+
+    @Test
+    public void guardedRemoteCallAnswersWhenNoClientAssaultIsEnabled() {
+        RestAssured.given()
+                .get("/api/service/remote")
+                .then()
+                .statusCode(200)
+                .body(org.hamcrest.Matchers.equalTo("remote: hello from Goblin test app"));
+    }
+
+    @Test
+    public void clientExceptionIsAnsweredByTheFallbackOfTheCaller() {
+        engine.getMutableConfig().setClientExceptionEnabled(true);
+
+        RestAssured.given()
+                .get("/api/service/remote")
+                .then()
+                .statusCode(200)
+                .body(org.hamcrest.Matchers.equalTo("remote fallback reply"));
+
+        assertTrue(engine.getHistory().stream().anyMatch(record -> "exception".equals(record.type())
+                && record.method().startsWith("REST-Client GET") && record.method().endsWith("/api/hello")),
+                "the outbound call must have been assaulted, got: " + engine.getHistory());
+    }
+
+    @Test
+    public void clientLatencyAboveTheTimeoutIsAnsweredByTheFallback() {
+        // the first call initialises the REST Client and Fault Tolerance, which would count against the timing below
+        RestAssured.given().get("/api/service/remote").then().statusCode(200);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setClientLatencyEnabled(true);
+        cfg.setLatencyMinMs(600);
+        cfg.setLatencyMaxMs(700);
+
+        long start = System.nanoTime();
+        RestAssured.given()
+                .get("/api/service/remote")
+                .then()
+                .statusCode(200)
+                .body(org.hamcrest.Matchers.equalTo("remote fallback reply"));
+        long elapsedMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+        assertTrue(elapsedMs < 600,
+                "@Timeout(400ms) must give up before the 600-700 ms injected latency elapses, took " + elapsedMs + " ms");
+    }
 }
