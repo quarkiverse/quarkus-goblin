@@ -90,14 +90,37 @@ class GoblinMetricsObserverTest {
         assertEquals(1, totalCount("exception", "messaging"));
     }
 
+    @Test
+    void injectedValueTagIsBoundedByTheConfiguration() {
+        observer.onAssault(new AssaultEngine.AssaultRecord("SampleResource.hello", "http-status",
+                System.currentTimeMillis(), 0, "snapshot", AssaultSource.SERVER, AssaultType.HTTP_STATUS, "HTTP 429"));
+        observer.onAssault(new AssaultEngine.AssaultRecord("SampleResource.hello", "latency",
+                System.currentTimeMillis(), 842, "snapshot", AssaultSource.SERVER, AssaultType.LATENCY, "842ms"));
+        observer.onAssault(new AssaultEngine.AssaultRecord("SampleResource.hello", "latency",
+                System.currentTimeMillis(), 843, "snapshot", AssaultSource.SERVER, AssaultType.LATENCY, "843ms"));
+
+        assertEquals(1, registry.find(GoblinMetricsObserver.TOTAL_METRIC).tag("type", "http-status")
+                .tag("injected_value", "HTTP 429").counter().count());
+        assertEquals(2, registry.find(GoblinMetricsObserver.TOTAL_METRIC).tag("type", "latency")
+                .tag("injected_value", "-").counter().count(), "a latency is a single series, its value is in the timer");
+        assertEquals(2, registry.find(GoblinMetricsObserver.TOTAL_METRIC).counters().size());
+    }
+
+    @Test
+    void anUnknownInjectedValueIsTaggedWithADash() {
+        observer.onAssault(record("SampleResource.hello", "exception", 0));
+
+        assertNotNull(registry.find(GoblinMetricsObserver.TOTAL_METRIC).tag("injected_value", "-").counter());
+    }
+
     private AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {
         return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot",
-                AssaultSource.SERVER, assaultType(type));
+                AssaultSource.SERVER, assaultType(type), "");
     }
 
     private AssaultEngine.AssaultRecord record(AssaultSource source, String method, String type, long latencyMs) {
         return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source,
-                assaultType(type));
+                assaultType(type), "");
     }
 
     private double totalCount(String type, String source) {

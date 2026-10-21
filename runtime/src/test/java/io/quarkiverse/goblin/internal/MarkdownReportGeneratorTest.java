@@ -28,11 +28,23 @@ class MarkdownReportGeneratorTest {
     @Test
     void historyRowsCarryTheSource() {
         AssaultEngine.AssaultRecord record = new AssaultEngine.AssaultRecord("Database <default> connection",
-                "exception", 0, 0, "exception enabled", AssaultSource.DATABASE, AssaultType.EXCEPTION);
+                "exception", 0, 0, "exception enabled", AssaultSource.DATABASE, AssaultType.EXCEPTION,
+                "java.lang.IllegalStateException: boom");
 
         String report = MarkdownReportGenerator.build(true, new MutableAssaultConfigImpl(), List.of(record));
 
         assertTrue(report.contains("| # | Time | Method | Source | Type |"), report);
         assertTrue(report.contains("| Database <default> connection | database | exception |"), report);
+        assertTrue(report.contains("| java.lang.IllegalStateException: boom |"), report);
+    }
+
+    @Test
+    void aPipeInTheInjectedValueIsEscaped() {
+        AssaultEngine.AssaultRecord record = new AssaultEngine.AssaultRecord("SampleResource.hello", "exception", 0, 0,
+                "exception enabled", AssaultSource.SERVER, AssaultType.EXCEPTION, "java.lang.IllegalStateException: a|b");
+
+        String report = MarkdownReportGenerator.build(true, new MutableAssaultConfigImpl(), List.of(record));
+
+        assertTrue(report.contains("| java.lang.IllegalStateException: a\\|b |"), report);
     }
 }

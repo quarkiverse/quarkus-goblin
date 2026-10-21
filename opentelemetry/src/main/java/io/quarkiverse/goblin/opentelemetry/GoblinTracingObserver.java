@@ -31,7 +31,10 @@ import io.quarkus.runtime.StartupEvent;
  * <li>{@code goblin.assault.target.method} -- the recorded method identifier (e.g. {@code SampleResource.hello},
  * {@code REST-Client GET http://...}, {@code WebClient GET http://...});</li>
  * <li>the injected value per type: {@code goblin.assault.latency_ms}, {@code goblin.assault.status_code},
- * {@code goblin.assault.exception}, plus the whole active configuration snapshot in {@code goblin.assault.config}.</li>
+ * {@code goblin.assault.exception};</li>
+ * <li>{@code goblin.assault.injected_value} -- what the assault injected, as in the history and the structured logs
+ * (e.g. {@code 842ms}, {@code HTTP 503}, {@code truncate 50%}), plus the whole active configuration snapshot in
+ * {@code goblin.assault.config}.</li>
  * </ul>
  * The span is started from the current tracing context, so it is automatically linked to the request span that
  * triggered the assault (parent-child relationship) for end-to-end trace correlation. Every assault span uses the
@@ -61,6 +64,7 @@ public class GoblinTracingObserver implements AssaultObserver {
     public static final String ATTR_LATENCY_MS = "goblin.assault.latency_ms";
     public static final String ATTR_STATUS_CODE = "goblin.assault.status_code";
     public static final String ATTR_EXCEPTION = "goblin.assault.exception";
+    public static final String ATTR_INJECTED_VALUE = "goblin.assault.injected_value";
     public static final String ATTR_CONFIG = "goblin.assault.config";
 
     private static final long DEPENDENCY_DEGRADATION_STATUS = 503L;
@@ -103,6 +107,9 @@ public class GoblinTracingObserver implements AssaultObserver {
             span.setAttribute(ATTR_SOURCE, source);
             span.setAttribute(ATTR_TARGET_METHOD, record.method() == null ? "unknown" : record.method());
             span.setAttribute(ATTR_CONFIG, record.configSnapshot());
+            if (record.injectedValue() != null && !record.injectedValue().isEmpty()) {
+                span.setAttribute(ATTR_INJECTED_VALUE, record.injectedValue());
+            }
             applyValueAttributes(span, record, engine != null ? engine.getMutableConfig() : null);
         } finally {
             span.end();

@@ -487,8 +487,9 @@ public class GoblinJsonRPCServiceTest {
         assertTrue(markdown.contains("SampleResource.slow"));
         assertTrue(markdown.contains("latency"));
         assertTrue(markdown.contains("http-status"));
-        assertTrue(markdown.contains("423 ms"));
-        assertTrue(markdown.contains("3922 ms"));
+        assertTrue(markdown.contains("| 423ms |"));
+        assertTrue(markdown.contains("| 3922ms |"));
+        assertTrue(markdown.contains("| HTTP 503 |"));
         assertTrue(markdown.contains("Active Config at Time of Assault"));
         assertTrue(markdown.contains("latency enabled (100 - 500 ms)"));
         assertTrue(markdown.contains("latency enabled (1000 - 5000 ms)"));
@@ -510,6 +511,8 @@ public class GoblinJsonRPCServiceTest {
         assertEquals("latency", record.type());
         assertEquals(AssaultType.LATENCY, record.assaultType());
         assertEquals("SampleResource.hello", record.method());
+        assertEquals("250ms", record.injectedValue());
+        assertEquals("250ms", jsonRpc.getHistory().getJsonObject(0).getString("injectedValue"));
         assertTrue(record.configSnapshot().contains("latency enabled (100 - 500 ms)"));
         assertTrue(record.configSnapshot().contains("exception enabled"));
 

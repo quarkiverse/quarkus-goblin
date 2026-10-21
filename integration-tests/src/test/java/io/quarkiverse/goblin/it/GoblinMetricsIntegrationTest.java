@@ -63,6 +63,10 @@ public class GoblinMetricsIntegrationTest {
         assertHistory("latency", p -> p.equals("SampleResource.hello"));
         awaitCounter("latency", "server");
         awaitTimerCount("server");
+        assertNotNull(registry.find(GoblinMetricsObserver.TOTAL_METRIC)
+                .tag("type", "latency")
+                .tag("injected_value", "-")
+                .counter(), "a latency is tagged '-': its value is in the timer");
         assertEquals(1, activeGauge(), "engine must be active during the assault");
     }
 
@@ -110,6 +114,10 @@ public class GoblinMetricsIntegrationTest {
 
         assertHistory("exception", p -> p.startsWith("WebClient"));
         awaitCounter("exception", "webclient");
+        assertNotNull(registry.find(GoblinMetricsObserver.TOTAL_METRIC)
+                .tag("type", "exception")
+                .tag("injected_value", "java.lang.IllegalStateException: downstream is in trouble")
+                .counter(), "the counter must be tagged with the injected exception");
     }
 
     @Test

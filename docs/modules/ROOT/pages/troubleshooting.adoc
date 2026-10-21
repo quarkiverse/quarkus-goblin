@@ -11,8 +11,8 @@ include::../partials/attributes.adoc[]
 * In test mode the `.goblin-state.json` file is ignored: tests always start from `application.properties`.
 * Check that `quarkus.goblin.enabled=true` (the default).
 * Verify at least one assault type is enabled in the Dev UI.
-* Look for the WARN log at startup confirming chaos activation.
-* A Dev UI auto-off may have elapsed: the engine then logs `Goblin chaos auto-disabled` and switches chaos off, even when the Dev UI is closed.
+* Look for the `activated` event logged at startup (`goblin event=activated ...`, see xref:structured-logs.adoc[Structured logs]).
+* A Dev UI auto-off may have elapsed: the engine then switches chaos off and logs a `deactivated` event with `reason=auto-off`, even when the Dev UI is closed.
 * The status bar says why chaos is off next to `Inactive` (`deactivated in this dev session`, `the auto-off switched it off`, `quarkus.goblin.enabled=false`, `quarkus.goblin.test.enabled=false`); `getStatus` reports the same cause as `inactiveReason`.
 
 *Chaos is active again after a restart although I switched it off:*

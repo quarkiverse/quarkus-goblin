@@ -31,7 +31,7 @@ The module only brings in the Micrometer API (`quarkus-micrometer`), so it never
 
 | `goblin_assaults_total`
 | Counter of every fired assault, incremented once per assault (including client-side ones).
-| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`, `response-header-set:X-RateLimit-Remaining`) and `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`)
+| `type` (e.g. `latency`, `exception`, `http-status`, `response-body-truncate`, `response-header-set:X-RateLimit-Remaining`), `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`) and `injected_value` (see below)
 
 | `goblin_latency_injected_seconds`
 | Timer of the delays actually injected (only incremented when latency was really applied). Exposed as a histogram: `_sum` / `_count` / `_max` plus `_bucket` distribution series. To change the buckets, register a Micrometer `MeterFilter` bean that overrides the `DistributionStatisticConfig` of `goblin.latency.injected.seconds` (see below).
@@ -45,6 +45,10 @@ The module only brings in the Micrometer API (`quarkus-micrometer`), so it never
 NOTE: Meter names are declared with Micrometer's dotted convention (e.g. `goblin.assaults.total`), but the Prometheus export sanitizes them to underscores -- `goblin_assaults_total` in `/q/metrics`. Other backends (JVM, statsd, ...) keep the dotted names, so write PromQL against the underscored form and refer to the dotted names when consuming the tags/names elsewhere.
 
 The response header assaults carry the header name and action in `type` (`response-header-set:<name>` or `response-header-remove:<name>`, with the name as configured): each header rule produces its own series, so keep the number of rules small on a long-lived Prometheus.
+
+`injected_value` is what the assault injected, as in the xref:structured-logs.adoc#the-injected-value[structured logs]: `HTTP 503`, `java.lang.IllegalStateException: boom`, `truncate 50%`, `X-Goblin: on`... These values come from the configuration, so they only add a series when the configuration changes. A latency is the exception: it is drawn per request, and one series per delay would flood Prometheus, so a latency assault is tagged `injected_value="-"` and its value is in `goblin_latency_injected_seconds`. An assault whose value is unknown (a custom assault) is tagged `-` too.
+
+TIP: Count the injected failures by value with `sum(goblin_assaults_total{injected_value!="-"}) by (type, injected_value)`.
 
 `source` is carried by each recorded assault: inbound REST and reactive-route assaults (`SampleResource.hello`) are tagged `server`, application bean assaults (SERVICE layer) `service`, outgoing REST Client calls tag `rest-client`, outgoing Vert.x WebClient calls tag `webclient`, JDBC connection acquisitions (DATABASE layer) tag `database` and `@Incoming` consumers (MESSAGING layer) tag `messaging`.
 

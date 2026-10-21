@@ -52,8 +52,10 @@ You will see a warning log confirming chaos is active:
 
 [source]
 ----
-WARN  Chaos engineering active: 100% of inbound HTTP requests subject to assault (profile=NONE, latency=true, exception=false, httpStatus=false, dependencyDegradation=false, clientLatency=false, clientException=false, responseBody=false)
+WARN  goblin event=activated timestamp=2026-10-21T10:00:00.004Z origin=startup profile=NONE level=100 layers=HTTP_OUT,HTTP_IN config="latency enabled (100 - 5000 ms)"
 ----
+
+Every assault, configuration change and switch on or off is then logged the same way: see xref:structured-logs.adoc[Structured logs].
 
 === Verify it works
 

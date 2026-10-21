@@ -246,6 +246,17 @@ public class MutableAssaultConfigImpl implements MutableAssaultConfig {
         issues.add(message);
     }
 
+    /**
+     * Returns the class of the exception the exception assault actually throws: the configured one, or
+     * {@link RuntimeException} when the engine falls back to it (see {@link #exceptionClassError(String)}).
+     *
+     * @param className the configured exception class name
+     * @return the fully qualified name of the thrown exception class
+     */
+    public static String effectiveExceptionType(String className) {
+        return exceptionClassError(className) == null ? className : RuntimeException.class.getName();
+    }
+
     private static String exceptionClassError(String className) {
         if (className == null || className.isBlank()) {
             return "Configured exception class is blank. The engine will fall back to RuntimeException.";

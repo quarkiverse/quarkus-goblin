@@ -181,9 +181,11 @@ public interface AssaultEngine {
      * @param configSnapshot a description of the enabled assaults at that time
      * @param source where the assault was injected
      * @param assaultType the assault type, without the detail the label may carry
+     * @param injectedValue what the assault injected, e.g. {@code "842ms"}, {@code "HTTP 503"} or
+     *        {@code "java.lang.IllegalStateException: boom"}; empty for a custom assault that injected no latency
      */
     record AssaultRecord(String method, String type, long timestamp, long latencyMs, String configSnapshot,
-            AssaultSource source, AssaultType assaultType) {
+            AssaultSource source, AssaultType assaultType, String injectedValue) {
 
         /**
          * @return the metric tag / span attribute value of the source, {@code "server"} when no source was recorded
