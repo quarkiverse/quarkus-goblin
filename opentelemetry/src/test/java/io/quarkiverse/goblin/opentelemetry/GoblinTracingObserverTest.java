@@ -2,6 +2,7 @@ package io.quarkiverse.goblin.opentelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.List;
 
@@ -42,7 +43,8 @@ class GoblinTracingObserverTest {
     @Test
     void serverLatencyAssaultProducesSpanWithAttributes() {
         long now = System.currentTimeMillis();
-        observer.onAssault(record("SampleResource.hello", "latency", 250, now, "latency enabled (100 - 500 ms)"));
+        observer.onAssault(new AssaultEngine.AssaultRecord("SampleResource.hello", "latency", now, 250,
+                "latency enabled (100 - 500 ms)", AssaultSource.SERVER, AssaultType.LATENCY, "250ms"));
 
         List<SpanData> spans = exporter.getFinishedSpanItems();
         assertEquals(1, spans.size());
@@ -54,6 +56,16 @@ class GoblinTracingObserverTest {
         assertEquals("SampleResource.hello", attr(span, "goblin.assault.target.method"));
         assertEquals(250L, longAttr(span, "goblin.assault.latency_ms"));
         assertEquals("latency enabled (100 - 500 ms)", attr(span, "goblin.assault.config"));
+        assertEquals("250ms", attr(span, "goblin.assault.injected_value"));
+    }
+
+    @Test
+    void injectedValueAttributeIsOmittedWhenUnknown() {
+        observer.onAssault(record("SampleResource.hello", "http-status", 0));
+
+        SpanData span = finished(GoblinTracingObserver.SPAN_NAME);
+        assertNull(span.getAttributes().get(AttributeKey.stringKey("goblin.assault.injected_value")),
+                "an empty injected value sets no attribute");
     }
 
     @Test
@@ -193,7 +205,7 @@ class GoblinTracingObserverTest {
 
     private static AssaultEngine.AssaultRecord record(AssaultSource source, String method, String type, long latencyMs) {
         return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source,
-                assaultType(type));
+                assaultType(type), "");
     }
 
     private static AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {
@@ -203,7 +215,7 @@ class GoblinTracingObserverTest {
     private static AssaultEngine.AssaultRecord record(String method, String type, long latencyMs, long timestamp,
             String configSnapshot) {
         return new AssaultEngine.AssaultRecord(method, type, timestamp, latencyMs, configSnapshot, AssaultSource.SERVER,
-                assaultType(type));
+                assaultType(type), "");
     }
 
     /** The assault type of a built-in label without detail, e.g. {@code "http-status"}. */

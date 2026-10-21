@@ -1,0 +1,91 @@
+= Structured logs
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+Goblin writes every event of a chaos experiment -- each assault, chaos switched on or off, a configuration change -- as a structured line in the `io.quarkiverse.goblin.events` log category. The goal is a log you can reason about while the experiment runs, whether you read it yourself or hand it to an agent: which request was hit, by what, with which value, under which configuration.
+
+This is not log aggregation for compliance: Goblin is inert in a production build, and these events only exist in dev and test mode.
+
+== Format
+
+Each event is a single line: a `goblin` marker followed by `key=value` pairs, always in the same order. A value holding a space, a quote or an `=` is quoted, and control characters are escaped (`\n`, `\t`, `\u0007`...), so an event never spans two lines.
+
+[source]
+----
+WARN  goblin event=activated timestamp=2026-10-21T10:00:00.004Z origin=startup profile=NONE level=100 layers=HTTP_OUT,HTTP_IN config="latency enabled (500 - 1000 ms)"
+INFO  goblin event=assault timestamp=2026-10-21T10:02:03.120Z source=server method=GreetingResource.hello type=latency assault-type=latency value=842ms config="latency enabled (500 - 1000 ms)"
+WARN  goblin event=config-change timestamp=2026-10-21T10:03:10.511Z profile=NONE level=100 layers=HTTP_OUT,HTTP_IN config="latency enabled (500 - 1000 ms), httpStatus enabled (503: \"Service Unavailable\")" previous="latency enabled (500 - 1000 ms)"
+INFO  goblin event=assault timestamp=2026-10-21T10:03:12.087Z source=server method=GreetingResource.hello type=http-status assault-type=http-status value="HTTP 503" config="latency enabled (500 - 1000 ms), httpStatus enabled (503: \"Service Unavailable\")"
+WARN  goblin event=deactivated timestamp=2026-10-21T10:05:00.000Z reason=auto-off
+----
+
+== Events
+
+[cols="1,1,3"]
+|===
+| Event | Level | Fields after `event` and `timestamp`
+
+| `assault`
+| `INFO`
+| `source` (`server`, `service`, `rest-client`, `webclient`, `database`, `messaging`), `method` (the assaulted target, as in the history), `type` (the assault label, e.g. `response-body-truncate`, the same as the `type` metric tag), `assault-type` (`latency`, `exception`, `http-status`, `dependency-degradation`, `response-body`, `response-header`), `value` (what was injected), `config` (the enabled assaults at that time)
+
+| `activated`
+| `WARN`
+| `origin` (`startup` or `manual`), `profile`, `level` (the target level, in percent), `layers` (the armed chaos layers, from the deepest to the inbound HTTP boundary), `config`
+
+| `deactivated`
+| `WARN`
+| `reason` (`manual` or `auto-off`)
+
+| `auto-off-scheduled`
+| `WARN`
+| `deadline`, when chaos switches itself off
+
+| `config-change`
+| `WARN`
+| `profile`, `level`, `layers`, `config` (after the change), `previous` (the enabled assaults before it)
+|===
+
+`timestamp` is an ISO-8601 instant in UTC. A configuration change comes from anywhere -- the Dev UI, a JSON-RPC or Dev MCP call, a test calling `MutableAssaultConfig` -- and is logged once per published change, like the `AssaultObserver.onConfigChange` notification it mirrors. The configuration loaded at startup is reported by the `activated` event, not as a change.
+
+[#the-injected-value]
+=== The injected value
+
+`value` says what the assault did, read from the configuration it ran with:
+
+[cols="1,2"]
+|===
+| Assault | Value
+
+| Latency | the delay actually applied, e.g. `842ms` (the endured part when a `@Timeout` cut it short)
+| Exception | the class and message of the exception thrown, e.g. `java.lang.IllegalStateException: boom` (`java.lang.RuntimeException` when the configured class is invalid and the engine falls back to it)
+| HTTP status | `HTTP 429`
+| Dependency degradation | `HTTP 503`
+| Response body | the mode and percentage, e.g. `truncate 50%`
+| Response header | `X-Goblin: on` for a header set, `Server removed` for a header removed
+| Custom `Assault` | the latency it recorded, empty otherwise
+|===
+
+The same value is in `AssaultRecord.injectedValue()`, in the `injectedValue` field of the JSON-RPC `getHistory` entries, in the `goblin.assault.injected_value` span attribute (see xref:tracing.adoc[Tracing]), in the `injected_value` tag of `goblin_assaults_total` except for a latency (see xref:metrics.adoc[Metrics]), and in the Markdown report.
+
+== JSON logs
+
+While an event is logged, its fields are also in the MDC, prefixed with `goblin.`: `goblin.event`, `goblin.timestamp`, `goblin.method`, `goblin.value`... With `quarkus-logging-json`, they come out as fields of the JSON log record, so an agent can filter the events without parsing the message:
+
+[source,properties]
+----
+quarkus.log.console.json.enabled=true
+----
+
+== Tuning the volume
+
+At a 100% target level, every request produces an `assault` event. Assaults are logged at `INFO` and the lifecycle at `WARN`, so raising the category level keeps the lifecycle and silences the assaults:
+
+[source,properties]
+----
+quarkus.log.category."io.quarkiverse.goblin.events".level=WARN
+----
+
+Set it to `OFF` to silence all events. The history (`AssaultEngine.getHistory()`), the counters and the observers are not affected.

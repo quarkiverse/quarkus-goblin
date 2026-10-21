@@ -209,6 +209,10 @@ public class AssaultEngineImpl implements AssaultEngine {
                 this.active = false;
                 this.inactiveReason = DeactivationReason.AUTO_OFF;
                 LOG.info("Goblin chaos stays off after the restart: the Dev UI auto-off switched it off");
+                if (autoOff != AUTO_OFF_FIRED) {
+                    // the deadline elapsed during the restart: the previous engine never reported the deactivation
+                    GoblinEventLog.deactivated(DeactivationReason.AUTO_OFF);
+                }
             } else if (active && readManualOff()) {
                 this.active = false;
                 this.inactiveReason = DeactivationReason.MANUAL;
@@ -216,18 +220,7 @@ public class AssaultEngineImpl implements AssaultEngine {
             }
         }
         if (active) {
-            MutableAssaultConfigImpl mutableConfig = this.mutableConfig.snapshot();
-            LOG.warnf(
-                    "Chaos engineering active: %d%% of inbound HTTP requests subject to assault (profile=%s, latency=%s, exception=%s, httpStatus=%s, dependencyDegradation=%s, clientLatency=%s, clientException=%s, responseBody=%s)",
-                    mutableConfig.getTargetLevel(),
-                    mutableConfig.getProfile(),
-                    mutableConfig.isLatencyEnabled(),
-                    mutableConfig.isExceptionEnabled(),
-                    mutableConfig.isHttpStatusEnabled(),
-                    mutableConfig.isDependencyDegradationEnabled(),
-                    mutableConfig.isClientLatencyEnabled(),
-                    mutableConfig.isClientExceptionEnabled(),
-                    mutableConfig.isResponseBodyEnabled());
+            GoblinEventLog.activated("startup", this.mutableConfig.snapshot());
         }
     }
 
@@ -256,6 +249,7 @@ public class AssaultEngineImpl implements AssaultEngine {
             lastNotifiedConfig = current;
             change = new AssaultConfigChange(previous != null ? previous : current, current, System.currentTimeMillis());
         }
+        GoblinEventLog.configChange(change);
         notifyConfigObservers(change);
     }
 
@@ -324,6 +318,14 @@ public class AssaultEngineImpl implements AssaultEngine {
                 writeAutoOff(AUTO_OFF_NONE);
             }
         }
+        if (active) {
+            MutableAssaultConfigImpl cfg = mutableConfig;
+            if (cfg != null) {
+                GoblinEventLog.activated("manual", cfg.snapshot());
+            }
+        } else {
+            GoblinEventLog.deactivated(DeactivationReason.MANUAL);
+        }
         notifyObservers(observer -> observer.onActiveChange(active));
     }
 
@@ -364,7 +366,7 @@ public class AssaultEngineImpl implements AssaultEngine {
             }
         }
         if (fired) {
-            LOG.warn("Goblin chaos auto-disabled: the auto-off deadline elapsed");
+            GoblinEventLog.deactivated(DeactivationReason.AUTO_OFF);
             notifyObservers(observer -> observer.onActiveChange(false));
         }
     }
@@ -384,6 +386,7 @@ public class AssaultEngineImpl implements AssaultEngine {
         }
         long deadline = System.currentTimeMillis() + delayMillis;
         writeAutoOff(deadline);
+        GoblinEventLog.autoOffScheduled(deadline);
         return deadline;
     }
 
@@ -688,10 +691,11 @@ public class AssaultEngineImpl implements AssaultEngine {
      * @param latencyMs the injected latency, {@code 0} when not applicable
      */
     public void recordAssault(AssaultSource source, AssaultType assaultType, String method, String type, long latencyMs) {
-        String configSnapshot = mutableConfig != null ? mutableConfig.describeAssaults() : "no assault enabled";
+        MutableAssaultConfigImpl cfg = mutableConfig != null ? mutableConfig.snapshot() : null;
+        String configSnapshot = cfg != null ? cfg.describeAssaults() : "no assault enabled";
         AssaultRecord record = new AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, configSnapshot,
-                source, assaultType);
-        LOG.debugf("Goblin: history += %s type=%s latencyMs=%d (%s)", method, type, latencyMs, configSnapshot);
+                source, assaultType, injectedValue(cfg, type, latencyMs));
+        GoblinEventLog.assault(record);
         history.addLast(record);
         while (history.size() > MAX_HISTORY) {
             history.pollFirst();
@@ -701,6 +705,49 @@ public class AssaultEngineImpl implements AssaultEngine {
         sourceCounts.computeIfAbsent(source != null ? source : AssaultSource.SERVER, k -> new AtomicLong())
                 .incrementAndGet();
         notifyObservers(observer -> observer.onAssault(record));
+    }
+
+    /**
+     * Describes what a built-in assault injected, read from its record label and the configuration it ran with. A
+     * custom assault has its own label: only the latency it reports is known.
+     *
+     * @param cfg the configuration at the time of the assault, {@code null} outside the container
+     * @param label the record label, e.g. {@code "response-header-set:X-Foo"}
+     * @param latencyMs the injected latency, {@code 0} when not applicable
+     * @return the injected value, empty when unknown
+     */
+    static String injectedValue(MutableAssaultConfigImpl cfg, String label, long latencyMs) {
+        if ("latency".equals(label)) {
+            return latencyMs + "ms";
+        }
+        if (cfg != null && label != null) {
+            switch (label) {
+                case "exception" -> {
+                    return MutableAssaultConfigImpl.effectiveExceptionType(cfg.getExceptionType()) + ": "
+                            + cfg.getExceptionMessage();
+                }
+                case "http-status" -> {
+                    return "HTTP " + cfg.getHttpStatusCode();
+                }
+                case "dependency-degradation" -> {
+                    return "HTTP 503";
+                }
+                default -> {
+                }
+            }
+            if (label.startsWith("response-body-")) {
+                return label.substring("response-body-".length()) + " " + cfg.getResponseBodyPercentage() + "%";
+            }
+            if (label.startsWith("response-header-remove:")) {
+                return label.substring("response-header-remove:".length()) + " removed";
+            }
+            if (label.startsWith("response-header-set:")) {
+                String name = label.substring("response-header-set:".length());
+                AssaultConfig.HeaderRule rule = cfg.getResponseHeaders().get(name);
+                return name + ": " + (rule != null ? rule.value() : "");
+            }
+        }
+        return latencyMs > 0 ? latencyMs + "ms" : "";
     }
 
     /**

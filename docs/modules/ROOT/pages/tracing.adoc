@@ -51,6 +51,9 @@ Each assault produces exactly one span named `goblin.assault`, carrying the assa
 | `goblin.assault.exception`
 | The configured exception class (only present for `exception` assaults).
 
+| `goblin.assault.injected_value`
+| What the assault injected, as in the history and the xref:structured-logs.adoc#the-injected-value[structured logs]: `842ms`, `HTTP 503`, `java.lang.IllegalStateException: boom`, `truncate 50%`, `X-Goblin: on`... Absent when unknown (a custom assault that injected no latency).
+
 | `goblin.assault.config`
 | The whole active configuration snapshot at the moment of the assault.
 |===

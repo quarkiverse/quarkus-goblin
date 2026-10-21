@@ -71,6 +71,7 @@ public class GoblinTracingIntegrationTest {
         assertEquals(100L, span.getAttributes().get(AttributeKey.longKey("goblin.assault.latency_ms")),
                 "with min=max=100 the injected delay is deterministic");
         assertNotNull(attrOrNull(span, "goblin.assault.config"), "assault spans must carry the config snapshot");
+        assertEquals("100ms", attr(span, "goblin.assault.injected_value"));
         long requestStartNanos = requestStart * 1_000_000L;
         assertTrue(span.getStartEpochNanos() < requestStartNanos + 100_000_000L,
                 "the injected delay must be back-dated towards the request start instead of starting at the post-delay record time");
@@ -95,6 +96,7 @@ public class GoblinTracingIntegrationTest {
         assertEquals(SpanKind.INTERNAL, span.getKind());
         assertEquals("server", attr(span, "goblin.assault.source"));
         assertEquals(503L, span.getAttributes().get(AttributeKey.longKey("goblin.assault.status_code")));
+        assertEquals("HTTP 503", attr(span, "goblin.assault.injected_value"));
     }
 
     @Test
@@ -157,6 +159,8 @@ public class GoblinTracingIntegrationTest {
         assertEquals(StatusCode.ERROR, span.getStatus().getStatusCode());
         assertEquals("webclient", attr(span, "goblin.assault.source"));
         assertEquals("java.lang.IllegalStateException", attr(span, "goblin.assault.exception"));
+        assertEquals("java.lang.IllegalStateException: downstream is in trouble",
+                attr(span, "goblin.assault.injected_value"));
         assertTrue(attr(span, "goblin.assault.target.method").startsWith("WebClient"));
     }
 
@@ -197,6 +201,7 @@ public class GoblinTracingIntegrationTest {
                         && hasExportedServerParent(s));
         assertEquals("server", attr(span, "goblin.assault.source"));
         assertEquals(503L, span.getAttributes().get(AttributeKey.longKey("goblin.assault.status_code")));
+        assertEquals("HTTP 503", attr(span, "goblin.assault.injected_value"));
     }
 
     @Test

@@ -24,7 +24,7 @@ application or a `@QuarkusTest`.
 
 | `AssaultEngine.AssaultRecord`
 | One recorded assault, as returned by `getHistory()` and passed to the observers: target, label, `AssaultType`, source,
-injected latency, time.
+injected latency, injected value, time.
 
 | `AssaultConfig`
 | A read-only view of the assault configuration, frozen on one state: `AssaultEngine.configSnapshot()`, the two sides of

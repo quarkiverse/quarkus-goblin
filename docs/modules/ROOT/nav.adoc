@@ -9,6 +9,7 @@
 * xref:compatibility.adoc[Compatibility]
 * xref:metrics.adoc[Metrics]
 * xref:tracing.adoc[Tracing]
+* xref:structured-logs.adoc[Structured logs]
 * xref:troubleshooting.adoc[Troubleshooting]
 * xref:end-to-end-example.adoc[End-to-end example]
 * xref:videos.adoc[Videos]

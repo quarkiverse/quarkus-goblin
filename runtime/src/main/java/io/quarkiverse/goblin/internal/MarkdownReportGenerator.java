@@ -97,9 +97,7 @@ public final class MarkdownReportGenerator {
     }
 
     private static String injectedValue(AssaultEngine.AssaultRecord record) {
-        if ("latency".equals(record.type()) && record.latencyMs() > 0) {
-            return record.latencyMs() + " ms";
-        }
-        return "-";
+        String value = record.injectedValue();
+        return value == null || value.isEmpty() ? "-" : value.replace("|", "\\|");
     }
 }

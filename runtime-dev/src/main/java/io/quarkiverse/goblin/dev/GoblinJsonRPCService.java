@@ -152,10 +152,8 @@ public class GoblinJsonRPCService {
             return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
         }
         try {
-            AssaultProfile previous = cfg.getProfile();
             AssaultProfile next = parseProfile(profile);
             cfg.setProfile(next);
-            LOG.warnf("Goblin profile changed: %s -> %s", previous, cfg.getProfile());
             return configJson(cfg).put("ok", true);
         } catch (IllegalArgumentException e) {
             LOG.warnf("Goblin: cannot switch profile '%s': %s", profile, e.getMessage());
@@ -246,7 +244,6 @@ public class GoblinJsonRPCService {
             + "full configuration plus ok and the effective 'active' flag.")
     public JsonObject toggleActive() {
         boolean active = engine.toggleActive();
-        LOG.warnf("Goblin chaos %s via Dev UI", active ? "ACTIVATED" : "DEACTIVATED");
         return activeResult(engine.getMutableConfig(), active);
     }
 
@@ -258,7 +255,6 @@ public class GoblinJsonRPCService {
     public JsonObject setActive(
             @JsonRpcDescription("true to arm chaos, false to disarm it and cancel any pending auto-off.") boolean active) {
         engine.setActive(active);
-        LOG.warnf("Goblin chaos %s via Dev UI", active ? "ACTIVATED" : "DEACTIVATED");
         return activeResult(engine.getMutableConfig(), engine.isActive());
     }
 
@@ -282,7 +278,6 @@ public class GoblinJsonRPCService {
                     .put("error", "Auto-off delay must be between 1 and " + MAX_AUTO_OFF_MINUTES + " minutes");
         }
         engine.scheduleAutoOff(minutes * 60_000L);
-        LOG.warnf("Goblin chaos will auto-disable in %d min (Dev UI)", minutes);
         return new JsonObject().put("ok", true).put("autoOffRemainingMs", autoOffRemainingMs());
     }
 
@@ -324,7 +319,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleLatency() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setLatencyEnabled(!cfg.isLatencyEnabled());
-        LOG.warnf("Goblin latency %s via Dev UI", cfg.isLatencyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -334,7 +328,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleException() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setExceptionEnabled(!cfg.isExceptionEnabled());
-        LOG.warnf("Goblin exception %s via Dev UI", cfg.isExceptionEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -345,7 +338,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleHttpStatus() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setHttpStatusEnabled(!cfg.isHttpStatusEnabled());
-        LOG.warnf("Goblin HTTP status %s via Dev UI", cfg.isHttpStatusEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -357,7 +349,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleDependencyDegradation() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setDependencyDegradationEnabled(!cfg.isDependencyDegradationEnabled());
-        LOG.warnf("Goblin dependency degradation %s via Dev UI", cfg.isDependencyDegradationEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -371,7 +362,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleClientLatency() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setClientLatencyEnabled(!cfg.isClientLatencyEnabled());
-        LOG.warnf("Goblin client latency %s via Dev UI", cfg.isClientLatencyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -385,7 +375,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleClientException() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setClientExceptionEnabled(!cfg.isClientExceptionEnabled());
-        LOG.warnf("Goblin client exception %s via Dev UI", cfg.isClientExceptionEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -400,7 +389,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleResponseBody() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setResponseBodyEnabled(!cfg.isResponseBodyEnabled());
-        LOG.warnf("Goblin response body %s via Dev UI", cfg.isResponseBodyEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -416,7 +404,6 @@ public class GoblinJsonRPCService {
     public JsonObject toggleResponseHeader() {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
         cfg.setResponseHeaderEnabled(!cfg.isResponseHeaderEnabled());
-        LOG.warnf("Goblin response header %s via Dev UI", cfg.isResponseHeaderEnabled() ? "ENABLED" : "DISABLED");
         return configJson(cfg).put("ok", true);
     }
 
@@ -467,7 +454,6 @@ public class GoblinJsonRPCService {
             LOG.warnf("Goblin: response header rule rejected: name='%s' action='%s': %s", trimmed, action, e.getMessage());
             return new JsonObject().put("ok", false).put("error", e.getMessage());
         }
-        LOG.warnf("Goblin response header changed: %s %s value='%s'", trimmed, parsed, safeValue);
         return configJson(cfg)
                 .put("ok", true)
                 .put("name", trimmed)
@@ -491,7 +477,6 @@ public class GoblinJsonRPCService {
         }
         String trimmed = name.trim();
         cfg.removeResponseHeader(trimmed);
-        LOG.warnf("Goblin response header removed: %s", trimmed);
         return configJson(cfg).put("ok", true);
     }
 
@@ -552,12 +537,8 @@ public class GoblinJsonRPCService {
             return new JsonObject().put("ok", false)
                     .put("error", "Unknown response body mode '" + mode + "'. Valid values: TRUNCATE, INFLATE");
         }
-        String previous = cfg.getResponseBodyMode().name();
-        int previousPercentage = cfg.getResponseBodyPercentage();
         cfg.setResponseBodyMode(parsed);
         List<String> issues = cfg.setResponseBodyPercentage(percentage);
-        LOG.warnf("Goblin response body changed: %s %d%% -> %s %d%%", previous, previousPercentage,
-                cfg.getResponseBodyMode(), cfg.getResponseBodyPercentage());
         return configJson(cfg)
                 .put("ok", true)
                 .put("mode", cfg.getResponseBodyMode().name())
@@ -584,11 +565,7 @@ public class GoblinJsonRPCService {
             @JsonRpcDescription("Minimum injected delay, in milliseconds.") long minMs,
             @JsonRpcDescription("Maximum injected delay, in milliseconds.") long maxMs) {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
-        long prevMin = cfg.getLatencyMinMs();
-        long prevMax = cfg.getLatencyMaxMs();
         List<String> issues = cfg.setLatencyRange(minMs, maxMs);
-        LOG.warnf("Goblin latency changed: %d-%d ms -> %d-%d ms", prevMin, prevMax,
-                cfg.getLatencyMinMs(), cfg.getLatencyMaxMs());
         return configJson(cfg)
                 .put("ok", true)
                 .put("minMilliseconds", cfg.getLatencyMinMs())
@@ -606,11 +583,7 @@ public class GoblinJsonRPCService {
                     + "single-String constructor.") String type,
             @JsonRpcDescription("Message carried by the thrown exception.") String message) {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
-        String prevType = cfg.getExceptionType();
         List<String> issues = cfg.setExceptionType(type);
-        if (!prevType.equals(cfg.getExceptionType())) {
-            LOG.warnf("Goblin exception changed: %s -> %s", prevType, cfg.getExceptionType());
-        }
         cfg.setExceptionMessage(message);
         return configJson(cfg)
                 .put("ok", true)
@@ -628,10 +601,8 @@ public class GoblinJsonRPCService {
                     + "replaced by 503.") int code,
             @JsonRpcDescription("Response body returned together with the status code.") String message) {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
-        int prevCode = cfg.getHttpStatusCode();
         List<String> issues = cfg.setHttpStatusCode(code);
         cfg.setHttpStatusMessage(message);
-        LOG.warnf("Goblin HTTP status changed: %d -> %d", prevCode, cfg.getHttpStatusCode());
         return configJson(cfg)
                 .put("ok", true)
                 .put("code", cfg.getHttpStatusCode())
@@ -646,9 +617,7 @@ public class GoblinJsonRPCService {
             @JsonRpcDescription("Percentage of eligible requests to affect, 0-100; 100 affects every eligible "
                     + "request.") int level) {
         MutableAssaultConfigImpl cfg = engine.getMutableConfig();
-        int previous = cfg.getTargetLevel();
         List<String> issues = cfg.setTargetLevel(level);
-        LOG.warnf("Goblin target level changed: %d%% -> %d%%", previous, cfg.getTargetLevel());
         return configJson(cfg)
                 .put("ok", true)
                 .put("level", cfg.getTargetLevel())
@@ -663,7 +632,7 @@ public class GoblinJsonRPCService {
     @JsonRpcDescription("Read the assault history buffer, oldest entry first. It keeps the last 1000 assaults: older "
             + "entries are dropped as new ones arrive. Each entry carries the method, the "
             + "assault type, the epoch timestamp in milliseconds, the injected latency in milliseconds (0 for a "
-            + "non-latency assault), the "
+            + "non-latency assault), what the assault injected (e.g. '842ms', 'HTTP 503'), the "
             + "source (server, service, rest-client, webclient, database, messaging) and a snapshot of the "
             + "configuration active at the time. Read-only.")
     public JsonArray getHistory() {
@@ -674,6 +643,7 @@ public class GoblinJsonRPCService {
                     .put("type", record.type())
                     .put("timestamp", record.timestamp())
                     .put("latencyMs", record.latencyMs())
+                    .put("injectedValue", record.injectedValue())
                     .put("source", record.sourceTag())
                     .put("config", record.configSnapshot()));
         }
@@ -705,7 +675,7 @@ public class GoblinJsonRPCService {
             cfg.setResponseHeaderEnabled(false);
             cfg.setProfile(AssaultProfile.NONE);
         }
-        LOG.warnf("Goblin: all assaults disabled via Dev UI kill switch");
+        LOG.info("Goblin: all assaults disabled via Dev UI kill switch");
         JsonObject result = cfg != null ? configJson(cfg) : new JsonObject();
         return result.put("ok", true).put("active", false);
     }
@@ -727,7 +697,7 @@ public class GoblinJsonRPCService {
             return new JsonObject().put("ok", false).put("error", "Engine is not initialised");
         }
         List<String> issues = cfg.resetToDefaults();
-        LOG.warnf("Goblin: configuration reset to defaults via Dev UI");
+        LOG.info("Goblin: configuration reset to defaults via Dev UI");
         return configJson(cfg).put("ok", true).put("warning", toWarning(issues));
     }
 
@@ -779,7 +749,7 @@ public class GoblinJsonRPCService {
             return configJson(cfg).put("ok", false).put("error", "Invalid configuration, nothing applied: " + e.getMessage());
         }
         cfg.replaceWith(staged);
-        LOG.warnf("Goblin: configuration applied via Dev UI: fields=%s", new ArrayList<>(config.keySet()));
+        LOG.infof("Goblin: configuration applied via Dev UI: fields=%s", new ArrayList<>(config.keySet()));
         if (!issues.isEmpty()) {
             LOG.warnf("Goblin: configuration applied with issues: %s", issues);
         }
@@ -1018,7 +988,6 @@ public class GoblinJsonRPCService {
                 LOG.warnf("Goblin: skipping response header rule '%s' from applyConfig: %s", name, e.getMessage());
                 continue;
             }
-            LOG.warnf("Goblin: response header rule applied via applyConfig: %s %s value='%s'", name, action, safeValue);
         }
     }
 
@@ -1137,7 +1106,7 @@ public class GoblinJsonRPCService {
         try {
             LoadedScenario scenario = GoblinScenarios.load(name);
             cfg.replaceWith(scenario.config());
-            LOG.warnf("Goblin: scenario '%s' loaded via Dev UI: %s", scenario.name(), cfg.describeAssaults());
+            LOG.infof("Goblin: scenario '%s' loaded via Dev UI: %s", scenario.name(), cfg.describeAssaults());
             return configJson(cfg).put("ok", true).put("scenario", scenario.name());
         } catch (ScenarioException e) {
             return scenarioError(e);
