@@ -4,22 +4,17 @@ import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.List;
 
-import org.jboss.jandex.AnnotationInstance;
-import org.jboss.jandex.AnnotationTransformation;
-import org.jboss.jandex.AnnotationValue;
-import org.jboss.jandex.ClassInfo;
-import org.jboss.jandex.DotName;
-import org.jboss.jandex.IndexView;
-import org.jboss.jandex.MethodInfo;
+import org.jboss.jandex.*;
 
-import io.quarkiverse.goblin.GoblinChaosClientFilter;
-import io.quarkiverse.goblin.GoblinTargetingConfig;
-import io.quarkiverse.goblin.TargetRules;
 import io.quarkiverse.goblin.assault.Assault;
-import io.quarkiverse.goblin.service.GoblinServiceAssault;
-import io.quarkiverse.goblin.service.GoblinServiceInterceptor;
+import io.quarkiverse.goblin.internal.config.GoblinTargetingConfig;
+import io.quarkiverse.goblin.internal.config.TargetRules;
+import io.quarkiverse.goblin.internal.filter.GoblinChaosClientFilter;
+import io.quarkiverse.goblin.internal.service.GoblinServiceAssault;
+import io.quarkiverse.goblin.internal.service.GoblinServiceInterceptor;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
+import io.quarkus.arc.processor.BuiltinScope;
 import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
@@ -44,9 +39,8 @@ public class GoblinBuildStep {
      */
     private static final String[] INTERNAL_PACKAGE_PREFIXES = {
             "io.quarkiverse.goblin.assault",
-            "io.quarkiverse.goblin.service",
+            "io.quarkiverse.goblin.internal",
             "io.quarkiverse.goblin.dev",
-            "io.quarkiverse.goblin.route",
             "io.quarkiverse.goblin.metrics",
             "io.quarkiverse.goblin.opentelemetry"
     };
@@ -73,7 +67,9 @@ public class GoblinBuildStep {
     @BuildStep(onlyIfNot = IsProduction.class)
     void registerAssaultBeans(CombinedIndexBuildItem combinedIndex,
             BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
-        AdditionalBeanBuildItem.Builder builder = AdditionalBeanBuildItem.builder().setUnremovable();
+        // the SPI promises @ApplicationScoped assaults: a class without a scope annotation gets it, never @Dependent
+        AdditionalBeanBuildItem.Builder builder = AdditionalBeanBuildItem.builder().setUnremovable()
+                .setDefaultScope(BuiltinScope.APPLICATION.getName());
         DotName assaultName = DotName.createSimple(Assault.class.getName());
         for (ClassInfo ci : combinedIndex.getIndex().getAllKnownImplementations(assaultName)) {
             builder.addBeanClass(ci.name().toString());

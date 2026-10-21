@@ -5,9 +5,9 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 
-import io.quarkiverse.goblin.GoblinTargetingConfig;
-import io.quarkiverse.goblin.TargetRules;
 import io.quarkiverse.goblin.dev.GoblinJsonRPCService;
+import io.quarkiverse.goblin.internal.config.GoblinTargetingConfig;
+import io.quarkiverse.goblin.internal.config.TargetRules;
 import io.quarkus.deployment.IsLocalDevelopment;
 import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;

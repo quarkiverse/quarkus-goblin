@@ -1,0 +1,112 @@
+= Public API and versioning
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+Goblin follows https://semver.org[semantic versioning] from 1.0.0 on. This page says which part of the extension the
+version number speaks for, and what a minor version may still change.
+
+== What the version covers
+
+=== Java API
+
+The stable Java API is the `io.quarkiverse.goblin` package. The `io.quarkiverse.goblin.assault` package is public too, but
+<<experimental-spi,experimental>>; nothing else is public API.
+
+[cols="1,3"]
+|===
+| Type | Role
+
+| `AssaultEngine`
+| The chaos engine: active flag, auto-off, live configuration, history, counters. Inject it to drive chaos from an
+application or a `@QuarkusTest`.
+
+| `AssaultEngine.AssaultRecord`
+| One recorded assault, as returned by `getHistory()` and passed to the observers: target, label, `AssaultType`, source,
+injected latency, time.
+
+| `AssaultConfig`
+| A read-only view of the assault configuration, frozen on one state: `AssaultEngine.configSnapshot()`, the two sides of
+an `AssaultConfigChange`, the configuration a custom assault is applied with.
+
+| `MutableAssaultConfig`
+| The live configuration, modifiable at runtime, returned by `AssaultEngine.getMutableConfig()`. Extends `AssaultConfig`
+with the setters; its `snapshot()` returns an `AssaultConfig`.
+
+| `AssaultConfig.HeaderRule`
+| One response header rule, as returned by `AssaultConfig.getResponseHeaders()`.
+
+| `AssaultObserver`
+| SPI notified of every assault, activation change and configuration change. See xref:how-it-works.adoc#observer-spi[the observer SPI].
+
+| `AssaultConfigChange`
+| A configuration change delivered to `AssaultObserver.onConfigChange`.
+
+| `GoblinWebClient`
+| Arms a Vert.x `WebClient` for the client-side assaults.
+
+| `AssaultType`, `AssaultSource`, `AssaultProfile`, `ChaosLayer`, `DeactivationReason`, `ResponseBodyMode`, `ResponseHeaderAction`
+| The enums used by the types above.
+|===
+
+`AssaultEngine`, `AssaultConfig` and `MutableAssaultConfig` are interfaces provided by Goblin: an application uses them,
+it does not implement them. In this package, `AssaultObserver` is the only interface meant to be implemented; the
+experimental `Assault` SPI is the other one.
+
+=== Beyond Java
+
+The version also covers what an application, a dashboard or an agent relies on outside the Java API:
+
+* the `quarkus.goblin.*` configuration properties (see xref:configuration-reference.adoc[]);
+* the metric names and tags of `quarkus-goblin-metrics` (see xref:metrics.adoc[]), and the span name and attributes of
+  `quarkus-goblin-opentelemetry` (see xref:tracing.adoc[]). In particular the `type` tag and the `goblin.assault.type`
+  attribute keep carrying the assault label, e.g. `latency` or `response-body-truncate`;
+* the names and parameters of the JSON-RPC methods and Dev MCP tools (see xref:json-rpc-reference.adoc[]).
+
+=== Not covered
+
+* `io.quarkiverse.goblin.internal` and its sub-packages, and the Java classes of the `quarkus-goblin-metrics`,
+  `quarkus-goblin-opentelemetry` and Dev UI modules: implementation, free to change in any version.
+* The constructors of the records -- `AssaultEngine.AssaultRecord`, `AssaultConfigChange`,
+  `AssaultConfig.HeaderRule` -- and their record patterns (`instanceof AssaultRecord(var method, ...)`,
+  `case AssaultRecord(...)`): these records are created by Goblin, and new components can be added. Their accessors are
+  covered.
+* Human-readable text: log messages, `AssaultConfig.describeAssaults()`, the Markdown report, the Dev UI.
+* The layout of `.goblin-state.json` and of the `.goblin/scenarios/` files.
+
+[#experimental-spi]
+== Experimental SPI
+
+The `io.quarkiverse.goblin.assault` package -- `Assault`, `AssaultContext`, `AssaultOutcome`, used to
+xref:how-it-works.adoc#custom-assault[add your own assault type] -- is annotated `@Experimental`. Custom
+assaults run on the inbound JAX-RS filter only, so this SPI may change in a minor version when another layer supports
+them. Such a change is announced in the xref:release-notes.adoc[release notes].
+
+== What a version may change
+
+[cols="1,3"]
+|===
+| Version | Changes
+
+| Patch (`1.0.x`)
+| Bug fixes only.
+
+| Minor (`1.x.0`)
+| Additions that keep code using the covered surface compiling and running: new types, new methods on `AssaultEngine`,
+`AssaultConfig` and `MutableAssaultConfig`, new default methods on `AssaultObserver`, new record components, new enum
+constants, new configuration properties, JSON-RPC methods and Dev MCP tools, new fields in their results. Deprecations.
+Changes to the <<experimental-spi,experimental SPI>>, announced in the release notes.
+
+| Major (`x.0.0`)
+| Anything else: removals and incompatible changes of the covered surface.
+|===
+
+A covered element is removed only in a major version, after being deprecated in an earlier minor one. The experimental SPI is not covered by this rule.
+
+[TIP]
+====
+New injection layers -- gRPC, GraphQL, reactive clients -- arrive in minor versions, and each one adds constants to
+`ChaosLayer` and `AssaultSource`. Keep a `default` branch when you `switch` on Goblin enums: an exhaustive `switch`
+without one stops compiling, or throws `MatchException`, once a constant is added.
+====

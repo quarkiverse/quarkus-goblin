@@ -8,11 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import jakarta.inject.Inject;
@@ -21,11 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.MutableAssaultConfig;
-import io.quarkiverse.goblin.ResponseBodyMode;
-import io.quarkiverse.goblin.ResponseHeaderAction;
+import io.quarkiverse.goblin.*;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
@@ -72,6 +64,7 @@ class GoblinReactiveRoutesIntegrationTest {
         assertTrue(elapsedMs >= 200, "the route must be delayed by 200-250 ms, took " + elapsedMs + " ms");
         AssaultEngine.AssaultRecord record = single("SampleRoutes.thread");
         assertEquals("latency", record.type());
+        assertEquals(AssaultType.LATENCY, record.assaultType());
         assertEquals("server", record.sourceTag());
         assertTrue(record.latencyMs() >= 200 && record.latencyMs() <= 250, "got: " + record.latencyMs());
     }
@@ -87,6 +80,7 @@ class GoblinReactiveRoutesIntegrationTest {
 
         assertTrue(elapsedMs >= 200, "the route must be delayed by 200-250 ms, took " + elapsedMs + " ms");
         assertEquals("latency", single("SampleRoutes.blocking").type());
+        assertEquals(AssaultType.LATENCY, single("SampleRoutes.blocking").assaultType());
     }
 
     @Test
@@ -99,6 +93,7 @@ class GoblinReactiveRoutesIntegrationTest {
         RestAssured.given().get("/routes/hello").then().statusCode(500)
                 .body(equalTo("route failure handled: Goblin route chaos"));
         assertEquals("exception", single("SampleRoutes.hello").type());
+        assertEquals(AssaultType.EXCEPTION, single("SampleRoutes.hello").assaultType());
     }
 
     @Test
@@ -125,6 +120,7 @@ class GoblinReactiveRoutesIntegrationTest {
                 .contentType(startsWith("text/plain"))
                 .body(equalTo("teapot chaos"));
         assertEquals("http-status", single("SampleRoutes.hello").type());
+        assertEquals(AssaultType.HTTP_STATUS, single("SampleRoutes.hello").assaultType());
     }
 
     @Test
@@ -147,6 +143,7 @@ class GoblinReactiveRoutesIntegrationTest {
         RestAssured.given().get("/routes/hello").then().statusCode(503)
                 .body(equalTo("Dependency unavailable (Goblin chaos)"));
         assertEquals("dependency-degradation", single("SampleRoutes.hello").type());
+        assertEquals(AssaultType.DEPENDENCY_DEGRADATION, single("SampleRoutes.hello").assaultType());
     }
 
     @Test
@@ -169,6 +166,7 @@ class GoblinReactiveRoutesIntegrationTest {
         RestAssured.given().get("/routes/service").then().statusCode(500)
                 .body(equalTo("route failure handled: service chaos"));
         assertEquals("exception", single("io.quarkiverse.goblin.it.SampleService.hello").type());
+        assertEquals(AssaultType.EXCEPTION, single("io.quarkiverse.goblin.it.SampleService.hello").assaultType());
     }
 
     @Test
@@ -199,6 +197,7 @@ class GoblinReactiveRoutesIntegrationTest {
                 .header("X-Goblin-Filter", "seen")
                 .body(equalTo("filtered"));
         assertEquals("latency", single("SampleRoutes.trace").type());
+        assertEquals(AssaultType.LATENCY, single("SampleRoutes.trace").assaultType());
     }
 
     @Test
@@ -209,6 +208,7 @@ class GoblinReactiveRoutesIntegrationTest {
                 .header("X-Goblin-Pass-Through", "seen")
                 .body(equalTo("hello behind a pass-through route"));
         assertEquals("latency", single("SampleRouteFilters.passThrough").type());
+        assertEquals(AssaultType.LATENCY, single("SampleRouteFilters.passThrough").assaultType());
     }
 
     @Test
@@ -230,6 +230,7 @@ class GoblinReactiveRoutesIntegrationTest {
         RestAssured.given().body("payload").post("/routes/echo").then().statusCode(200)
                 .body(equalTo("echo: payload"));
         assertEquals("latency", single("SampleRoutes.echo").type());
+        assertEquals(AssaultType.LATENCY, single("SampleRoutes.echo").assaultType());
     }
 
     @Test
@@ -257,6 +258,7 @@ class GoblinReactiveRoutesIntegrationTest {
         assertTrue(body.length() < "hello from Goblin route".length() && "hello from Goblin route".startsWith(body),
                 "got: " + body);
         assertEquals("response-body-truncate", single("SampleRoutes.hello").type());
+        assertEquals(AssaultType.RESPONSE_BODY, single("SampleRoutes.hello").assaultType());
     }
 
     @Test
@@ -442,6 +444,7 @@ class GoblinReactiveRoutesIntegrationTest {
         // the route resolves the layer on the event loop, the resource and its bean run on a worker thread
         RestAssured.given().get("/api/passthrough/service").then().statusCode(500);
         assertEquals("exception", single("io.quarkiverse.goblin.it.SampleService.hello").type());
+        assertEquals(AssaultType.EXCEPTION, single("io.quarkiverse.goblin.it.SampleService.hello").assaultType());
     }
 
     @Test
@@ -452,6 +455,7 @@ class GoblinReactiveRoutesIntegrationTest {
         String full = "hello behind a pass-through route";
         assertTrue(body.length() < full.length() && full.startsWith(body), "got: " + body);
         assertEquals("response-body-truncate", single("SampleRouteFilters.passThrough").type());
+        assertEquals(AssaultType.RESPONSE_BODY, single("SampleRouteFilters.passThrough").assaultType());
     }
 
     private void truncateHalf() {

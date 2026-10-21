@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultType;
 import io.quarkiverse.goblin.GoblinWebClient;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkus.test.junit.QuarkusTest;
@@ -79,6 +80,7 @@ public class GoblinWebClientIntegrationTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("latency", record.type());
+        assertEquals(AssaultType.LATENCY, record.assaultType());
         assertTrue(record.method().startsWith("WebClient GET"),
                 "expected a WebClient record, got: " + record.method());
         assertTrue(record.method().contains("/api/hello"),
@@ -117,6 +119,7 @@ public class GoblinWebClientIntegrationTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("exception", record.type());
+        assertEquals(AssaultType.EXCEPTION, record.assaultType());
         assertTrue(record.method().startsWith("WebClient GET"),
                 "expected a WebClient record, got: " + record.method());
         assertTrue(record.method().contains("/api/hello"),
@@ -139,7 +142,9 @@ public class GoblinWebClientIntegrationTest {
         assertTrue(elapsed >= 150, "expected the delay before the WebClient exception, got " + elapsed + "ms");
         assertEquals(2, engine.getHistory().size());
         assertEquals("latency", engine.getHistory().getFirst().type());
+        assertEquals(AssaultType.LATENCY, engine.getHistory().getFirst().assaultType());
         assertEquals("exception", engine.getHistory().get(1).type());
+        assertEquals(AssaultType.EXCEPTION, engine.getHistory().get(1).assaultType());
     }
 
     @Test
@@ -187,6 +192,7 @@ public class GoblinWebClientIntegrationTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("latency", record.type());
+        assertEquals(AssaultType.LATENCY, record.assaultType());
         assertTrue(record.method().startsWith("WebClient GET"),
                 "expected a WebClient record, got: " + record.method());
     }
@@ -206,6 +212,7 @@ public class GoblinWebClientIntegrationTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("exception", record.type());
+        assertEquals(AssaultType.EXCEPTION, record.assaultType());
         assertTrue(record.method().startsWith("WebClient GET"),
                 "expected a WebClient record, got: " + record.method());
     }

@@ -1,4 +1,4 @@
-import {LitElement, html, css} from 'lit';
+import {css, html, LitElement} from 'lit';
 import {live} from 'lit/directives/live.js';
 import {JsonRpc} from 'jsonrpc';
 import './goblin-active.js';

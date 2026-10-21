@@ -1,8 +1,6 @@
 package io.quarkiverse.goblin.metrics;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.concurrent.TimeUnit;
 
@@ -13,11 +11,13 @@ import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultSource;
+import io.quarkiverse.goblin.AssaultType;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
 
 class GoblinMetricsObserverTest {
 
     private final MeterRegistry registry = new SimpleMeterRegistry();
-    private final AssaultEngine engine = new AssaultEngine();
+    private final AssaultEngineImpl engine = new AssaultEngineImpl();
     private final GoblinMetricsObserver observer = new GoblinMetricsObserver(registry, engine);
 
     @Test
@@ -91,11 +91,13 @@ class GoblinMetricsObserverTest {
     }
 
     private AssaultEngine.AssaultRecord record(String method, String type, long latencyMs) {
-        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot");
+        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot",
+                AssaultSource.SERVER, assaultType(type));
     }
 
     private AssaultEngine.AssaultRecord record(AssaultSource source, String method, String type, long latencyMs) {
-        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source);
+        return new AssaultEngine.AssaultRecord(method, type, System.currentTimeMillis(), latencyMs, "snapshot", source,
+                assaultType(type));
     }
 
     private double totalCount(String type, String source) {
@@ -109,5 +111,10 @@ class GoblinMetricsObserverTest {
                 .tag("type", type)
                 .tag("source", source)
                 .counter();
+    }
+
+    /** The assault type of a built-in label without detail, e.g. {@code "http-status"}. */
+    private static AssaultType assaultType(String label) {
+        return AssaultType.valueOf(label.toUpperCase().replace('-', '_'));
     }
 }

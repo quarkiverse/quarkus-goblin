@@ -113,8 +113,9 @@ Current status: **preview** (v0.5.0 released, v1.0.0 in development)
 
 ## v1.0.0 -- Maturity
 
-- [ ] **Stable public API** ([#85](https://github.com/quarkiverse/quarkus-goblin/issues/85))
+- [x] **Stable public API** ([#85](https://github.com/quarkiverse/quarkus-goblin/issues/85))
   Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultEngine.AssaultRecord`, the `Assault` and `AssaultObserver` SPIs), which is currently preview and may change between minor versions. Document the API contract and versioning policy for third-party extensions.
+  Delivered as the `io.quarkiverse.goblin` package -- `AssaultEngine` and the configuration became interfaces, split into a read-only `AssaultConfig` and the live `MutableAssaultConfig`, and the implementation moved to `io.quarkiverse.goblin.internal`, organised by responsibility -- with `AssaultRecord.assaultType()`, the `Assault` SPI marked `@Experimental` while it is bound to JAX-RS, and a *Public API and versioning* documentation page. An automated compatibility check (japicmp/revapi) follows once 1.0.0 is published as its baseline.
 
 - [ ] **Production-profile safeguard** ([#86](https://github.com/quarkiverse/quarkus-goblin/issues/86))
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.

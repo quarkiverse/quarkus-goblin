@@ -151,7 +151,7 @@ The MESSAGING layer targets the consumer side of Quarkus Messaging: the `@Incomi
 
 == Runtime config modification
 
-All assault parameters can be modified at runtime through the Dev UI or via JSON-RPC. The initial config is loaded from `application.properties` at startup, then held in a mutable in-memory config (`MutableAssaultConfig`). This means you can:
+All assault parameters can be modified at runtime through the Dev UI or via JSON-RPC. The initial config is loaded from `application.properties` at startup, then held in a live in-memory configuration, the `MutableAssaultConfig` returned by `AssaultEngine.getMutableConfig()`. Each hook reads it through a read-only `AssaultConfig` snapshot taken once per request or call, so a change made meanwhile never applies half-way. This means you can:
 
 * Enable latency AND exception simultaneously to simulate a slow failure.
 * Toggle assault types on/off without restarting.
@@ -189,6 +189,11 @@ can never break an assault. The engine
 injects `Instance<AssaultObserver>`, so any `@ApplicationScoped` implementation is picked up automatically; outside
 the CDI container (plain unit tests) the notification simply does nothing.
 
+Each `AssaultEngine.AssaultRecord` passed to `onAssault` carries the target (`method()`), the label (`type()`, e.g.
+`latency` or `response-body-truncate`: the value of the `type` metric tag and span attribute), the `AssaultType`
+without the label's detail (`assaultType()`), the source (`source()`: server, service, REST Client, WebClient,
+database or messaging), the injected latency, the time and a description of the enabled assaults.
+
 Every change of the assault configuration is broadcast too, through `onConfigChange(AssaultConfigChange)`: the event
 carries the configuration before and after the change, both read-only snapshots, and the time it was published. That
 is enough for an application or a test to record the exact attack it went through, and to replay it after a fix:
@@ -212,8 +217,8 @@ public class AttackRecorder implements AssaultObserver {
   intermediate state is then not reported on its own.
 * *Not a request-path call.* The observer runs on the thread that changed the configuration, never on a request
   thread. It must still return quickly: the caller waits for it.
-* *Read-only.* Both configurations are frozen snapshots: their setters throw `UnsupportedOperationException`, so an
-  observer can keep them but never changes the live configuration through them.
+* *Read-only.* Both configurations are frozen `AssaultConfig` snapshots, with no setter: an observer can keep them, but
+  never changes the live configuration through them.
 * *Dev and test mode.* The notification fires in test mode as well, so a `@QuarkusTest` can assert on the configuration
   an assault ran with, while the `.goblin-state.json` persistence stays dev-only.
 * *What is not a change.* The configuration loaded at startup, its startup validation and the profile label restored
@@ -227,18 +232,21 @@ The optional `quarkus-goblin-metrics` and `quarkus-goblin-opentelemetry` modules
 assault and activation notifications (see xref:metrics.adoc[] and xref:tracing.adoc[]); experiment recording plugs
 into the same hook.
 
+[#custom-assault]
 == Adding your own assault type
 
-Goblin ships with six built-in assault types (latency, exception, HTTP status, dependency degradation, response body and response headers) and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface, annotate the class `@ApplicationScoped`, and it is discovered automatically at build time -- no other wiring required:
+Goblin ships with six built-in assault types (latency, exception, HTTP status, dependency degradation, response body and response headers) and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface and it is discovered automatically at build time -- no other wiring required. The bean is `@ApplicationScoped`, whether you annotate it or not:
 
 * `type()` -- the `AssaultType` this assault represents. `AssaultType` is a closed enum: a custom assault reuses one of
   the existing constants. Note that the per-request gate only opens when at least one of the built-in toggles is
   enabled, so a custom assault must be paired with (or guarded by) one of them.
-* `isEnabled(config)` -- whether the assault should run for the current mutable configuration.
+* `isEnabled(config)` -- whether the assault should run, given the read-only `AssaultConfig` snapshot of the current request.
 * `recordLabel()` -- the label used in the assault history and the Markdown report.
 * `order()` -- the execution position in the chain. Latency (order `10`) runs first; assaults that abort the request run afterwards.
-* `apply(context)` -- perform the assault. Return `AssaultOutcome.CONTINUE` to let the next enabled type run, or `ABORTED` to stop processing. To short-circuit the request call `context.getRequestContext().abortWith(...)`; to throw a simulated failure, throw a `RuntimeException`. The engine does not record anything on your behalf: call `context.getEngine().recordAssault(context.getMethodName(), recordLabel())` when the assault fires, so it shows up in the history, the counters, the metrics and the traces.
+* `apply(context)` -- perform the assault. Return `AssaultOutcome.CONTINUE` to let the next enabled type run, or `ABORTED` to stop processing. To short-circuit the request call `context.getRequestContext().abortWith(...)`; to throw a simulated failure, throw a `RuntimeException`. The engine does not record anything on your behalf: call `context.record(this)` when the assault fires (`context.record(this, delayMs)` for a latency), so it shows up in the history, the counters, the metrics and the traces with its `type()` and `recordLabel()`.
 
-At build time Goblin scans the application index for implementors of `Assault` and registers them as beans, so a custom type provided by your application is picked up automatically. The filter resolves the ordered list of assaults for every request and applies the enabled ones in `order()` sequence.
+At build time Goblin scans the combined index -- the application and its indexed dependencies (a library jar needs a Jandex index, a `beans.xml` or a `quarkus.index-dependency` entry) -- for implementors of `Assault` and registers them as `@ApplicationScoped` beans (the scope a class without a scope annotation gets), so a custom type provided by your application is picked up automatically. The filter resolves the ordered list of assaults for every request and applies the enabled ones in `order()` sequence.
 
 NOTE: Custom assaults run in the JAX-RS filter only, since their `AssaultContext` carries the JAX-RS request context. Reactive routes apply the six built-in assault types and never call a custom `Assault` bean.
+
+IMPORTANT: The `Assault` SPI (`Assault`, `AssaultContext`, `AssaultOutcome`) is marked `@Experimental`: being bound to JAX-RS, it may change in a minor version once another layer supports custom assaults. See xref:public-api.adoc[].

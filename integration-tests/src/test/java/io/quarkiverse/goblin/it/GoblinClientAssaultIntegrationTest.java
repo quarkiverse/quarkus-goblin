@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultEngine;
+import io.quarkiverse.goblin.AssaultType;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
@@ -58,6 +59,7 @@ public class GoblinClientAssaultIntegrationTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("latency", record.type());
+        assertEquals(AssaultType.LATENCY, record.assaultType());
         assertTrue(record.method().contains("/api/hello"),
                 "expected the outbound URI in the record, got: " + record.method());
     }
@@ -94,6 +96,7 @@ public class GoblinClientAssaultIntegrationTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("exception", record.type());
+        assertEquals(AssaultType.EXCEPTION, record.assaultType());
         assertTrue(record.method().contains("/api/hello"),
                 "expected the outbound URI in the record, got: " + record.method());
     }
@@ -114,7 +117,9 @@ public class GoblinClientAssaultIntegrationTest {
         assertTrue(elapsed >= 150, "expected the delay before the client exception, got " + elapsed + "ms");
         assertEquals(2, engine.getHistory().size());
         assertEquals("latency", engine.getHistory().getFirst().type());
+        assertEquals(AssaultType.LATENCY, engine.getHistory().getFirst().assaultType());
         assertEquals("exception", engine.getHistory().get(1).type());
+        assertEquals(AssaultType.EXCEPTION, engine.getHistory().get(1).assaultType());
     }
 
     @Test

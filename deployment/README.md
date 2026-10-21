@@ -29,7 +29,7 @@ user application.
   `io.quarkus.vertx.web.runtime.RouteHandler.handle()`, so the HTTP_IN layer covers `@Route` methods (a WARN is logged
   when the call is not found).
 - `declareOptionalHooks(...)` -- exposes the installed optional layers as the `GoblinLayerHooks` synthetic bean read by
-  `AssaultEngine`.
+  `AssaultEngineImpl`.
 
 ## Keeping chaos out of production
 
@@ -38,7 +38,7 @@ Two independent guards:
 - every chaos build step above (and the Dev UI JSON-RPC registration) is annotated
   `@BuildStep(onlyIfNot = IsProduction.class)`: a production build carries no interceptor binding, no database hook
   and no JSON-RPC service;
-- at runtime, `AssaultEngine.initialize(LaunchMode)` leaves the engine inactive and without configuration in any launch
+- at runtime, `AssaultEngineImpl.initialize(LaunchMode)` leaves the engine inactive and without configuration in any launch
   mode other than `DEVELOPMENT` and `TEST`; in `TEST` it loads its configuration but stays inactive unless
   `quarkus.goblin.test.enabled=true`.
 
@@ -77,4 +77,4 @@ added in `runtime-dev` + `qwc-goblin-dashboard.js` (see [runtime-dev/README.md](
 - Keep `GoblinBuildStep` free of Dev UI logic (it lives in the processor) and vice versa.
 - Rely on the build index (`CombinedIndexBuildItem`) rather than hard-coding bean class names.
 - Any new chaos wiring must be a `@BuildStep(onlyIfNot = IsProduction.class)` step, and any new runtime behavior must
-  stay behind the dev/test launch-mode check of `AssaultEngine.initialize`.
+  stay behind the dev/test launch-mode check of `AssaultEngineImpl.initialize`.

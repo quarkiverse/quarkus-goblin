@@ -11,6 +11,7 @@ import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
+import io.quarkiverse.goblin.AssaultConfig;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.AssaultObserver;
 import io.quarkiverse.goblin.MutableAssaultConfig;
@@ -118,7 +119,7 @@ public class GoblinTracingObserver implements AssaultObserver {
      * @param record the assault record being traced
      * @param config the active configuration, or {@code null} outside a running application
      */
-    static void applyValueAttributes(Span span, AssaultEngine.AssaultRecord record, MutableAssaultConfig config) {
+    static void applyValueAttributes(Span span, AssaultEngine.AssaultRecord record, AssaultConfig config) {
         String type = record.type();
         if ("latency".equals(type)) {
             if (record.latencyMs() > 0) {

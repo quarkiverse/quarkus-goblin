@@ -1,30 +1,19 @@
 package io.quarkiverse.goblin.dev;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.AssaultProfile;
-import io.quarkiverse.goblin.AssaultSource;
-import io.quarkiverse.goblin.MutableAssaultConfig;
-import io.quarkiverse.goblin.ResponseHeaderAction;
+import io.quarkiverse.goblin.*;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
+import io.quarkiverse.goblin.internal.MutableAssaultConfigImpl;
 import io.quarkus.runtime.annotations.DevMCPEnableByDefault;
 import io.quarkus.runtime.annotations.JsonRpcDescription;
 import io.vertx.core.json.Json;
@@ -34,12 +23,12 @@ import io.vertx.core.json.JsonObject;
 class GoblinJsonRPCServiceTest {
 
     private GoblinJsonRPCService service;
-    private AssaultEngine engine;
+    private AssaultEngineImpl engine;
 
     @BeforeEach
     void setUp() {
         service = new GoblinJsonRPCService();
-        engine = new AssaultEngine();
+        engine = new AssaultEngineImpl();
         service.engine = engine;
     }
 
@@ -149,7 +138,7 @@ class GoblinJsonRPCServiceTest {
     }
 
     /**
-     * A null {@link MutableAssaultConfig} (engine not yet initialised) must produce a stable {@code ok=false} error
+     * A null {@link MutableAssaultConfigImpl} (engine not yet initialised) must produce a stable {@code ok=false} error
      * object instead of throwing.
      */
     @Test
@@ -165,7 +154,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setProfileReturnsOkTrueAndConfigShapeOnSuccess() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setProfile("slow_failure");
 
@@ -177,7 +166,7 @@ class GoblinJsonRPCServiceTest {
         assertNotNull(result.getJsonObject("exception"));
         assertNotNull(result.getJsonObject("httpStatus"));
         assertTrue(result.containsKey("level"));
-        assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList(),
+        assertEquals(MutableAssaultConfigImpl.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList(),
                 "the full config must expose the server-side exception presets");
     }
 
@@ -186,7 +175,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setProfileResetsToNoneWhenBlank() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setProfile("  ");
 
@@ -199,7 +188,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setProfileReturnsOkFalseForUnknownProfile() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setProfile("NOT_A_PROFILE");
 
@@ -212,7 +201,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void clientTogglesExposedInConfigAndStatus() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = service.getConfig();
         assertTrue(config.containsKey("clientLatencyEnabled"));
@@ -229,7 +218,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void availableLayersExposedInConfigAndStatus() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         List<Object> expected = List.of("SERVICE", "HTTP_OUT", "HTTP_IN");
         assertEquals(expected, service.getConfig().getJsonArray("availableLayers").getList());
@@ -241,7 +230,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void toggleClientLatencyFlipsValue() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.toggleClientLatency();
 
@@ -257,7 +246,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void toggleClientExceptionFlipsValue() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.toggleClientException();
 
@@ -273,7 +262,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void responseBodyExposedInConfigAndStatus() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = service.getConfig();
         assertTrue(config.containsKey("responseBodyEnabled"));
@@ -291,7 +280,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void toggleResponseBodyFlipsValue() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.toggleResponseBody();
 
@@ -307,7 +296,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseBodyConfigAppliesValues() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseBodyConfig("inflate", 175);
 
@@ -322,7 +311,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseBodyConfigRejectsUnknownMode() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseBodyConfig("SHRINK", 50);
 
@@ -335,7 +324,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseBodyConfigWarnsWhenPercentageClamped() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseBodyConfig("TRUNCATE", 250);
 
@@ -349,7 +338,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void responseHeaderExposedInConfigAndStatus() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = service.getConfig();
         assertTrue(config.containsKey("responseHeaderEnabled"));
@@ -365,7 +354,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void toggleResponseHeaderFlipsValue() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.toggleResponseHeader();
 
@@ -381,7 +370,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseHeaderInfoStoresRule() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseHeaderInfo("X-Goblin", "set", "chaos");
 
@@ -398,7 +387,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseHeaderInfoTrimsName() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseHeaderInfo("  X-Goblin  ", "set", "chaos");
 
@@ -411,7 +400,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseHeaderInfoRejectsUnknownAction() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseHeaderInfo("X-Goblin", "SHRINK", "chaos");
 
@@ -424,7 +413,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseHeaderInfoRejectsBlankName() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseHeaderInfo("  ", "SET", "chaos");
 
@@ -438,7 +427,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseHeaderInfoRejectsControlCharacters() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseHeaderInfo("X-Goblin", "SET", "chaos\r\nInjected: true");
 
@@ -452,7 +441,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void removeResponseHeaderDropsRule() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         service.setResponseHeaderInfo("X-Goblin", "SET", "chaos");
         JsonObject result = service.removeResponseHeader("X-Goblin");
@@ -466,7 +455,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void assertionMutationsReturnFullConfig() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.toggleLatency();
         assertTrue(result.getBoolean("ok"));
@@ -484,7 +473,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void toggleResultsExposeEveryToggle() throws Exception {
-        MutableAssaultConfig config = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl config = setMutableConfig(new MutableAssaultConfigImpl());
         config.setLatencyEnabled(false);
 
         JsonObject latency = service.toggleLatency();
@@ -500,7 +489,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setLatencyRangeReturnsFullConfig() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setLatencyRange(150, 300);
 
@@ -517,7 +506,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void toggleActiveReturnsFullConfigAndEffectiveActiveFlag() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.toggleActive();
 
@@ -525,7 +514,7 @@ class GoblinJsonRPCServiceTest {
         assertTrue(result.getBoolean("active"));
         assertTrue(engine.isActive());
         assertTrue(result.containsKey("profile"));
-        assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
+        assertEquals(MutableAssaultConfigImpl.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
     }
 
     /**
@@ -533,14 +522,14 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setActiveReturnsFullConfigAndActiveFlag() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setActive(false);
 
         assertTrue(result.getBoolean("ok"));
         assertFalse(result.getBoolean("active"));
         assertFalse(engine.isActive());
-        assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
+        assertEquals(MutableAssaultConfigImpl.EXCEPTION_PRESETS, result.getJsonArray("exceptionPresets").getList());
     }
 
     /**
@@ -549,7 +538,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void statusExplainsWhyChaosIsInactive() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         assertTrue(service.getStatus().containsKey("inactiveReason"), "the status always carries the reason");
         assertNull(service.getStatus().getString("inactiveReason"), "an engine that was never initialised has no reason");
@@ -573,7 +562,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void statusExplainsAnAutoOffThatElapsesOnTheSpot() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
         engine.setActive(true);
         engine.scheduleAutoOff(1);
         Thread.sleep(20);
@@ -589,7 +578,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void disableAllTurnsEverythingOff() throws Exception {
-        MutableAssaultConfig config = new MutableAssaultConfig();
+        MutableAssaultConfigImpl config = new MutableAssaultConfigImpl();
         config.setLatencyEnabled(true);
         config.setExceptionEnabled(true);
         config.setClientLatencyEnabled(true);
@@ -612,7 +601,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void resetDefaultsRestoresTheDefaults() throws Exception {
-        MutableAssaultConfig config = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl config = setMutableConfig(new MutableAssaultConfigImpl());
         config.setLatencyEnabled(false);
         config.setExceptionEnabled(true);
         config.setHttpStatusEnabled(true);
@@ -639,7 +628,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigAppliesOnlyTheProvidedFields() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject partial = new JsonObject()
                 .put("exceptionEnabled", true)
@@ -664,7 +653,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigAppliesProfileThenOverrides() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = new JsonObject()
                 .put("profile", "SLOW_FAILURE")
@@ -683,7 +672,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigReplacesHeaderRules() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
         service.setResponseHeaderInfo("X-Goblin", "SET", "boo");
 
         JsonObject config = new JsonObject()
@@ -708,7 +697,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigSkipsHeaderRuleWithUnknownAction() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = new JsonObject()
                 .put("headers", new JsonObject()
@@ -728,7 +717,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigSkipsHeaderRuleWithUnsafeValue() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = new JsonObject()
                 .put("headers", new JsonObject()
@@ -749,7 +738,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigAcceptsTransportDeserializedPayloadWithNestedHeaders() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         String payload = """
                 {
@@ -779,7 +768,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigRejectsMissingPayload() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.applyConfig(null);
 
@@ -792,9 +781,9 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void getCountersReportsTotalsAndPerType() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
-        engine.recordAssault("a", "latency");
-        engine.recordAssault("b", "response-body-truncate");
+        setMutableConfig(new MutableAssaultConfigImpl());
+        engine.recordAssault(AssaultType.LATENCY, "a", "latency");
+        engine.recordAssault(AssaultType.RESPONSE_BODY, "b", "response-body-truncate");
 
         JsonObject counters = service.getCounters();
 
@@ -810,10 +799,10 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void getCountersReportsPerSource() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
-        engine.recordAssault("SampleResource.hello", "latency");
-        engine.recordAssault(AssaultSource.REST_CLIENT, "REST-Client GET http://x", "latency", 5);
-        engine.recordAssault(AssaultSource.DATABASE, "Database <default> connection", "exception");
+        setMutableConfig(new MutableAssaultConfigImpl());
+        engine.recordAssault(AssaultType.LATENCY, "SampleResource.hello", "latency");
+        engine.recordAssault(AssaultSource.REST_CLIENT, AssaultType.LATENCY, "REST-Client GET http://x", "latency", 5);
+        engine.recordAssault(AssaultSource.DATABASE, AssaultType.EXCEPTION, "Database <default> connection", "exception");
 
         JsonObject bySource = service.getCounters().getJsonObject("bySource");
 
@@ -830,8 +819,8 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void resetCountersClearsCounts() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
-        engine.recordAssault("a", "latency");
+        setMutableConfig(new MutableAssaultConfigImpl());
+        engine.recordAssault(AssaultType.LATENCY, "a", "latency");
 
         JsonObject result = service.resetCounters();
 
@@ -846,7 +835,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setExceptionConfigWarnsOnCheckedException() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setExceptionConfig("java.util.concurrent.TimeoutException", "boom");
 
@@ -862,7 +851,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setExceptionConfigAcceptsRuntimeExceptionSubtype() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setExceptionConfig("jakarta.ws.rs.WebApplicationException", "boom");
 
@@ -878,9 +867,9 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void everyExceptionPresetIsAcceptedWithoutFallbackWarning() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
-        for (String preset : MutableAssaultConfig.EXCEPTION_PRESETS) {
+        for (String preset : MutableAssaultConfigImpl.EXCEPTION_PRESETS) {
             JsonObject result = service.setExceptionConfig(preset, "boom");
             assertTrue(result.getBoolean("ok"), "preset must be accepted: " + preset);
             assertEquals(preset, result.getString("type"));
@@ -895,15 +884,15 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void getConfigExposesServerSideExceptionPresets() throws Exception {
-        setMutableConfig(new MutableAssaultConfig());
+        setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject config = service.getConfig();
 
-        assertEquals(MutableAssaultConfig.EXCEPTION_PRESETS, config.getJsonArray("exceptionPresets").getList());
+        assertEquals(MutableAssaultConfigImpl.EXCEPTION_PRESETS, config.getJsonArray("exceptionPresets").getList());
     }
 
     /**
-     * Injects a {@link MutableAssaultConfig} into the engine's private field so the service can be exercised without a
+     * Injects a {@link MutableAssaultConfigImpl} into the engine's private field so the service can be exercised without a
      * full CDI/Quarkus runtime, and returns it for further mutation.
      *
      * @param config the configuration to install
@@ -914,7 +903,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigRejectedPayloadChangesNothing() throws Exception {
-        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl cfg = setMutableConfig(new MutableAssaultConfigImpl());
         cfg.setTargetLevel(30);
 
         JsonObject result = service.applyConfig(new JsonObject()
@@ -934,7 +923,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigToleratesStringValuesAndSkipsInvalidOnes() throws Exception {
-        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl cfg = setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.applyConfig(new JsonObject()
                 .put("exceptionEnabled", "true")
@@ -956,7 +945,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigSkipsInvalidHeaderNamesWithoutLosingTheOtherRules() throws Exception {
-        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl cfg = setMutableConfig(new MutableAssaultConfigImpl());
         cfg.setResponseHeader("X-Existing", ResponseHeaderAction.SET, "kept");
 
         JsonObject result = service.applyConfig(new JsonObject().put("headers", new JsonObject()
@@ -974,7 +963,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void applyConfigPublishesTheImportAsASingleChange() throws Exception {
-        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl cfg = setMutableConfig(new MutableAssaultConfigImpl());
         int[] changes = { 0 };
         cfg.setOnChange(() -> changes[0]++);
 
@@ -991,7 +980,7 @@ class GoblinJsonRPCServiceTest {
      */
     @Test
     void setResponseHeaderInfoRejectsInvalidNames() throws Exception {
-        MutableAssaultConfig cfg = setMutableConfig(new MutableAssaultConfig());
+        MutableAssaultConfigImpl cfg = setMutableConfig(new MutableAssaultConfigImpl());
 
         JsonObject result = service.setResponseHeaderInfo("X Bad", "SET", "v");
 
@@ -999,9 +988,9 @@ class GoblinJsonRPCServiceTest {
         assertTrue(cfg.getResponseHeaders().isEmpty());
     }
 
-    private MutableAssaultConfig setMutableConfig(MutableAssaultConfig config) {
+    private MutableAssaultConfigImpl setMutableConfig(MutableAssaultConfigImpl config) {
         try {
-            Field field = AssaultEngine.class.getDeclaredField("mutableConfig");
+            Field field = AssaultEngineImpl.class.getDeclaredField("mutableConfig");
             field.setAccessible(true);
             field.set(engine, config);
             return config;

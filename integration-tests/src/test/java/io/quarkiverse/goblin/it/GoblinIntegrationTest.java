@@ -1,8 +1,6 @@
 package io.quarkiverse.goblin.it;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import jakarta.inject.Inject;
@@ -11,8 +9,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.GoblinConfig;
+import io.quarkiverse.goblin.AssaultSource;
+import io.quarkiverse.goblin.AssaultType;
 import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
+import io.quarkiverse.goblin.internal.config.GoblinConfig;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 
@@ -20,7 +21,7 @@ import io.restassured.RestAssured;
 public class GoblinIntegrationTest {
 
     @Inject
-    AssaultEngine engine;
+    AssaultEngineImpl engine;
 
     @Inject
     GoblinConfig config;
@@ -193,6 +194,12 @@ public class GoblinIntegrationTest {
                 .then()
                 .statusCode(503)
                 .body(equalTo("Dependency unavailable (Goblin chaos)"));
+
+        // recorded by the built-in JAX-RS assault through AssaultContext.record(this)
+        AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
+        assertEquals("dependency-degradation", record.type());
+        assertEquals(AssaultType.DEPENDENCY_DEGRADATION, record.assaultType());
+        assertEquals(AssaultSource.SERVER, record.source());
     }
 
     // ==================== Multiple assault types ====================
@@ -430,12 +437,13 @@ public class GoblinIntegrationTest {
         AssaultEngine.AssaultRecord record = engine.getHistory().getLast();
         assertEquals("SampleResource.hello", record.method());
         assertEquals("http-status", record.type());
+        assertEquals(AssaultType.HTTP_STATUS, record.assaultType());
     }
 
     @Test
     public void testHistoryClear() {
         engine.setActive(true);
-        engine.recordAssault("test", "latency");
+        engine.recordAssault(AssaultType.LATENCY, "test", "latency");
         assertFalse(engine.getHistory().isEmpty());
 
         engine.clearHistory();

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import io.quarkiverse.goblin.internal.AssaultEngineImpl;
+import io.quarkiverse.goblin.internal.MutableAssaultConfigImpl;
 import io.vertx.core.Vertx;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -27,8 +29,8 @@ class GoblinWebClientTest {
     private static Vertx vertx;
     private static WebClient webClient;
 
-    private final AssaultEngine engine = new AssaultEngine();
-    private MutableAssaultConfig config;
+    private final AssaultEngineImpl engine = new AssaultEngineImpl();
+    private MutableAssaultConfigImpl config;
 
     @BeforeAll
     static void startVertx() {
@@ -46,7 +48,7 @@ class GoblinWebClientTest {
     void setUp() {
         engine.setActive(true);
         engine.clearHistory();
-        config = new MutableAssaultConfig();
+        config = new MutableAssaultConfigImpl();
         setMutableConfig(config);
         GoblinWebClient.setEngineForTests(engine);
     }
@@ -63,6 +65,7 @@ class GoblinWebClientTest {
 
         assertEquals(1, engine.getHistory().size(), "repeated enable() must not stack interceptors");
         assertEquals("latency", engine.getHistory().getFirst().type());
+        assertEquals(AssaultType.LATENCY, engine.getHistory().getFirst().assaultType());
         assertTrue(elapsedMs >= 5, "expected at least 5ms delay, got " + elapsedMs + "ms");
     }
 
@@ -79,6 +82,7 @@ class GoblinWebClientTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getFirst();
         assertEquals("latency", record.type());
+        assertEquals(AssaultType.LATENCY, record.assaultType());
         assertEquals("WebClient GET http://localhost:1/api/hello", record.method());
         assertTrue(elapsedMs >= 90, "expected at least 90ms delay, got " + elapsedMs + "ms");
     }
@@ -106,6 +110,7 @@ class GoblinWebClientTest {
         assertEquals(1, engine.getHistory().size());
         AssaultEngine.AssaultRecord record = engine.getHistory().getFirst();
         assertEquals("exception", record.type());
+        assertEquals(AssaultType.EXCEPTION, record.assaultType());
         assertEquals("WebClient GET http://localhost:1/api/hello", record.method());
     }
 
@@ -124,7 +129,9 @@ class GoblinWebClientTest {
         assertNotNull(failure);
         assertEquals(2, engine.getHistory().size());
         assertEquals("latency", engine.getHistory().getFirst().type());
+        assertEquals(AssaultType.LATENCY, engine.getHistory().getFirst().assaultType());
         assertEquals("exception", engine.getHistory().get(1).type());
+        assertEquals(AssaultType.EXCEPTION, engine.getHistory().get(1).assaultType());
         assertTrue(elapsedMs >= 90, "expected delay before the exception, got " + elapsedMs + "ms");
     }
 
@@ -173,9 +180,9 @@ class GoblinWebClientTest {
         }
     }
 
-    private void setMutableConfig(MutableAssaultConfig configValue) {
+    private void setMutableConfig(MutableAssaultConfigImpl configValue) {
         try {
-            Field field = AssaultEngine.class.getDeclaredField("mutableConfig");
+            Field field = AssaultEngineImpl.class.getDeclaredField("mutableConfig");
             field.setAccessible(true);
             field.set(engine, configValue);
         } catch (ReflectiveOperationException e) {

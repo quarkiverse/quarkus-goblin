@@ -12,9 +12,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.ChaosLayer;
-import io.quarkiverse.goblin.MutableAssaultConfig;
+import io.quarkiverse.goblin.*;
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.reactive.messaging.memory.InMemoryConnector;
 
@@ -68,6 +66,7 @@ public class GoblinMessagingLayerIntegrationTest {
 
         awaitCondition(() -> engine.getHistory().stream().anyMatch(record -> ORDERS_CONSUMER.equals(record.method())));
         assertEquals("exception", engine.getHistory().getFirst().type());
+        assertEquals(AssaultType.EXCEPTION, engine.getHistory().getFirst().assaultType());
         assertTrue(consumer.processed().isEmpty(), "the consumer body must never run, got: " + consumer.processed());
     }
 
@@ -83,6 +82,8 @@ public class GoblinMessagingLayerIntegrationTest {
                 .findFirst()
                 .orElseThrow();
         assertTrue(latency.latencyMs() >= 100 && latency.latencyMs() <= 150, "got: " + latency.latencyMs());
+        assertEquals(AssaultType.LATENCY, latency.assaultType());
+        assertEquals(AssaultSource.MESSAGING, latency.source());
     }
 
     @Test

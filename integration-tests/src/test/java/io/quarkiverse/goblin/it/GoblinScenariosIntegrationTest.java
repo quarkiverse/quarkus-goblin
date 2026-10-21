@@ -1,8 +1,6 @@
 package io.quarkiverse.goblin.it;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,9 +18,9 @@ import org.junit.jupiter.api.Test;
 
 import io.quarkiverse.goblin.AssaultConfigChange;
 import io.quarkiverse.goblin.AssaultEngine;
-import io.quarkiverse.goblin.GoblinScenarios;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.dev.GoblinJsonRPCService;
+import io.quarkiverse.goblin.internal.state.GoblinScenarios;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.vertx.core.json.JsonArray;
