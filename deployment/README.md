@@ -33,17 +33,25 @@ user application.
 
 ## Keeping chaos out of production
 
-Two independent guards:
+Goblin never reaches production (issue #86): users declare it `provided`, and three build steps enforce the rule.
 
-- every chaos build step above (and the Dev UI JSON-RPC registration) is annotated
-  `@BuildStep(onlyIfNot = IsProduction.class)`: a production build carries no interceptor binding, no database hook
-  and no JSON-RPC service;
-- at runtime, `AssaultEngineImpl.initialize(LaunchMode)` leaves the engine inactive and without configuration in any launch
-  mode other than `DEVELOPMENT` and `TEST`; in `TEST` it loads its configuration but stays inactive unless
-  `quarkus.goblin.test.enabled=true`.
+- `GoblinBuildStep.refuseProductionBuild()` -- `@BuildStep(onlyIf = IsProduction.class)`, produces a
+  `ServiceStartBuildItem` so it runs in every production build (jar, native), and throws: a production build that
+  carries Goblin fails, with no opt-out.
+- `GoblinApplicationCodeProcessor.refuseGoblinInApplicationCode()` -- in dev and test builds, fails when a packaged
+  class refers to a Goblin class: the main classes of the application module and of the workspace modules it depends on
+  at runtime, except those declared `provided` (indexed from their output directories, since they may carry no Jandex
+  index). That code would compile against the `provided` dependency, then fail in the packaged application.
+- `GoblinApplicationCodeProcessor.armApplicationWebClients()` -- in dev and test builds, rewrites the direct
+  `WebClient.create(...)` / `WebClient.wrap(...)` calls (core and Mutiny) of the application module's main and test
+  classes and of the workspace modules it depends on (Jandex `getKnownUsers`) to pass the new client to
+  `WebClientArming.arm(...)`, so arming a Vert.x client needs no Goblin call in the application. Method references
+  (`WebClient::create`, an `invokedynamic`) are not rewritten.
 
-The runtime jar is Jandex-indexed, so the runtime beans themselves (engine, assault beans, JAX-RS filters) are still
-discovered in a production build; they stay inert because the engine never activates there.
+Defence in depth: every chaos build step is annotated `@BuildStep(onlyIfNot = IsProduction.class)`, and at runtime
+`AssaultEngineImpl.initialize(LaunchMode)` leaves the engine inactive and without configuration in any launch mode other
+than `DEVELOPMENT` and `TEST`; in `TEST` it loads its configuration but stays inactive unless
+`quarkus.goblin.test.enabled=true`.
 
 ## Dev UI wiring (`GoblinDevUIProcessor`)
 

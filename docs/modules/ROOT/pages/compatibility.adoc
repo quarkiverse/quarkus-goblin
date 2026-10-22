@@ -41,7 +41,7 @@ reactive-route latencies, which use a Vert.x timer, still apply there.
 == Agroal / Hibernate ORM / Panache
 
 The `DATABASE` layer is an Agroal pool interceptor, installed on every JDBC datasource when `quarkus-agroal` is present
-(which Hibernate ORM and Panache use). It is not registered in production builds, and applications without a datasource
+(which Hibernate ORM and Panache use). Like the rest of Goblin it never reaches a production build, and applications without a datasource
 never load the Agroal API. Hibernate Reactive and the reactive SQL clients are not covered.
 
 == Quarkus Messaging
@@ -63,15 +63,15 @@ routes]). Quarkus REST requests never go through that handler, so a REST request
 `@Route` acting as a pass-through filter sits in front of a REST resource, the JAX-RS filter applies the route's decision
 instead of drawing again: the route is assaulted, unless the targeting rules spare it, in which case the resource is.
 Failure handlers and `@RouteFilter` methods are not assaulted, and the response body assault leaves streamed responses
-alone. Nothing is woven in a production build, and applications without reactive routes are unaffected.
+alone. Goblin never reaches a production build, and applications without reactive routes are unaffected.
 
 == MicroProfile REST Client / Quarkus REST Client
 
-Client-side assaults are implemented as a standard JAX-RS `ClientRequestFilter` registered as a global provider. They apply to any client built with `quarkus-rest-client` (the RESTEasy Reactive-based MicroProfile REST Client implementation). The filter is inert in production builds and, being opt-in, off by default, so it has no effect unless you enable the client-side toggles.
+Client-side assaults are implemented as a standard JAX-RS `ClientRequestFilter` registered as a global provider. They apply to any client built with `quarkus-rest-client` (the RESTEasy Reactive-based MicroProfile REST Client implementation). The client-side toggles are off by default, so the filter has no effect until you enable them.
 
 == Vert.x WebClient
 
-The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClient` calls, but Vert.x 4.x exposes no public interceptor hook on `WebClient`. Goblin therefore attaches its interceptor explicitly, at the point where the application creates its client, via `GoblinWebClient.enable(webClient)`. The interceptor relies on Vert.x's internal `WebClientInternal.addInterceptor` mechanism (the same one used by Vert.x's own `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators), so it works with any client backed by Vert.x's default `WebClientImpl`; a custom decorator that does not extend the base client fails fast with an `IllegalArgumentException`. A plain `WebClient` is protected by Goblin's opt-in default: without `enable(...)` it is never touched.
+The same client-side assaults apply to outgoing `io.vertx.ext.web.client.WebClient` calls, but Vert.x 4.x exposes no public interceptor hook on `WebClient`. Goblin therefore arms the clients the application creates, without any Goblin call in the application code: in dev and test builds, every `WebClient.create(...)` and `WebClient.wrap(...)` call of the application classes -- the core client or its Mutiny flavour (`io.vertx.mutiny.ext.web.client.WebClient`) -- is rewritten to attach the interceptor to the new client. Clients created by other extensions or third-party libraries (an OIDC token call, for instance) are left alone; the application classes are those of the application module (main and test) and of the other modules of the same build, and only direct calls are seen -- a method reference such as `WebClient::create` is not armed. The interceptor relies on Vert.x's internal `WebClientInternal.addInterceptor` mechanism (the same one used by Vert.x's own `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators); a client that is not backed by it is left untouched. Client-side assaults stay off until you enable their toggles.
 
 WARNING: `WebClientInternal`, `HttpContext` and `ClientPhase` live in `io.vertx.ext.web.client.impl` and carry no
 compatibility guarantee. They are the only way to intercept a Vert.x 4 `WebClient` today; `GoblinWebClientTest` pins

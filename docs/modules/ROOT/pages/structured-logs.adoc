@@ -6,7 +6,7 @@ include::../partials/attributes.adoc[]
 
 Goblin writes every event of a chaos experiment -- each assault, chaos switched on or off, a configuration change -- as a structured line in the `io.quarkiverse.goblin.events` log category. The goal is a log you can reason about while the experiment runs, whether you read it yourself or hand it to an agent: which request was hit, by what, with which value, under which configuration.
 
-This is not log aggregation for compliance: Goblin is inert in a production build, and these events only exist in dev and test mode.
+This is not log aggregation for compliance: Goblin never reaches production (see xref:index.adoc#production[Does Goblin run in production?]), and these events only exist in dev and test mode.
 
 == Format
 

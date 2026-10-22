@@ -7,15 +7,15 @@ include::../partials/attributes.adoc[]
 Goblin operates at three boundaries:
 
 * the **incoming HTTP** boundary, through a JAX-RS `ContainerRequestFilter` / `ContainerResponseFilter` and, when `quarkus-reactive-routes` is present, a hook woven into the handler of every `@Route` method (the HTTP_IN layer);
-* the **outgoing HTTP** boundary, through a `ClientRequestFilter` (outgoing REST Client calls) and, for Vert.x WebClient calls, an opt-in request interceptor attached in application code (the HTTP_OUT layer);
+* the **outgoing HTTP** boundary, through a `ClientRequestFilter` (outgoing REST Client calls) and, for Vert.x WebClient calls, an interceptor Goblin attaches to the clients the application creates (the HTTP_OUT layer);
 * the **service** boundary, through a CDI interceptor woven at build time on eligible application bean methods (the SERVICE layer).
 
 For the HTTP boundaries:
 
 * For outbound MicroProfile REST Client calls the `ClientRequestFilter` is registered as a global provider at build time and intercepts every call automatically.
-* For Vert.x `WebClient` calls the application arms the client once with `GoblinWebClient.enable(webClient)`; the interceptor is then attached through Vert.x's internal `WebClientInternal` mechanism.
+* For Vert.x `WebClient` calls Goblin arms the clients the application creates: in dev and test builds, every `WebClient.create(...)` and `WebClient.wrap(...)` call of the application classes (core or Mutiny) is rewritten to attach the interceptor, through Vert.x's internal `WebClientInternal` mechanism. The application code contains no Goblin call.
 
-1. At build time, the deployment module registers the client filter, the service interceptor binding and the `goblin` feature with Quarkus; the server-side JAX-RS filter is a `@Provider` discovered by Quarkus REST. With `quarkus-reactive-routes`, it also weaves the reactive-route hook into Quarkus's `RouteHandler`. None of this is done in a production build.
+1. At build time, the deployment module registers the client filter, the service interceptor binding and the `goblin` feature with Quarkus; the server-side JAX-RS filter is a `@Provider` discovered by Quarkus REST. With `quarkus-reactive-routes`, it also weaves the reactive-route hook into Quarkus's `RouteHandler`, and it rewrites the `WebClient` factories of the application classes. A production build never gets here: it fails when it carries Goblin (see xref:index.adoc#production[Does Goblin run in production?]).
 2. At runtime startup, the `AssaultEngine` is initialized from the configuration in `application.properties`. In dev mode it first restores any persisted state file (`.goblin-state.json`) and registers a change listener so that every subsequent config mutation automatically persists the state to disk.
 3. For every incoming HTTP request, the filter checks whether chaos is active, whether this request should be affected (based on the `level` percentage), and which layer the request resolves to (see xref:how-it-works.adoc#chaos-layers[Chaos layers]). The resolved layer is carried on the request stack for the whole processing chain.
 4. If the HTTP_IN layer won, all enabled assault types are applied in order: latency first (delay), then exception/HTTP-status/dependency-degradation (which abort the request). The response body and response header assaults are applied on the way out, in the `ContainerResponseFilter`, rewriting the entity and its headers before they reach the client (header rules run after the body transformation, so an explicit header change always wins).
@@ -98,7 +98,7 @@ request resolved to the SERVICE layer.
   `MeterFilter` a producer method returns), constructors nor synthetic methods. Methods
   named as the `fallbackMethod` of a `@Fallback` (on a method or on the class) in the same class, and `FallbackHandler`
   implementations, are skipped too, so a fallback can answer the original failure instead of being assaulted itself.
-  The service-assault binding is only woven in dev and test builds, never in a production build.
+  The service-assault binding is only woven in dev and test builds; Goblin never reaches a production build.
 * **One fault per call chain.** Only the outermost intercepted call of a request is assaulted: when a decorated bean
   calls another decorated bean, the inner call runs untouched. Each further outermost call of the same request (a
   `@Retry` attempt, or a second bean called by the resource) draws `level` again.
@@ -173,7 +173,7 @@ The persisted state only covers the **assault configuration** (profile, toggles,
 
 Neither is written outside dev mode: a test application started by continuous testing runs in the same JVM and keeps its own state, so a test's `setActive(false)` neither inherits nor overwrites the dev session's decision. `getStatus` reports which of these applies as `inactiveReason` (`manual`, `auto-off`, `disabled`, `test-mode`, `launch-mode`), so an inactive dashboard is never a mystery.
 
-State persistence is dev-mode only: the change listener, registered in dev and test mode so that the observers see every configuration change (see <<observer-spi>>), only writes the state file in dev mode, and the state file is only read on a dev-mode startup. Chaos itself only activates in dev mode, and in test mode on opt-in (`quarkus.goblin.test.enabled=true`) -- a packaged production application always starts with the engine inactive. Integration or system tests always start from `application.properties` and never read nor overwrite the chaos configuration you saved from the Dev UI.
+State persistence is dev-mode only: the change listener, registered in dev and test mode so that the observers see every configuration change (see <<observer-spi>>), only writes the state file in dev mode, and the state file is only read on a dev-mode startup. Chaos itself only activates in dev mode, and in test mode on opt-in (`quarkus.goblin.test.enabled=true`) -- and Goblin never reaches a packaged production application: a production build carrying it fails (see xref:index.adoc#production[Does Goblin run in production?]). Integration or system tests always start from `application.properties` and never read nor overwrite the chaos configuration you saved from the Dev UI.
 
 TIP: Add `.goblin-state.json` and `.goblin/` (the saved scenarios, see xref:dev-ui.adoc#scenarios[Scenarios]) to your `.gitignore` to avoid committing local chaos state to version control.
 
@@ -187,7 +187,8 @@ Every recorded assault and every active-state change is broadcast to the registe
 the engine calls each bean and skips any failing observer (the failure is only logged at `DEBUG`) so observability
 can never break an assault. The engine
 injects `Instance<AssaultObserver>`, so any `@ApplicationScoped` implementation is picked up automatically; outside
-the CDI container (plain unit tests) the notification simply does nothing.
+the CDI container (plain unit tests) the notification simply does nothing. An observer stays out of production like
+Goblin itself: keep it in `src/test/java`, or in an indexed module declared `provided` (see xref:public-api.adoc[Public API]).
 
 Each `AssaultEngine.AssaultRecord` passed to `onAssault` carries the target (`method()`), the label (`type()`, e.g.
 `latency` or `response-body-truncate`: the value of the `type` metric tag and span attribute), the `AssaultType`
@@ -236,7 +237,7 @@ into the same hook.
 [#custom-assault]
 == Adding your own assault type
 
-Goblin ships with six built-in assault types (latency, exception, HTTP status, dependency degradation, response body and response headers) and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface and it is discovered automatically at build time -- no other wiring required. The bean is `@ApplicationScoped`, whether you annotate it or not:
+Goblin ships with six built-in assault types (latency, exception, HTTP status, dependency degradation, response body and response headers) and lets you register your own. Implement the `io.quarkiverse.goblin.assault.Assault` interface and it is discovered automatically at build time -- no other wiring required. Like Goblin, a custom assault never reaches production: keep it in `src/test/java` for tests only, or in an indexed module declared `provided` for dev mode (see xref:public-api.adoc[Public API]). The bean is `@ApplicationScoped`, whether you annotate it or not:
 
 * `type()` -- the `AssaultType` this assault represents. `AssaultType` is a closed enum: a custom assault reuses one of
   the existing constants. Note that the per-request gate only opens when at least one of the built-in toggles is

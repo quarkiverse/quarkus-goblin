@@ -40,7 +40,8 @@ public enum DeactivationReason {
     TEST_MODE("test-mode"),
 
     /**
-     * The application does not run in dev or test mode: chaos never activates in a packaged production application.
+     * The application does not run in dev or test mode. A production build carrying Goblin fails, so a packaged
+     * application never gets here; the reason remains for an engine initialised in another launch mode.
      */
     LAUNCH_MODE("launch-mode");
 

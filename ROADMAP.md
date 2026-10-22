@@ -33,7 +33,7 @@ Current status: **preview** (v0.5.0 released, v1.0.0 in development)
   Intercept outgoing calls made with MicroProfile REST Client or Quarkus REST Client Reactive. Inject latency and exceptions on the client side to simulate downstream failures without touching the remote service.
 
 - [x] **Client-side assault via Vert.x Web Client**
-  Extend client-side chaos to Vert.x `WebClient` calls, which are common in reactive Quarkus applications. The application arms a client once with `GoblinWebClient.enable(webClient)`; an interceptor attached through Vert.x's internal `WebClientInternal` mechanism applies delays and failures before the request is dispatched (the remote service is never reached for exceptions).
+  Extend client-side chaos to Vert.x `WebClient` calls, which are common in reactive Quarkus applications. The application arms a client once with `GoblinWebClient.enable(webClient)`; an interceptor attached through Vert.x's internal `WebClientInternal` mechanism applies delays and failures before the request is dispatched (the remote service is never reached for exceptions). Since #86 the application's clients are armed at build time, without this call.
 
 - [x] **Response body injection**
   Add a new assault type that truncates or inflates the response body. Useful for testing how clients handle partial JSON, oversized payloads, or unexpected content lengths.
@@ -117,7 +117,7 @@ Current status: **preview** (v0.5.0 released, v1.0.0 in development)
   Define a stable Java API for the core engine (`AssaultEngine`, `AssaultType`, `AssaultEngine.AssaultRecord`, the `Assault` and `AssaultObserver` SPIs), which is currently preview and may change between minor versions. Document the API contract and versioning policy for third-party extensions.
   Delivered as the `io.quarkiverse.goblin` package -- `AssaultEngine` and the configuration became interfaces, split into a read-only `AssaultConfig` and the live `MutableAssaultConfig`, and the implementation moved to `io.quarkiverse.goblin.internal`, organised by responsibility -- with `AssaultRecord.assaultType()`, the `Assault` SPI marked `@Experimental` while it is bound to JAX-RS, and a *Public API and versioning* documentation page. An automated compatibility check (japicmp/revapi) follows once 1.0.0 is published as its baseline.
 
-- [ ] **Production-profile safeguard** ([#86](https://github.com/quarkiverse/quarkus-goblin/issues/86))
+- [x] **Production-profile safeguard** ([#86](https://github.com/quarkiverse/quarkus-goblin/issues/86))
   Fail the build (or warn loudly) when Goblin assault configuration is detected in a production profile.
 
 - [x] **Structured assault logs** ([#87](https://github.com/quarkiverse/quarkus-goblin/issues/87))

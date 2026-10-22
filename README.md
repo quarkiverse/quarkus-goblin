@@ -26,7 +26,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **Response body injection** -- Truncate or inflate the response entity (`TRUNCATE` keeps the first N%, `INFLATE` pads it) to break strict JSON clients and length-validating consumers. On REST resources it applies to `String`, `CharSequence` and `byte[]` entities, and an object serialized by a JSON provider (e.g. a POJO) is left untouched; on reactive routes it applies to any payload written in one go (`end(...)`), POJOs included, and a streamed response is left untouched
 - **Response header injection** -- Set or remove headers on emitted responses (`SET` forces the value, replacing an existing header or adding it when absent; `REMOVE` deletes it when present)
 - **Reactive routes** -- With `quarkus-reactive-routes`, `@Route` methods get every server-side assault too (latency, exception, HTTP status, dependency degradation, response body and response header), with no code change; on the event loop the latency uses a Vert.x timer, never a blocking sleep
-- **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`) and Vert.x `WebClient` calls (`GoblinWebClient.enable(...)`, opt-in at client creation)
+- **Client-side assaults** -- Inject latency and exceptions into outgoing MicroProfile / Quarkus REST Client calls (`quarkus-rest-client`) and Vert.x `WebClient` calls (the clients the application creates are armed automatically in dev and test mode)
 - **Metrics** -- Optional `quarkus-goblin-metrics` module exposing assault activity as Micrometer / Prometheus metrics (`goblin_assaults_total`, `goblin_latency_injected_seconds`, `goblin_active`, see the [Metrics guide](docs/modules/ROOT/pages/metrics.adoc))
 - **Tracing** -- Optional `quarkus-goblin-opentelemetry` module emitting one `goblin.assault` span per assault with `goblin.assault.*` attributes, linked to the parent request span (see the [Tracing guide](docs/modules/ROOT/pages/tracing.adoc))
 - **Multiple types simultaneously** -- Enable latency + exception together for slow failure simulation
@@ -35,7 +35,7 @@ Quarkus has excellent resilience primitives (MicroProfile Fault Tolerance, Mutin
 - **State persistence** -- Dev UI config changes survive restarts automatically (`.goblin-state.json`, dev mode); the master on/off toggle is not written to that file: a deactivation survives the live reloads of the running dev process, and a new process starts from `quarkus.goblin.enabled`
 - **Markdown report export** -- Generate a factual report of config + assault history, ready to hand to an LLM for resilience review
 - **Multi-layer chaos** -- Arm the `DATABASE`, `MESSAGING`, `SERVICE`, `HTTP_OUT` and `HTTP_IN` layers independently (Dev UI switches): `DATABASE` fails or delays JDBC connection acquisition (Agroal, below Hibernate / Panache), `MESSAGING` faults `@Incoming` consumers, `HTTP_IN` covers JAX-RS endpoints and reactive routes, and `SERVICE` injects latency/exceptions on business beans *inside* MicroProfile Fault Tolerance (`@Priority(4100)`), so `@Retry`, `@Fallback`, `@Timeout` and `@CircuitBreaker` react for real
-- **Dev by default, tests on opt-in** -- Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`; in a production build the engine stays inactive and no bean is woven with the service interceptor
+- **Dev by default, tests on opt-in** -- Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`; never in production: Goblin is declared `provided`, and a production build that still carries it fails
 
 ## Quick start
 
@@ -46,8 +46,11 @@ Add the dependency:
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin</artifactId>
     <version>${goblin.version}</version>
+    <scope>provided</scope>
 </dependency>
 ```
+
+The `provided` scope is not optional: Goblin must never reach production. It keeps the extension in `quarkus:dev` and `@QuarkusTest` and out of the packaged application, and a production build that still carries Goblin fails. With Gradle, declare it as a `quarkusDev` and a `testImplementation` dependency.
 
 Start in dev mode:
 
@@ -134,6 +137,7 @@ Prometheus / Grafana dashboards:
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin-metrics</artifactId>
     <version>${goblin.version}</version>
+    <scope>provided</scope>
 </dependency>
 ```
 
@@ -154,6 +158,7 @@ tracing backend:
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin-opentelemetry</artifactId>
     <version>${goblin.version}</version>
+    <scope>provided</scope>
 </dependency>
 ```
 
@@ -181,7 +186,7 @@ All changes apply instantly, each one logged as a structured `config-change` eve
 ## Safety
 
 - **Dev by default, tests on opt-in** -- Chaos activates in `quarkus:dev`. In `@QuarkusTest` it stays off unless `quarkus.goblin.test.enabled=true`, so adding the extension never slows down nor breaks an existing test suite; a single test can also switch it on with `AssaultEngine.setActive(true)`.
-- **Zero code modification** -- No annotations needed for the server-side and REST Client assaults; Vert.x `WebClient` instances are armed with one `GoblinWebClient.enable(...)` call.
+- **Zero code modification** -- No annotations needed for the server-side and REST Client assaults; Vert.x `WebClient` instances are armed automatically, and the application code never refers to Goblin.
 - **Explicit logging** -- WARN log emitted when chaos is active.
 
 ## Repository layout
