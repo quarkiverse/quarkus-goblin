@@ -188,4 +188,29 @@ public class GoblinClientAssaultIntegrationTest {
         assertTrue(elapsedMs < 600,
                 "@Timeout(400ms) must give up before the 600-700 ms injected latency elapses, took " + elapsedMs + " ms");
     }
+
+    @Test
+    public void latencyCutShortByTheTimeoutIsRecordedAsEndured() {
+        // the first call initialises the REST Client and Fault Tolerance, which would count against the timing below
+        RestAssured.given().get("/api/service/remote").then().statusCode(200);
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setClientLatencyEnabled(true);
+        cfg.setLatencyMinMs(2000);
+        cfg.setLatencyMaxMs(2000);
+
+        RestAssured.given()
+                .get("/api/service/remote")
+                .then()
+                .statusCode(200)
+                .body(org.hamcrest.Matchers.equalTo("remote fallback reply"));
+
+        AssaultEngine.AssaultRecord record = engine.getHistory().stream()
+                .filter(r -> "latency".equals(r.type()) && r.method().startsWith("REST-Client GET"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the client latency must be recorded, got: " + engine.getHistory()));
+        assertTrue(record.latencyMs() < 1000,
+                "@Timeout(400ms) cut the 2000 ms latency short: the endured delay must be recorded, got "
+                        + record.latencyMs() + " ms");
+        assertEquals(record.latencyMs() + "ms", record.injectedValue());
+    }
 }

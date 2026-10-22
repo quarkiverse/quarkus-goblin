@@ -36,6 +36,10 @@ include::../partials/attributes.adoc[]
 ** `AssaultEngine.AssaultRecord` gains an `injectedValue()` component (`842ms`, `HTTP 503`, `java.lang.IllegalStateException: boom`...), also returned as `injectedValue` by the JSON-RPC `getHistory`, shown in the Markdown report, set as the `goblin.assault.injected_value` span attribute, and used as the `injected_value` tag of `goblin_assaults_total` (`-` for a latency, whose value is in the latency timer, so the tag stays bounded).
 * A custom `Assault` declared without a scope annotation is registered `@ApplicationScoped`, as the SPI expects, instead of `@Dependent`.
 
+==== Bug Fixes
+
+* A REST Client latency cut short by a `@Timeout` is recorded as the delay actually endured, not the one drawn: the history, the `assault` event (`value=`), the `goblin.assault.latency_ms` span attribute and the `goblin.latency.injected.seconds` timer no longer report a 2000 ms delay for a call the timeout ended after 400 ms. The layer faults (`SERVICE`, `DATABASE`, `MESSAGING`) already did.
+
 [[version-0-5]]
 == 0.5.x
 

@@ -65,15 +65,19 @@ public class GoblinChaosClientFilter implements ClientRequestFilter {
         if (config.isClientLatencyEnabled()) {
             long delay = LatencySupport.drawDelay(config);
             LOG.debugf("Goblin: injecting client latency on %s", methodName);
+            long start = System.nanoTime();
             boolean applied;
+            long endured = delay;
             try {
                 applied = LatencySupport.sleep(delay, methodName);
             } catch (InterruptedException e) {
-                // interrupt flag restored by LatencySupport: the client call observes it
+                // interrupt flag restored by LatencySupport: the client call observes it. Cut short (typically by
+                // @Timeout): record the delay actually endured, not the one drawn
                 applied = true;
+                endured = Math.min(delay, (System.nanoTime() - start) / 1_000_000);
             }
             if (applied) {
-                engine.recordAssault(AssaultSource.REST_CLIENT, AssaultType.LATENCY, methodName, "latency", delay);
+                engine.recordAssault(AssaultSource.REST_CLIENT, AssaultType.LATENCY, methodName, "latency", endured);
             }
         }
 
