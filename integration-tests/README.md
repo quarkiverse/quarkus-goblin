@@ -9,7 +9,8 @@ End-to-end `@QuarkusTest` suite exercising the extension through a real JAX-RS a
 - `/api/db/ping` and `/api/db/retry` -- `SampleRepository` on an in-memory H2 datasource, without and with
   `@Retry` + `@Fallback`, for the `DATABASE` layer;
 - `/api/proxy` (a proxy that calls `SampleClient` internally) and `/api/web-proxy` (a proxy that calls back through a
-  Vert.x `WebClient` armed with `GoblinWebClient.enable(...)`), handy to exercise client-side assaults in dev mode.
+  Vert.x `WebClient`, armed by Goblin without any Goblin call in `SampleResource`) and `/api/mutiny-web-proxy` (the same
+  with the Mutiny `WebClient`), handy to exercise client-side assaults in dev mode.
 
 Reactive routes (`quarkus-reactive-routes`) cover the `HTTP_IN` layer on `@Route` methods: `SampleRoutes` serves
 `/routes/hello`, `/routes/thread` (answers `event-loop` or `worker`), `/routes/blocking`, `/routes/json` and
@@ -27,7 +28,8 @@ opts the tests in with `quarkus.goblin.test.enabled=true`.
 The suite also exercises **client-side assaults**: `SampleClient` (`@RegisterRestClient(configKey = "sample-client")`,
 targeting `http://localhost:8081`) verifies that the globally-registered `GoblinChaosClientFilter` attacks outbound
 REST Client calls with latency and exceptions, and `GoblinWebClientIntegrationTest` verifies the same for Vert.x
-`WebClient` calls armed with `GoblinWebClient.enable(...)`.
+`WebClient` calls, on a client armed with `GoblinWebClient.enable(...)` in the test itself and on the clients the
+application creates, armed by the build-time rewrite.
 
 ## Test classes
 
@@ -35,7 +37,7 @@ REST Client calls with latency and exceptions, and `GoblinWebClientIntegrationTe
 |---|---|
 | `GoblinIntegrationTest` | Endpoint basics, each assault type (latency, exception, HTTP status, dependency degradation, response body truncate/inflate, response header set/remove), target-level percentage behavior |
 | `GoblinClientAssaultIntegrationTest` | Client-side latency and exception on outgoing REST Client calls (incl. interplay with the target level and isolation from incoming-request assaults) |
-| `GoblinWebClientIntegrationTest` | Client-side latency and exception on outgoing Vert.x WebClient calls armed with `GoblinWebClient.enable(...)`, against the same 8081 test-port endpoint |
+| `GoblinWebClientIntegrationTest` | Client-side latency and exception on outgoing Vert.x WebClient calls, against the same 8081 test-port endpoint: on a client armed with `GoblinWebClient.enable(...)` (created reflectively, out of the build-time rewrite), and on the core and Mutiny clients `SampleResource` creates without any Goblin call (`/api/web-proxy`, `/api/mutiny-web-proxy`) |
 | `GoblinMetricsIntegrationTest` | The optional `quarkus-goblin-metrics` module end-to-end: meters registered with the expected names/tags on the live Prometheus registry (server, REST Client and WebClient sources), settled-step counter/timer values, and the `goblin.active` gauge |
 | `GoblinTracingIntegrationTest` | The optional `quarkus-goblin-opentelemetry` module end-to-end: a `goblin.assault` span per assault (server latency, HTTP status, REST Client / WebClient latency, client exception) with the `goblin.assault.*` attributes, INTERNAL kind and parent linkage to the request span, captured through the CDI `SpanExporter` bean (`InMemoryTraceSpanExporter`) |
 | `GoblinJsonRPCServiceTest` | The Dev UI JSON-RPC contract (status, toggles, editors, history, Markdown report, response body and response header config self-service) |

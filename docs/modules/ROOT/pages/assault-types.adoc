@@ -229,13 +229,13 @@ A JAX-RS `ClientRequestFilter` is registered globally and intercepts every outbo
 
 === Vert.x WebClient
 
-Vert.x 4.x exposes no public request-interceptor hook on `WebClient`, so Goblin attaches its interceptor explicitly where the application builds the client. Wrap the client creation in one call:
+Vert.x 4.x exposes no public request-interceptor hook on `WebClient`, so Goblin arms the clients the application creates: in dev and test builds, every `WebClient.create(...)` and `WebClient.wrap(...)` call of the application classes -- core or Mutiny -- is rewritten to attach Goblin's interceptor to the new client. There is nothing to write in the application:
 
 [source,java]
 ----
-WebClient client = GoblinWebClient.enable(WebClient.create(vertx));
+WebClient client = WebClient.create(vertx);   // armed in dev and test mode, untouched code in production
 ----
 
-The interceptor is registered only once per instance (repeat calls to `enable` are harmless). It uses the same internal interceptor mechanism Vert.x itself relies on for its `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators, and it fails fast with an `IllegalArgumentException` if the instance is not backed by Vert.x's `WebClientInternal` implementation. Without `GoblinWebClient.enable(...)` a `WebClient` is left untouched and behaves exactly as before.
+Clients created by other extensions or third-party libraries are left alone. The rewrite covers the application module's main and test classes and the other modules of the same build; it sees direct calls only, so a client obtained through a method reference (`WebClient::create`) or reflectively is not armed. The interceptor uses the same internal mechanism Vert.x itself relies on for its `OAuth2WebClient`, `CachingWebClient` and `WebClientSession` decorators; a client that is not backed by Vert.x's `WebClientInternal` implementation is left untouched. `GoblinWebClient.enable(client)` remains for such a client, from test code or a module of its own declared `provided`: it attaches the same interceptor, once per instance.
 
 NOTE: Client-side assaults are off by default. They are recorded in the assault history like any other assault, with the HTTP method and target URL of the outbound call as the method (e.g. `REST-Client GET http://localhost:8081/api/books` for REST Client, `WebClient GET http://localhost:8081/api/books` for Vert.x WebClient). They respect the shared `target.level` percentage but ignore the package/annotation filters, which only select incoming endpoints. HTTP status and dependency degradation assaults are server-side response manipulations and are never applied to outgoing calls.

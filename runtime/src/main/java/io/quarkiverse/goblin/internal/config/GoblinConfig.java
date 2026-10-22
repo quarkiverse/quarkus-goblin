@@ -23,8 +23,8 @@ public interface GoblinConfig {
 
     /**
      * Whether the Goblin chaos engineering extension is enabled. Chaos only ever activates in dev mode, and in test mode
-     * when {@code quarkus.goblin.test.enabled} is set; in a production build the engine stays inactive whatever this
-     * value.
+     * when {@code quarkus.goblin.test.enabled} is set. Goblin never reaches a production build, which fails when it carries
+     * the extension: declare it in the {@code provided} scope.
      */
     @WithDefault("true")
     boolean enabled();

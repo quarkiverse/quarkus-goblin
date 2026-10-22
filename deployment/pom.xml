@@ -50,6 +50,12 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- QuarkusProdModeTest: runs a real production build of a test application -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit-internal</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- annotation types only: fixtures of the resilience inventory tests, indexed with Jandex -->
         <dependency>
             <groupId>org.eclipse.microprofile.fault-tolerance</groupId>

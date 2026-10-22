@@ -47,7 +47,8 @@ public interface AssaultObserver {
      * test), never on a request thread; it must return quickly and must not block;</li>
      * <li>both configurations of the event are frozen snapshots: reading them is consistent, changing them throws
      * {@link UnsupportedOperationException};</li>
-     * <li>it fires in dev and test mode, never in a production build, where Goblin is inert;</li>
+     * <li>it fires in dev and test mode only: Goblin never reaches a production build, so an observer lives in
+     * {@code src/test/java} or in a module declared {@code provided};</li>
      * <li>the configuration loaded at startup is not notified, nor are the startup validation of the configuration
      * and the profile label restored from the persisted state: the first
      * notification is the first change made once the application runs. Activating or deactivating chaos is reported by

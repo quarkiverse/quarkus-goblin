@@ -18,10 +18,12 @@
     </properties>
 
     <dependencies>
+        <!-- provided: Goblin never reaches a production build, which fails when it finds it (quarkus:build below) -->
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
             <artifactId>quarkus-goblin</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
@@ -33,11 +35,13 @@
             <groupId>io.quarkiverse.goblin</groupId>
             <artifactId>quarkus-goblin-metrics</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkiverse.goblin</groupId>
             <artifactId>quarkus-goblin-opentelemetry</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -88,6 +92,11 @@
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-web-client</artifactId>
+        </dependency>
+        <!-- the Mutiny flavour of the WebClient, armed by Goblin like the core one -->
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

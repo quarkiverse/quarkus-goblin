@@ -30,10 +30,14 @@ import io.vertx.ext.web.client.impl.WebClientInternal;
  * therefore attaches its interceptor explicitly, using the same internal mechanism Vert.x itself relies on for its
  * {@code OAuth2WebClient}, {@code CachingWebClient} and {@code WebClientSession} decorators.
  * <p>
- * Usage is one line at the point where the application creates its {@code WebClient}:
+ * The application does not call it: in dev and test builds, Goblin rewrites the {@code WebClient.create(...)} and
+ * {@code WebClient.wrap(...)} calls of the application classes -- the application module's main and test classes and
+ * the other modules of the same build -- to arm every client they create. Call it for a client the rewrite does not
+ * see, created through a method reference or reflectively, from test code or a module of its own declared
+ * {@code provided}; never from code that is packaged, since Goblin does not reach production.
  *
  * <pre>{@code
- * WebClient client = GoblinWebClient.enable(WebClient.create(vertx));
+ * WebClient client = GoblinWebClient.enable(clients.get()); // in a test, the client coming from a Supplier
  * }</pre>
  *
  * The interceptor replays the exact same behavior as the REST Client path: when the client latency assault

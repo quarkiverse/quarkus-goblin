@@ -16,6 +16,7 @@ The integration is **optional** and lives in the `quarkus-goblin-opentelemetry` 
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin-opentelemetry</artifactId>
     <version>${goblin.version}</version>
+    <scope>provided</scope>
 </dependency>
 ----
 

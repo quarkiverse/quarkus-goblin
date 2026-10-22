@@ -4,6 +4,15 @@
 
 include::../partials/attributes.adoc[]
 
+*My production build fails with `Goblin must never reach production`:*
+
+* Goblin is declared in a scope that reaches the packaged application -- usually the default `compile` scope. Declare `quarkus-goblin` (and `quarkus-goblin-metrics` / `quarkus-goblin-opentelemetry`, which bring it) with `<scope>provided</scope>` in Maven, or as `quarkusDev` and `testImplementation` dependencies in Gradle. Dev mode and `@QuarkusTest` keep it; the production build no longer sees it. See xref:index.adoc#production[Does Goblin run in production?].
+* A library of yours depends on `quarkus-goblin` in the `compile` scope: make that dependency `provided` too, or exclude it.
+
+*My dev or test build fails with `these application classes use its API`:*
+
+* A class compiled from `src/main/java` refers to Goblin -- an `AssaultObserver`, a custom `Assault`, a `GoblinWebClient.enable(...)` call. It would compile, then fail in the packaged application, which does not contain Goblin. Move it to `src/test/java` when only tests use it, or to a module of its own declared `provided` when dev mode needs it -- an indexed one (an empty `src/main/resources/META-INF/beans.xml` or the `jandex-maven-plugin`), or its beans are not discovered. The class may also sit in another module of your build that the application packages: that module counts as application code too. Drop a `GoblinWebClient.enable(...)` call around a client the application creates: Goblin arms it by itself.
+
 *Chaos is not activating:*
 
 * Verify you are running in dev mode (`quarkus:dev`) or test mode (`@QuarkusTest`): chaos never activates in production mode.

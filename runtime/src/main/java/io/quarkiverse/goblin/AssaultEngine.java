@@ -21,8 +21,8 @@ import java.util.Set;
  * <p>
  * Chaos is meant for dev and test mode. In any other launch mode the engine is never initialised: it starts inactive,
  * {@link #getMutableConfig()} and {@link #configSnapshot()} return {@code null}, and no assault fires, even after
- * {@link #setActive(boolean) setActive(true)}. Code that may run in production checks the configuration for
- * {@code null}.
+ * {@link #setActive(boolean) setActive(true)}. Goblin itself never reaches production: a production build carrying
+ * the extension fails, so code using this interface lives in tests or in dev-only modules.
  * <p>
  * Part of the public API covered by semantic versioning. The engine is provided by Goblin: implementing this
  * interface is not supported, and methods may be added to it in a minor version.

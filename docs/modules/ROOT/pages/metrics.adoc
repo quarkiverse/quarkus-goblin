@@ -16,6 +16,7 @@ The integration is **optional** and lives in the `quarkus-goblin-metrics` module
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin-metrics</artifactId>
     <version>${goblin.version}</version>
+    <scope>provided</scope>
 </dependency>
 ----
 

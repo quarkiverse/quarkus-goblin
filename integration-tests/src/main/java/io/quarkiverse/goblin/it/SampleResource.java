@@ -14,7 +14,6 @@ import jakarta.ws.rs.core.UriInfo;
 
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
-import io.quarkiverse.goblin.GoblinWebClient;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpResponse;
@@ -37,9 +36,16 @@ public class SampleResource {
 
     private WebClient webClient;
 
+    @Inject
+    io.vertx.mutiny.core.Vertx mutinyVertx;
+
+    private io.vertx.mutiny.ext.web.client.WebClient mutinyWebClient;
+
     @PostConstruct
-    void armWebClient() {
-        this.webClient = GoblinWebClient.enable(WebClient.create(vertx));
+    void createWebClient() {
+        // no Goblin call: in dev and test builds Goblin arms the WebClients the application creates by itself
+        this.webClient = WebClient.create(vertx);
+        this.mutinyWebClient = io.vertx.mutiny.ext.web.client.WebClient.create(mutinyVertx);
     }
 
     @GET
@@ -177,5 +183,12 @@ public class SampleResource {
             }
             throw new IllegalStateException("WebClient call failed", e.getCause());
         }
+    }
+
+    @GET
+    @Path("/mutiny-web-proxy")
+    public String mutinyWebProxyHello(@Context UriInfo uriInfo) {
+        String downstream = uriInfo.getBaseUri().resolve("/api/hello").toString();
+        return mutinyWebClient.getAbs(downstream).send().await().indefinitely().bodyAsString();
     }
 }

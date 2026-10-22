@@ -2,6 +2,7 @@ package io.quarkiverse.goblin.it;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 
@@ -24,8 +25,12 @@ import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
 
 /**
- * End-to-end coverage of client-side assaults applied to outbound Vert.x WebClient calls armed through
- * {@link GoblinWebClient#enable(WebClient)}. The WebClient targets the application's own test endpoint.
+ * End-to-end coverage of client-side assaults applied to outbound Vert.x WebClient calls: on a client armed through
+ * {@link GoblinWebClient#enable(WebClient)}, and on the clients the application creates, which Goblin arms at build time.
+ * The WebClient targets the application's own test endpoint.
+ * <p>
+ * The test's own client is created reflectively: Goblin rewrites every {@code WebClient.create(...)} call of the
+ * application classes, test classes included, so a direct call would arm it before {@code enable} is ever reached.
  */
 @QuarkusTest
 public class GoblinWebClientIntegrationTest {
@@ -49,7 +54,7 @@ public class GoblinWebClientIntegrationTest {
         cfg.setLatencyMinMs(100);
         cfg.setLatencyMaxMs(200);
         engine.clearHistory();
-        client = GoblinWebClient.enable(WebClient.create(vertx, new WebClientOptions().setConnectTimeout(5_000)));
+        client = GoblinWebClient.enable(createOutsideTheRewrite());
     }
 
     @AfterEach
@@ -217,6 +222,33 @@ public class GoblinWebClientIntegrationTest {
                 "expected a WebClient record, got: " + record.method());
     }
 
+    @Test
+    public void aClientCreatedOutsideTheApplicationCodeIsLeftAloneUntilEnabled() {
+        engine.getMutableConfig().setClientExceptionEnabled(true);
+        client.close();
+        client = createOutsideTheRewrite();
+
+        assertEquals("hello from Goblin test app", hello(), "a client Goblin did not arm must not be assaulted");
+        assertTrue(engine.getHistory().isEmpty(), "no assault should be recorded, got: " + engine.getHistory());
+
+        GoblinWebClient.enable(client);
+        assertThrows(CompletionException.class, this::hello, "once enabled, the client must be assaulted");
+        assertFalse(engine.getHistory().isEmpty(), "the assault must be recorded once the client is enabled");
+    }
+
+    /**
+     * Creates a client the build-time rewrite does not see: a reflective call is not a {@code WebClient.create(...)}
+     * call site, so the client stays unarmed until {@link GoblinWebClient#enable(WebClient)}.
+     */
+    private WebClient createOutsideTheRewrite() {
+        try {
+            return (WebClient) WebClient.class.getMethod("create", Vertx.class, WebClientOptions.class)
+                    .invoke(null, vertx, new WebClientOptions().setConnectTimeout(5_000));
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private String hello() {
         try {
             HttpResponse<Buffer> response = client.getAbs(DOWNSTREAM).send()
@@ -236,5 +268,22 @@ public class GoblinWebClientIntegrationTest {
             current = current.getCause();
         }
         return false;
+    }
+
+    @Test
+    public void webClientsTheApplicationCreatesAreArmedWithoutAnyGoblinCall() {
+        engine.getMutableConfig().setClientExceptionEnabled(true);
+
+        // SampleResource creates both clients with a plain WebClient.create(...): Goblin armed them at build time
+        for (String endpoint : List.of("/api/web-proxy", "/api/mutiny-web-proxy")) {
+            engine.clearHistory();
+            RestAssured.given()
+                    .get(endpoint)
+                    .then()
+                    .statusCode(500);
+            assertTrue(engine.getHistory().stream().anyMatch(record -> "exception".equals(record.type())
+                    && record.method().startsWith("WebClient GET") && record.method().endsWith("/api/hello")),
+                    endpoint + " must have been assaulted by the client exception, got: " + engine.getHistory());
+        }
     }
 }

@@ -20,7 +20,7 @@ Goblin fills that gap: inject realistic failures at the HTTP layer during develo
 
 Key design decisions:
 
-* **Dev by default, tests on opt-in.** Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`, so adding the extension never slows down nor breaks an existing test suite. In a production build the engine stays inactive whatever the configuration, the Dev UI is absent, and no application bean is woven with the service-assault interceptor; only the (inert) runtime classes ship in the extension jar.
+* **Dev by default, tests on opt-in.** Chaos activates under `quarkus:dev`, and under `@QuarkusTest` only with `quarkus.goblin.test.enabled=true`, so adding the extension never slows down nor breaks an existing test suite. Never in production: Goblin is declared in the `provided` scope, so the packaged application does not contain it, and a production build that still carries it fails.
 * **Zero code modification.** No `@ChaosLatency` annotations to scatter across your endpoints. Configuration is the only interface.
 * **Non-destructive.** You can target specific packages, exclude annotated methods, and control the percentage of affected requests.
 * **Composable.** Multiple assault types can be active simultaneously on the same request.
@@ -38,8 +38,11 @@ Key design decisions:
     <groupId>io.quarkiverse.goblin</groupId>
     <artifactId>quarkus-goblin</artifactId>
     <version>${goblin.version}</version>
+    <scope>provided</scope>
 </dependency>
 ----
+
+IMPORTANT: The `provided` scope is not optional: Goblin must never reach production. It keeps the extension in `quarkus:dev` and `@QuarkusTest` and out of the packaged application, and a production build that still carries Goblin fails (see <<production>>). With Gradle, declare it as a `quarkusDev` and a `testImplementation` dependency.
 
 That's it. Start your application in dev mode:
 
@@ -97,9 +100,21 @@ Short on time? The https://www.youtube.com/watch?v=owd2kXIM9Z4[three-minute tour
 
 == FAQ
 
+[#production]
 *Does Goblin run in production?*
 
-No. The chaos implementation is only activated in dev mode and, on opt-in, in test mode. The runtime ships in `quarkus-goblin`, while the Dev UI components live in the `runtime-dev` module (`quarkus-goblin-dev`), which is only attached in dev mode.
+No, and it is never even there. Goblin belongs to dev mode and tests: declared in the `provided` scope, it is part of `quarkus:dev` and `@QuarkusTest` and left out of the packaged application. A production build -- `mvn package`, `quarkus build`, a native image, whatever the profile -- that still carries Goblin fails, with a message saying how to declare it:
+
+[source]
+----
+Goblin must never reach production, but quarkus-goblin is part of this production build. ...
+----
+
+This is deliberate and cannot be switched off. A Goblin left in a production artifact would stay inactive, but it would let anyone believe chaos runs there -- a staging environment running the production build, a setting under a `%prod` or `%staging` profile -- and conclude that the application is resilient when nothing was injected. The same goes for `quarkus-goblin-metrics` and `quarkus-goblin-opentelemetry`, which bring `quarkus-goblin` with them.
+
+The application's own code stays free of Goblin too, since it is packaged: a dev or test build fails when a class compiled from the main sources uses the Goblin API, and names it. A Vert.x `WebClient` needs no Goblin call -- Goblin arms the clients the application creates by itself -- and a custom `Assault` or an `AssaultObserver` lives in `src/test/java`, or in a module of its own declared `provided` when dev mode needs it.
+
+Remote dev mode (`mutable-jar`) is not supported: its first step is a production build, which Goblin is never part of.
 
 *Do I need to annotate my endpoints?*
 
@@ -127,7 +142,7 @@ Yes. Runtime changes are automatically saved to a `.goblin-state.json` file in t
 * **Production or staging chaos** -- Goblin is a dev-mode tool. Chaos belongs in the hands of someone who is watching the application, with an auto-off set.
 * **CI pipelines** -- no scenario files run non-interactively. A pipeline runs where nobody is watching; saved scenarios exist to replay an experiment by hand.
 * **A rules engine** -- no declarative expectations evaluated into pass/fail. Goblin provides the signals (history, counters, metrics, spans); the agent or the human concludes.
-* **Running in native mode** -- the extension must not break a native build when it sits in the dependencies, nothing more.
+* **Running in native mode** -- a native image is a production build: like any production build, it fails when it carries Goblin (see <<production>>).
 
 == Requirements
 

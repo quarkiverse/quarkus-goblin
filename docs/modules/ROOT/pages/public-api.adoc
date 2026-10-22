@@ -7,6 +7,8 @@ include::../partials/attributes.adoc[]
 Goblin follows https://semver.org[semantic versioning] from 1.0.0 on. This page says which part of the extension the
 version number speaks for, and what a minor version may still change.
 
+Code that uses this API stays out of production, like Goblin itself (see xref:index.adoc#production[Does Goblin run in production?]). Keep it in `src/test/java` when only your `@QuarkusTest` classes use it, or in a module of its own, declared `provided` like Goblin, when dev mode needs it -- a custom `Assault` or an `AssaultObserver` for the Dev UI sessions. That module must be indexed for its beans to be discovered: give it an empty `src/main/resources/META-INF/beans.xml` or the `jandex-maven-plugin`, otherwise its observers and assaults are silently ignored. Packaged code -- the main classes of the application module and of the other modules of the build it depends on, unless they are declared `provided` -- would compile against the `provided` dependency and then fail in the packaged application, which does not contain Goblin: a dev or test build refuses it and names the class. A Vert.x `WebClient` needs no Goblin call at all, Goblin arms the application's clients by itself.
+
 == What the version covers
 
 === Java API

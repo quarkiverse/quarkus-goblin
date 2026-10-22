@@ -18,13 +18,24 @@ import io.quarkus.arc.processor.BuiltinScope;
 import io.quarkus.deployment.IsProduction;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.annotations.Produce;
 import io.quarkus.deployment.builditem.ApplicationArchivesBuildItem;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
+import io.quarkus.deployment.builditem.ServiceStartBuildItem;
 
 public class GoblinBuildStep {
 
     static final String FEATURE = "goblin";
+
+    /**
+     * Why a production build fails, and how to keep Goblin out of it.
+     */
+    static final String PRODUCTION_BUILD_MESSAGE = "Goblin must never reach production, but quarkus-goblin is part of "
+            + "this production build. Goblin belongs to dev mode and tests only: declare it with <scope>provided</scope> "
+            + "in Maven, which keeps it in quarkus:dev and @QuarkusTest and out of the packaged application, or as a "
+            + "quarkusDev and testImplementation dependency in Gradle. The same goes for quarkus-goblin-metrics and "
+            + "quarkus-goblin-opentelemetry, which bring quarkus-goblin with them.";
 
     private static final DotName MICROPROFILE_FALLBACK = DotName.createSimple(
             "org.eclipse.microprofile.faulttolerance.Fallback");
@@ -55,6 +66,24 @@ public class GoblinBuildStep {
     @BuildStep(onlyIfNot = IsProduction.class)
     FeatureBuildItem feature() {
         return new FeatureBuildItem(FEATURE);
+    }
+
+    /**
+     * Fails a production build that carries Goblin. The extension only belongs to dev mode and tests: its engine would
+     * stay inactive in production anyway, but an artifact shipping it lets anyone believe chaos runs there (a staging
+     * environment running the production build, a configuration under a production profile), and ships code that has
+     * no business in production. A dependency in the {@code provided} scope never reaches this step: Maven keeps it
+     * out of the production build.
+     * <p>
+     * The step throws on its own rather than reporting a CDI validation error, so the message is never hidden behind
+     * another failure of the same build; producing a {@link ServiceStartBuildItem} ties it to every production build.
+     *
+     * @throws IllegalStateException always
+     */
+    @BuildStep(onlyIf = IsProduction.class)
+    @Produce(ServiceStartBuildItem.class)
+    void refuseProductionBuild() {
+        throw new IllegalStateException(PRODUCTION_BUILD_MESSAGE);
     }
 
     /*
