@@ -8,7 +8,6 @@ import io.quarkiverse.goblin.AssaultConfig;
 import io.quarkiverse.goblin.AssaultEngine;
 import io.quarkiverse.goblin.MutableAssaultConfig;
 import io.quarkiverse.goblin.internal.AssaultEngineImpl;
-import io.smallrye.common.annotation.Experimental;
 
 /**
  * Context passed to an {@link Assault} when it is applied to a request by the JAX-RS filter (reactive routes never
@@ -19,10 +18,9 @@ import io.smallrye.common.annotation.Experimental;
  * {@code null} in unit tests
  * that do not exercise a real JAX-RS pipeline.
  * <p>
- * Experimental: custom assaults run on the inbound JAX-RS filter only, so this SPI may change in a minor version when
- * another layer supports them. The rest of the public API is stable.
+ * Part of the public API covered by semantic versioning. The context is created by Goblin and bound to the inbound
+ * JAX-RS request; methods may be added in a minor version, for instance when custom assaults reach another layer.
  */
-@Experimental("Custom assaults are bound to JAX-RS; the SPI may change once another layer supports them")
 public class AssaultContext {
 
     private final ContainerRequestContext requestContext;

@@ -10,7 +10,7 @@ include::../partials/attributes.adoc[]
 |Version |Date
 
 |1.0.0
-|_unreleased_
+|2026-10-22
 |===
 
 === 1.0.0
@@ -25,10 +25,11 @@ include::../partials/attributes.adoc[]
 ** The built-in assaults, the filters, the layer hooks, the configuration mappings and the other implementation classes moved from `io.quarkiverse.goblin`, `io.quarkiverse.goblin.assault`, `.route`, `.service`, `.database` and `.messaging` to `io.quarkiverse.goblin.internal` and its sub-packages.
 ** `AssaultEngine.AssaultRecord` has two new components, `assaultType` and `injectedValue` (see below): its canonical constructor changed, and the five-argument constructor defaulting the source to `SERVER` is removed. Records are created by Goblin; an observer test building them by hand passes the source and the type.
 ** The moved classes log under their new names, e.g. `io.quarkiverse.goblin.internal.AssaultEngineImpl` instead of `io.quarkiverse.goblin.AssaultEngine`, and `io.quarkiverse.goblin.internal.filter.GoblinChaosFilter` instead of `io.quarkiverse.goblin.GoblinChaosFilter`. A log level set on an old class category no longer applies: set it on `io.quarkiverse.goblin`, which covers them all.
-** The `Assault` SPI (`Assault`, `AssaultContext`, `AssaultOutcome`) is marked `@Experimental`, since it is bound to JAX-RS. A custom assault records itself with the new `AssaultContext.record(this)` instead of `context.getEngine().recordAssault(...)`.
+** The `Assault` SPI (`Assault`, `AssaultContext`, `AssaultOutcome`) is part of the stable public API: still bound to JAX-RS, it only evolves by additions, `Assault` gaining `default` methods only. A custom assault records itself with the new `AssaultContext.record(this)` instead of `context.getEngine().recordAssault(...)`.
 
 ==== Improvements
 
+* The extension moves from *preview* to *stable* status: its public API -- including the `Assault` SPI -- follows semantic versioning (see xref:public-api.adoc[]).
 * `AssaultEngine.AssaultRecord` gains an `assaultType()` component, the `AssaultType` of the recorded assault, next to the `type()` label: an observer can filter assaults without parsing labels such as `response-body-truncate`. The label is unchanged, and so are the `type` metric tag and the `goblin.assault.type` span attribute.
 * Resilience testing guides (https://github.com/quarkiverse/quarkus-goblin/issues/88[#88]): one page per Fault Tolerance pattern -- xref:testing-circuit-breakers.adoc[circuit breakers], xref:testing-retries.adoc[retries] and xref:testing-fallbacks.adoc[fallbacks] -- each with the layer to arm, a Dev UI walkthrough on the sample application, a `@QuarkusTest`, what to observe in the history and the `ft_*` metrics, and the pitfalls; and xref:performance-baselines.adoc[performance baselines], measuring the reference latency from the client and the server before injecting a known delay. The sample application gains a circuit breaker that recovers in 500 ms and an outgoing REST Client call guarded by `@Timeout` and `@Fallback`, both covered by the integration tests.
 * Structured assault logs (https://github.com/quarkiverse/quarkus-goblin/issues/87[#87]): every assault, chaos switched on or off, an auto-off scheduled and every configuration change is logged as a single `key=value` line in the `io.quarkiverse.goblin.events` category -- timestamp, method, assault type, injected value, configuration snapshot -- with the same fields in the MDC for JSON logs. Assaults are logged at `INFO`, the lifecycle at `WARN`. See xref:structured-logs.adoc[].

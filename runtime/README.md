@@ -9,7 +9,7 @@ the [Adding a new assault](#adding-a-new-assault) section.
 - `io.quarkiverse.goblin` -- the public API, covered by semantic versioning: `AssaultEngine`, `AssaultConfig` (read-only) and
   `MutableAssaultConfig` (interfaces), `AssaultObserver`, `AssaultConfigChange`, `GoblinWebClient` and the enums. A public type there is a
   promise to users: add one only on purpose.
-- `io.quarkiverse.goblin.assault` -- the `@Experimental` `Assault` SPI for custom assaults, nothing else.
+- `io.quarkiverse.goblin.assault` -- the `Assault` SPI for custom assaults, nothing else; public and stable.
 - `io.quarkiverse.goblin.internal` and its sub-packages -- everything else, free to change in any version:
   - `internal` -- the engine core: `AssaultEngineImpl` and `MutableAssaultConfigImpl` (state and the plumbing the hooks
     call), `AssaultSettings`, the per-request `ChaosRequestContext`, the installed `GoblinLayerHooks`, the Markdown
@@ -124,7 +124,7 @@ An `Assault` is an `@ApplicationScoped` CDI bean -- the scope Goblin registers i
 runs in the JAX-RS filter only, never on reactive routes. `AssaultContext` carries the JAX-RS
 `ContainerRequestContext` (may be `null` in unit tests), the request's read-only `AssaultConfig` snapshot, the `AssaultEngine` and the
 targeted method name; `context.record(this)` or `context.record(this, latencyMs)` appends the assault to the history with
-its `type()` and `recordLabel()`. The SPI is public but `@Experimental` (see the public API page of the documentation).
+its `type()` and `recordLabel()`. The SPI is public and stable (see the public API page of the documentation).
 
 `AssaultOutcome` has two values: `CONTINUE` (let the next enabled assault run) and `ABORTED` (short-circuit the chain;
 use it whenever the request must not reach the endpoint).

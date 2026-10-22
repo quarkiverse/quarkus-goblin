@@ -251,4 +251,4 @@ At build time Goblin scans the combined index -- the application and its indexed
 
 NOTE: Custom assaults run in the JAX-RS filter only, since their `AssaultContext` carries the JAX-RS request context. Reactive routes apply the six built-in assault types and never call a custom `Assault` bean.
 
-IMPORTANT: The `Assault` SPI (`Assault`, `AssaultContext`, `AssaultOutcome`) is marked `@Experimental`: being bound to JAX-RS, it may change in a minor version once another layer supports custom assaults. See xref:public-api.adoc[].
+NOTE: The `Assault` SPI (`Assault`, `AssaultContext`, `AssaultOutcome`) is part of the stable public API: it only evolves by additions in a minor version, including when custom assaults reach another layer. See xref:public-api.adoc#custom-assault-spi[The custom assault SPI].

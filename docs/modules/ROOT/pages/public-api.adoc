@@ -13,8 +13,8 @@ Code that uses this API stays out of production, like Goblin itself (see xref:in
 
 === Java API
 
-The stable Java API is the `io.quarkiverse.goblin` package. The `io.quarkiverse.goblin.assault` package is public too, but
-<<experimental-spi,experimental>>; nothing else is public API.
+The stable Java API is the `io.quarkiverse.goblin` package and the `io.quarkiverse.goblin.assault` package, the
+<<custom-assault-spi,custom assault SPI>>; nothing else is public API.
 
 [cols="1,3"]
 |===
@@ -53,8 +53,8 @@ with the setters; its `snapshot()` returns an `AssaultConfig`.
 |===
 
 `AssaultEngine`, `AssaultConfig` and `MutableAssaultConfig` are interfaces provided by Goblin: an application uses them,
-it does not implement them. In this package, `AssaultObserver` is the only interface meant to be implemented; the
-experimental `Assault` SPI is the other one.
+it does not implement them. In this package, `AssaultObserver` is the only interface meant to be implemented;
+`io.quarkiverse.goblin.assault.Assault` is the other one.
 
 === Beyond Java
 
@@ -77,13 +77,16 @@ The version also covers what an application, a dashboard or an agent relies on o
 * Human-readable text: log messages, `AssaultConfig.describeAssaults()`, the Markdown report, the Dev UI.
 * The layout of `.goblin-state.json` and of the `.goblin/scenarios/` files.
 
-[#experimental-spi]
-== Experimental SPI
+[#custom-assault-spi]
+== The custom assault SPI
 
 The `io.quarkiverse.goblin.assault` package -- `Assault`, `AssaultContext`, `AssaultOutcome`, used to
-xref:how-it-works.adoc#custom-assault[add your own assault type] -- is annotated `@Experimental`. Custom
-assaults run on the inbound JAX-RS filter only, so this SPI may change in a minor version when another layer supports
-them. Such a change is announced in the xref:release-notes.adoc[release notes].
+xref:how-it-works.adoc#custom-assault[add your own assault type] -- is covered like the rest of the API. `Assault` is
+implemented by applications: like `AssaultObserver`, it only gains `default` methods in a minor version. `AssaultContext`
+and `AssaultOutcome` are provided by Goblin and may gain methods and constants.
+
+Custom assaults run on the inbound JAX-RS filter only, and `AssaultContext` carries the JAX-RS request context. Running
+them on another layer will come as additions to this SPI, never by breaking it before a major version.
 
 == What a version may change
 
@@ -96,15 +99,14 @@ them. Such a change is announced in the xref:release-notes.adoc[release notes].
 
 | Minor (`1.x.0`)
 | Additions that keep code using the covered surface compiling and running: new types, new methods on `AssaultEngine`,
-`AssaultConfig` and `MutableAssaultConfig`, new default methods on `AssaultObserver`, new record components, new enum
+`AssaultConfig` and `MutableAssaultConfig`, new default methods on `AssaultObserver` and `Assault`, new methods on `AssaultContext`, new record components, new enum
 constants, new configuration properties, JSON-RPC methods and Dev MCP tools, new fields in their results. Deprecations.
-Changes to the <<experimental-spi,experimental SPI>>, announced in the release notes.
 
 | Major (`x.0.0`)
 | Anything else: removals and incompatible changes of the covered surface.
 |===
 
-A covered element is removed only in a major version, after being deprecated in an earlier minor one. The experimental SPI is not covered by this rule.
+A covered element is removed only in a major version, after being deprecated in an earlier minor one.
 
 [TIP]
 ====

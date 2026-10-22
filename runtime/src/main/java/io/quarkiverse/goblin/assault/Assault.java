@@ -2,7 +2,6 @@ package io.quarkiverse.goblin.assault;
 
 import io.quarkiverse.goblin.AssaultConfig;
 import io.quarkiverse.goblin.AssaultType;
-import io.smallrye.common.annotation.Experimental;
 
 /**
  * Contract for a single chaos assault type.
@@ -23,10 +22,10 @@ import io.smallrye.common.annotation.Experimental;
  * Implementations are discovered automatically at build time, no manual registration is required. They are
  * {@code @ApplicationScoped} beans: a class without a scope annotation gets that scope.
  * <p>
- * Experimental: custom assaults run on the inbound JAX-RS filter only, so this SPI may change in a minor version when
- * another layer supports them. The rest of the public API is stable.
+ * Part of the public API covered by semantic versioning, and meant to be implemented by applications: new methods are
+ * added in a minor version as {@code default} methods, so an existing assault keeps compiling and running. Custom
+ * assaults run on the inbound JAX-RS filter only; supporting them on another layer will come as such additions.
  */
-@Experimental("Custom assaults are bound to JAX-RS; the SPI may change once another layer supports them")
 public interface Assault {
 
     /**
