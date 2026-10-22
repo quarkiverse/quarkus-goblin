@@ -1,0 +1,91 @@
+= Establishing performance baselines
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+A chaos experiment answers "what happens to my response times when a dependency slows down?" -- which only means something next to "what are my response times when it does not?". This guide measures that reference first, then injects a known latency and reads how the application passes it on: untouched, capped by a `@Timeout`, or amplified by retries.
+
+The examples use the `GET /api/service/remote` endpoint of the `integration-tests` sample application (see xref:end-to-end-example.adoc[] to start it), which calls a downstream service through a REST Client, behind a `@Timeout(400ms)` and a `@Fallback`.
+
+== Measure the baseline
+
+Switch chaos off with the master toggle of the Dev UI, so Goblin injects nothing, then send the same requests you will send during the experiment. A sequential loop of `curl` is enough to read the latency percentiles from the client side:
+
+[source,bash]
+----
+for i in $(seq 1 200); do
+  curl -s -o /dev/null -w "%{time_total}\n" http://localhost:8080/api/service/remote
+done | sort -n | awk '{t[NR]=$1} END {print "p50=" t[int(NR*0.50)] " p95=" t[int(NR*0.95)] " p99=" t[int(NR*0.99)]}'
+----
+
+Run it twice and keep the second result: the first calls of a freshly started application pay the initialisation of the REST Client, Fault Tolerance and the JIT, easily half a second on the very first one.
+
+Write the numbers down next to the promise they back, in the `RESILIENCE.md` of your application (see xref:agent-playbook.adoc#your-promises[the template]): a baseline nobody can find later is a baseline you will measure again.
+
+== Read it from the server
+
+The client-side loop measures everything, network included. To see what the application itself spends, read the `http_server_requests_seconds` timer of Quarkus Micrometer at `/q/metrics`. It exposes `_count`, `_sum` and `_max` per `uri` and `status`, enough for an average:
+
+[source,promql]
+----
+sum(rate(http_server_requests_seconds_sum{uri="/api/service/remote"}[1m]))
+  / sum(rate(http_server_requests_seconds_count{uri="/api/service/remote"}[1m]))
+----
+
+Percentiles need the histogram, which Quarkus does not publish by default for this timer. Turn it on with a `MeterFilter`, as for the Goblin latency histogram (see xref:metrics.adoc[Metrics]):
+
+[source,java]
+----
+@Produces
+@Singleton
+MeterFilter httpServerHistogram() {
+    return new MeterFilter() {
+        @Override
+        public DistributionStatisticConfig configure(Meter.Id id, DistributionStatisticConfig config) {
+            if (id.getName().equals("http.server.requests")) {
+                return DistributionStatisticConfig.builder()
+                        .percentilesHistogram(true)
+                        .build()
+                        .merge(config);
+            }
+            return config;
+        }
+    };
+}
+----
+
+[source,promql]
+----
+histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{uri="/api/service/remote"}[1m])) by (le))
+----
+
+== Inject a known latency
+
+Now make the downstream slow by a known amount, and measure again with the same loop:
+
+. In the Dev UI, switch chaos back on and use *Reset to defaults* in the *Danger zone*, so nothing left over from another experiment is armed (latency on, every other assault off, layers *Inbound HTTP* + *Outbound HTTP*, level `100`).
+. Set the latency range to `100`-`200` ms, below the 400 ms timeout, and click `Save` -- the range is only editable while **Latency** is on.
+. Disable **Latency** and enable **client latency**: the outgoing call is delayed by the range set above, the endpoint itself is not.
+. Run the loop again.
+
+Compare the new percentiles with the baseline, and both with what Goblin injected: `goblin_latency_injected_seconds{source="rest-client"}` (with `quarkus-goblin-metrics`), or the `value=` of the `assault` events in the log (see xref:structured-logs.adoc[Structured logs]).
+
+* **The response time grew by about the injected latency:** the slowness passes through untouched. Expected below the timeout -- but is the new p99 still within your promise?
+* **It grew by less, and stops near the timeout when the latency is above it:** the `@Timeout` caps the damage. Raise the range to `600`-`700` ms (switch **Latency** on to edit it, then off again): the p99 should stay near 0.4 s and the answers become `remote fallback reply`.
+* **It grew by more than injected:** something multiplies the delay -- a `@Retry` around a `@Timeout` waits `maxRetries + 1` times, several calls to the same downstream add up. This is the finding to fix.
+
+== Tail latency with a partial level
+
+A dependency rarely slows down for every call. Set the level to `10`: one outgoing call in ten is delayed. The p50 barely moves, the p99 carries the whole delay. That is the profile of a real degradation, and the one your p99 promise has to hold against.
+
+== Keep the experiment
+
+Save the configuration as a Dev UI scenario (see xref:dev-ui.adoc#scenarios[Scenarios]), e.g. `remote +150ms`, so the same experiment runs again after a change: same latency, same level, same layers. Re-measure the baseline at the same time -- the code changed, so may the reference.
+
+== Pitfalls
+
+* **Dev mode is a measuring device, not a benchmark.** Goblin only runs in dev and test mode, with live reload and, in the sample, `DEBUG` logs on. Compare numbers taken in the same mode on the same machine; never compare them with production figures.
+* **Logs cost time.** At a 100% level every assault writes an `INFO` event: raise `io.quarkiverse.goblin.events` to `WARN` while measuring (see xref:structured-logs.adoc#tuning-the-volume[Structured logs]).
+* **A sequential loop measures latency, not capacity.** One request at a time never fills a `@Bulkhead` nor a thread pool. To see how an injected latency eats your throughput, drive the endpoint with a concurrent load tool and watch the error rate as well as the percentiles.
+* **Non-blocking endpoints skip blocking latencies.** On a Vert.x event-loop thread Goblin does not sleep (a WARN says so once); only the WebClient and reactive-route latencies, which use a Vert.x timer, apply there (see xref:compatibility.adoc[Compatibility]).

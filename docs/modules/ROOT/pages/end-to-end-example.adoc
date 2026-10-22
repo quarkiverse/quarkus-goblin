@@ -54,4 +54,8 @@ curl -w "\nstatus=%{http_code}\n" http://localhost:8080/api/db/retry
 
 Set the level to `30` and call the endpoints repeatedly: some attempts now succeed, so `@Retry` recovers before the fallback, and only part of the calls hit the timeout -- the intermittent, non-deterministic failures that are the hardest to get right in production.
 
+== Going further
+
+Each Fault Tolerance pattern has its own guide, with the layer to arm, what to observe and the pitfalls: xref:testing-circuit-breakers.adoc[circuit breakers] (open, then close again), xref:testing-retries.adoc[retries] (count the attempts), xref:testing-fallbacks.adoc[fallbacks] (a failing or slow downstream behind a REST Client) and xref:performance-baselines.adoc[performance baselines] (measure before you break).
+
 TIP: The same scenarios can run in a `@QuarkusTest`: set `quarkus.goblin.test.enabled=true`, arm the layer and the assault through the injected `AssaultEngine` (`engine.getMutableConfig()`), and assert on the response and on `engine.getHistory()`. See `GoblinServiceLayerIntegrationTest` and `GoblinDatabaseLayerIntegrationTest` in the `integration-tests` module.

@@ -79,6 +79,7 @@ While an event is logged, its fields are also in the MDC, prefixed with `goblin.
 quarkus.log.console.json.enabled=true
 ----
 
+[#tuning-the-volume]
 == Tuning the volume
 
 At a 100% target level, every request produces an `assault` event. Assaults are logged at `INFO` and the lifecycle at `WARN`, so raising the category level keeps the lifecycle and silences the assaults:

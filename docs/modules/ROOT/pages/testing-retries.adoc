@@ -1,0 +1,121 @@
+= Testing retries
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+A `@Retry` promises that a transient failure is absorbed: the method is invoked again, up to `maxRetries` times, and the caller only sees an error once every attempt failed. Two things can silently break that promise -- the retry never re-enters the code that failed, or it re-enters it so many times that it amplifies the outage. This guide uses Goblin to count the attempts and to make some of them succeed.
+
+The examples use the sample application of the `integration-tests` module (see xref:end-to-end-example.adoc[] to start it):
+
+[source,java]
+----
+@Retry(maxRetries = 2, delay = 0, jitter = 0)
+public String flaky() { ... }                    // GET /api/service/flaky
+
+@Retry(maxRetries = 2, delay = 0, jitter = 0)
+@Fallback(fallbackMethod = "databaseFallback")
+public String databasePingWithRetry() { ... }    // GET /api/db/retry: each attempt acquires a JDBC connection
+----
+
+== Where to inject the fault
+
+The fault must happen *inside* the retried method, so that each attempt meets it again:
+
+* **SERVICE** -- the Goblin interceptor runs inside Fault Tolerance: every attempt re-enters the interceptor, which throws again.
+* **DATABASE** -- each attempt acquires a new connection, and each acquisition can fail.
+* **HTTP_OUT** -- each attempt makes a new outgoing call, and each call can fail.
+
+On `HTTP_IN` the fault hits the request before the method runs: there is nothing to retry.
+
+Use the **exception** assault, with a class the retry handles (any exception by default). A latency only triggers a retry through a `@Timeout` on the same method: the timeout is per attempt, so `maxRetries = 2` with `@Timeout(400)` can keep the caller waiting three times 400 ms.
+
+== Count the attempts in the Dev UI
+
+. Start from a known state: *Reset to defaults* in the *Danger zone* (latency on with `100`-`5000` ms, every other assault off, layers *Inbound HTTP* + *Outbound HTTP*, level `100`). The dashboard settings survive a restart, so a previous experiment -- or the previous guide -- may still be armed.
+. In *Chaos layers*, switch **Service** on, and **Database** and **Inbound HTTP** off.
+. Disable **Latency**, enable **Exception**, keep the level at `100`.
+. Call the endpoint once:
++
+[source,bash]
+----
+curl -w "\nstatus=%{http_code}\n" http://localhost:8080/api/service/flaky
+----
+. The call fails with a `500`, and the *Assault History* holds **three** `exception` entries on `io.quarkiverse.goblin.it.SampleService.flaky`: the first attempt and the two retries. At `level = 100` the decision is drawn again for every attempt, so each one fails.
+
+Three entries for `maxRetries = 2` is the proof the retry re-entered the failing code. One entry means the fault was injected outside the retry (wrong layer); more than three means something retries on top of it -- a retry in the caller, or in the client library.
+
+The Fault Tolerance metrics count the same thing per call:
+
+[source]
+----
+ft_retry_calls_total{method="...SampleService.flaky",retried="true",retryResult="maxRetriesReached"} 1.0
+ft_retry_retries_total{method="...SampleService.flaky"} 2.0
+----
+
+The same experiment on the database: arm **Database** instead of **Service** and call `/api/db/retry`. The history holds three `exception` entries on `Database <default> connection`, then the `@Fallback` answers `database fallback reply`.
+
+== Make some attempts succeed
+
+A retry exists for failures that go away. Lower the level to `30` and call the endpoint repeatedly:
+
+[source,bash]
+----
+for i in $(seq 1 20); do curl -s -o /dev/null -w "%{http_code} " http://localhost:8080/api/service/flaky; done
+----
+
+Most calls now answer `200`. About 70% were never assaulted -- the level gates the first attempt too -- and most of the others failed once and were rescued by a retry. Keep **Inbound HTTP** off for this: below `100`, a request whose `SERVICE` draw misses goes on to draw the next armed layer, and an exception at the inbound boundary fails the request before any retry can run. With three attempts at a 30% failure rate, a call fails only when all three fail -- about 3% of the calls. `ft_retry_calls_total{retried="true",retryResult="valueReturned"}` counts the calls the retry rescued; `retried="false"` the ones that succeeded at once.
+
+This is the mode to tune `maxRetries`, `delay` and `jitter` against: how many retries does the failure rate you expect need, and what do they add to the response time?
+
+== Prove it in a test
+
+Chaos runs in a `@QuarkusTest` only with `quarkus.goblin.test.enabled=true` in the test configuration.
+
+[source,java]
+----
+@QuarkusTest
+class RetryTest {
+
+    @Inject
+    AssaultEngine engine;
+
+    @BeforeEach
+    void startFromAKnownState() {
+        // the engine belongs to the application, shared by every test class: another test may have switched it off
+        engine.setActive(true);
+        engine.getMutableConfig().resetToDefaults();
+        engine.clearHistory();
+    }
+
+    @AfterEach
+    void stopChaos() {
+        engine.getMutableConfig().resetToDefaults();
+    }
+
+    @Test
+    void everyAttemptMeetsTheFault() {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLatencyEnabled(false);
+        cfg.setLayerEnabled(ChaosLayer.SERVICE, true);
+        cfg.setExceptionEnabled(true);
+        cfg.setTargetLevel(100);
+
+        given().get("/api/service/flaky").then().statusCode(500);
+
+        // maxRetries = 2: the first attempt and two retries
+        assertEquals(3, engine.getHistory().stream()
+                .filter(r -> r.method().equals("io.quarkiverse.goblin.it.SampleService.flaky"))
+                .count());
+    }
+}
+----
+
+Assert on the *number of attempts*, not only on the final status: a method without any `@Retry` fails with the same `500`.
+
+== Pitfalls
+
+* **`abortOn` and `retryOn` decide what is retried.** Set the Goblin exception class (`setExceptionType`) to a class in `abortOn` to prove the retry gives up at once (one history entry), and to a class outside `retryOn` to prove it is not retried.
+* **Retries multiply latency.** With a `delay`, a `jitter` or a `@Timeout` per attempt, the worst case is `(maxRetries + 1) × timeout + maxRetries × (delay + jitter)`, capped by the retry's `maxDuration`. Measure it with a latency assault above the timeout (see xref:performance-baselines.adoc[]).
+* **A retry around a non-idempotent call repeats it.** Goblin throws on the way *in*, so an assaulted attempt never reached the downstream; a real failure may happen after the side effect. Retrying a payment is a design question Goblin will not answer for you.
+* **A message consumer is retried by its channel**, not by a `@Retry` on the consumer: a `MESSAGING` fault is handled by the channel failure strategy (see xref:assault-types.adoc[Assault types]).

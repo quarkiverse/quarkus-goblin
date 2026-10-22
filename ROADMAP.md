@@ -123,7 +123,7 @@ Current status: **preview** (v0.5.0 released, v1.0.0 in development)
 - [x] **Structured assault logs** ([#87](https://github.com/quarkiverse/quarkus-goblin/issues/87))
   Replace the plain-text `WARN` logs with structured events whoever runs the experiment can read -- human or agent: timestamp, method, assault type, injected value, configuration snapshot. The goal is a log you can reason about during an experiment, not log aggregation for compliance, which is a production concern Goblin does not serve.
 
-- [ ] **Advanced scenario-based documentation** ([#88](https://github.com/quarkiverse/quarkus-goblin/issues/88))
+- [x] **Advanced scenario-based documentation** ([#88](https://github.com/quarkiverse/quarkus-goblin/issues/88))
   Write dedicated guides for common resilience testing patterns: testing circuit breakers with `@CircuitBreaker`, testing retries with `@Retry`, testing fallbacks with `@Fallback`, and establishing performance baselines.
 
 ---

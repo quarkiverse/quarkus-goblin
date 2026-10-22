@@ -1,0 +1,132 @@
+= Testing circuit breakers
+:toc: left
+:toclevels: 2
+
+include::../partials/attributes.adoc[]
+
+A `@CircuitBreaker` makes three promises: it *opens* once enough calls fail, it *rejects* calls without running the method while open, and it *closes* again once the dependency recovers. A declared breaker that never sees a real failure proves none of them. This guide uses Goblin to drive a breaker through its whole cycle, by hand in the Dev UI and then in a `@QuarkusTest`.
+
+The examples use the sample application of the `integration-tests` module (see xref:end-to-end-example.adoc[] to start it). Its `SampleService` declares two breakers:
+
+[source,java]
+----
+@CircuitBreaker(requestVolumeThreshold = 2, failureRatio = 1.0, delay = 60, delayUnit = ChronoUnit.SECONDS)
+public String guarded() { ... }                  // GET /api/service/guarded: stays open for a minute
+
+@CircuitBreaker(requestVolumeThreshold = 2, failureRatio = 1.0, delay = 500, delayUnit = ChronoUnit.MILLIS,
+        successThreshold = 1)
+public String recovering() { ... }               // GET /api/service/recovering: half-opens after 500 ms
+----
+
+== Where to inject the fault
+
+The fault must be thrown *inside* the breaker, where Fault Tolerance counts it:
+
+* **SERVICE** -- the Goblin interceptor runs inside the Fault Tolerance interceptor, so an exception thrown on a bean method is a failure of that method's breaker. This is the layer for a breaker on a business method.
+* **HTTP_OUT** -- a client exception on an outgoing REST Client or WebClient call is a failure of the breaker on the method that makes the call, or on the REST Client interface itself.
+* **DATABASE** -- a connection acquisition failure inside a guarded repository or service method.
+
+`HTTP_IN` is the wrong layer: the fault hits the request before the guarded method runs, so the breaker never counts it (see xref:compatibility.adoc[Compatibility]).
+
+Use the **exception** assault. A latency does not open a breaker on its own: pair it with a `@Timeout`, whose `TimeoutException` is what the breaker counts.
+
+== Open it in the Dev UI
+
+. Start from a known state: *Reset to defaults* in the *Danger zone* (latency on with `100`-`5000` ms, every other assault off, layers *Inbound HTTP* + *Outbound HTTP*, level `100`). The dashboard settings survive a restart, so a previous experiment -- or the previous guide -- may still be armed.
+. In *Chaos layers*, switch **Service** on, and **Database** and **Inbound HTTP** off.
+. Disable **Latency**, enable **Exception**, keep the level at `100`.
+. Call the breaker a few times:
++
+[source,bash]
+----
+for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w "%{http_code} " http://localhost:8080/api/service/guarded; done
+----
+. Every call fails with a `500`, but the *Assault History* holds only **two** `exception` entries on `io.quarkiverse.goblin.it.SampleService.guarded`. The first two calls ran the method and failed; from the third on, the open breaker rejected the call before the method -- and Goblin -- ran.
+
+The difference between the failures the client saw (6) and the faults Goblin injected (2) *is* the breaker working. The Fault Tolerance metrics at `/q/metrics` say the same:
+
+[source]
+----
+ft_circuitbreaker_state_current{method="io.quarkiverse.goblin.it.SampleService.guarded",state="open"} 1.0
+ft_circuitbreaker_calls_total{circuitBreakerResult="failure",method="...SampleService.guarded"} 2.0
+ft_circuitbreaker_calls_total{circuitBreakerResult="circuitBreakerOpen",method="...SampleService.guarded"} 4.0
+ft_circuitbreaker_opened_total{method="...SampleService.guarded"} 1.0
+----
+
+== Watch it close
+
+Opening is half the story: a breaker that never closes turns a transient outage into a permanent one. Use `recovering()`, whose delay is 500 ms:
+
+. With the exception still armed, call `/api/service/recovering` three times in a row -- within the 500 ms delay, or the third call is already the half-open trial (see the tip below):
++
+[source,bash]
+----
+for i in 1 2 3; do curl -s -o /dev/null -w "%{http_code} " http://localhost:8080/api/service/recovering; done
+----
++
+Two failures, then a rejection: the history holds two `exception` entries on `recovering`, not three.
+. Disable **Exception** -- the dependency "recovers".
+. Wait at least 500 ms, then call it again: the breaker half-opens, lets one trial call through, the call succeeds (`successThreshold = 1`) and the breaker closes. Every following call answers `200`.
+
+`ft_circuitbreaker_state_current` changes state lazily: after the delay it reads `halfOpen` until the next call, which closes (or reopens) it. `ft_circuitbreaker_state_total_seconds` tells how long the breaker spent in each state, which is how long your users were served by the fallback -- or by a `500`.
+
+TIP: To see the breaker *re-open* from half-open, leave the exception armed when the delay elapses: the trial call fails and the breaker opens again, with one more `failure` and one more `opened`.
+
+== Prove it in a test
+
+The same cycle as an automated test, from the `integration-tests` module. Chaos runs in a `@QuarkusTest` only with `quarkus.goblin.test.enabled=true` in the test configuration.
+
+[source,java]
+----
+@QuarkusTest
+class CircuitBreakerTest {
+
+    @Inject
+    AssaultEngine engine;
+
+    @BeforeEach
+    void startFromAKnownState() {
+        // the engine belongs to the application, shared by every test class: another test may have switched it off
+        engine.setActive(true);
+        engine.getMutableConfig().resetToDefaults();
+        engine.clearHistory();
+    }
+
+    @AfterEach
+    void stopChaos() {
+        engine.getMutableConfig().resetToDefaults();
+    }
+
+    @Test
+    void breakerOpensThenClosesOnceTheFaultsStop() throws Exception {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLatencyEnabled(false);
+        cfg.setLayerEnabled(ChaosLayer.SERVICE, true);
+        cfg.setExceptionEnabled(true);
+        cfg.setTargetLevel(100);
+
+        // two faults open the breaker; the third call is rejected before reaching the bean
+        for (int i = 0; i < 3; i++) {
+            given().get("/api/service/recovering").then().statusCode(500);
+        }
+        assertEquals(2, engine.getHistory().stream()
+                .filter(r -> r.method().equals("io.quarkiverse.goblin.it.SampleService.recovering")).count());
+
+        // the dependency recovers: after the delay, the half-open trial closes the breaker
+        cfg.setExceptionEnabled(false);
+        Thread.sleep(700);
+        for (int i = 0; i < 3; i++) {
+            given().get("/api/service/recovering").then().statusCode(200);
+        }
+    }
+}
+----
+
+Assert on what the *breaker* did -- calls rejected without an assault, then answered again -- not only on the client seeing errors: a method without any breaker fails just as well.
+
+== Pitfalls
+
+* **The breaker state outlives the test.** It belongs to the application, which a `@QuarkusTest` shares across test classes: a breaker opened by one test is still open in the next one. Give a breaker-focused test its own guarded method, wait for the delay, or test the opening last.
+* **`requestVolumeThreshold` is a window, not a counter of failures.** The breaker evaluates the last `requestVolumeThreshold` calls; with `failureRatio = 0.5` and a window of 4, two faults out of four open it. At a `level` below `100` the outcome depends on the draw: use `level = 100` to assert, a lower level to explore.
+* **Exceptions in `skipOn` are not failures.** If the breaker declares `skipOn` or `failOn`, pick the Goblin exception class (`setExceptionType`) accordingly -- injecting a class the breaker ignores is how you prove `skipOn` works.
+* **With a `@Fallback` on the same method,** the client sees the fallback reply in both states; tell them apart with `ft_circuitbreaker_calls_total` or the history, not the response body.

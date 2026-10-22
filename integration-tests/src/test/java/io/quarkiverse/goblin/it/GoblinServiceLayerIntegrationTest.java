@@ -31,6 +31,7 @@ public class GoblinServiceLayerIntegrationTest {
     private static final String SAMPLE_SERVICE_RETRY_FALLBACK = "io.quarkiverse.goblin.it.SampleService.retryThenFallback";
     private static final String SAMPLE_SERVICE_TIMED = "io.quarkiverse.goblin.it.SampleService.timed";
     private static final String SAMPLE_SERVICE_GUARDED = "io.quarkiverse.goblin.it.SampleService.guarded";
+    private static final String SAMPLE_SERVICE_RECOVERING = "io.quarkiverse.goblin.it.SampleService.recovering";
     private static final String SAMPLE_SERVICE_NESTED = "io.quarkiverse.goblin.it.SampleService.nested";
     private static final String SAMPLE_DELEGATE = "io.quarkiverse.goblin.it.SampleDelegate";
 
@@ -263,5 +264,35 @@ public class GoblinServiceLayerIntegrationTest {
         assertEquals(2, assaults,
                 "@CircuitBreaker(requestVolumeThreshold=2) must open after two Goblin faults: the third call is rejected "
                         + "by the breaker before reaching the bean, got " + assaults);
+    }
+
+    @Test
+    public void circuitBreakerClosesAgainOnceTheFaultsStop() throws Exception {
+        MutableAssaultConfig cfg = engine.getMutableConfig();
+        cfg.setLayerEnabled(ChaosLayer.SERVICE, true);
+        cfg.setExceptionEnabled(true);
+        cfg.setTargetLevel(100);
+
+        // two Goblin faults open the breaker; the third call is rejected before reaching the bean
+        for (int i = 0; i < 3; i++) {
+            RestAssured.given()
+                    .get("/api/service/recovering")
+                    .then()
+                    .statusCode(500);
+        }
+        assertEquals(2, engine.getHistory().stream()
+                .filter(record -> SAMPLE_SERVICE_RECOVERING.equals(record.method())).count(),
+                "the open breaker must reject the third call before Goblin sees it");
+
+        // chaos stops, the 500 ms delay elapses: the half-open trial succeeds and closes the breaker
+        cfg.setExceptionEnabled(false);
+        Thread.sleep(700);
+        for (int i = 0; i < 3; i++) {
+            RestAssured.given()
+                    .get("/api/service/recovering")
+                    .then()
+                    .statusCode(200)
+                    .body(org.hamcrest.Matchers.equalTo("recovering reply"));
+        }
     }
 }

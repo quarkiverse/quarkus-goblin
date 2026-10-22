@@ -198,7 +198,7 @@ Each module carries its own README for contributors:
 
 ## Documentation
 
-The full AsciiDoc guide lives in [`docs/modules/ROOT/pages/`](docs/modules/ROOT/pages/) (`index.adoc`), covering assault types, targeting, configuration validation, the Dev UI (with screenshots), an end-to-end example, a JSON-RPC reference, and a FAQ.
+The full AsciiDoc guide lives in [`docs/modules/ROOT/pages/`](docs/modules/ROOT/pages/) (`index.adoc`), covering assault types, targeting, configuration validation, the Dev UI (with screenshots), an end-to-end example, resilience testing guides (circuit breakers, retries, fallbacks, performance baselines), a JSON-RPC reference, and a FAQ.
 
 Screenshots of the Dev UI are stored in [`docs/modules/ROOT/assets/images/`](docs/modules/ROOT/assets/images/).
 
