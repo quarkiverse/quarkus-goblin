@@ -9,9 +9,18 @@ include::../partials/attributes.adoc[]
 |===
 |Version |Date
 
+|1.0.1
+|2026-10-23
+
 |1.0.0
 |2026-10-22
 |===
+
+=== 1.0.1
+
+==== Bug fixes
+
+* Publication to Maven Central: the 0.5.0 and 1.0.0 releases were built and tagged, but Maven Central refused them because their Javadoc jars were missing. Maven 3.10 no longer activates the release profile of its super POM with `-DperformRelease`, and the Quarkiverse parent Goblin used (22) relied on it; Goblin now inherits `quarkiverse-parent` 26, whose own release profile is activated by `performRelease`. 1.0.1 carries exactly the content of 1.0.0, and is the first version of the 1.0.x line available on Maven Central; 0.5.0 is not published.
 
 === 1.0.0
 
