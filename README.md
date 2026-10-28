@@ -6,6 +6,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Build](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml/badge.svg)](https://github.com/quarkiverse/quarkus-goblin/actions/workflows/build.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fquarkiverse%2Fquarkus-goblin%2Fbadges%2Fcoverage.json)](https://github.com/quarkiverse/quarkus-goblin/tree/badges)
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/ErwanLT/badge.svg)](https://hub.xerj.org/contributors/ErwanLT)
 
 Chaos engineering extension for Quarkus -- inject latency, exceptions, HTTP failures, and dependency degradation into your running application without touching a single line of source code.
 
