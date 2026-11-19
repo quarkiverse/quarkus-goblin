@@ -56,6 +56,13 @@ public class GoblinBuildStep {
             "io.quarkiverse.goblin.opentelemetry"
     };
 
+    /**
+     * Aesh command types: Aesh reads {@code @CommandDefinition} on the command instance's own class, which an
+     * intercepted bean's ArC subclass does not carry, so the command is refused and the CLI never starts (#95).
+     */
+    private static final DotName AESH_COMMAND = DotName.createSimple("org.aesh.command.Command");
+    private static final DotName AESH_COMMAND_DEFINITION = DotName.createSimple("org.aesh.command.CommandDefinition");
+
     private static final DotName JAX_RS_PATH = DotName.createSimple("jakarta.ws.rs.Path");
     private static final DotName JAX_RS_PROVIDER = DotName.createSimple("jakarta.ws.rs.ext.Provider");
     private static final DotName ROUTE = DotName.createSimple("io.quarkus.vertx.web.Route");
@@ -279,6 +286,8 @@ public class GoblinBuildStep {
      * methods always sit
      * <em>below</em> the resource boundary -- intercepting a resource method would abort the request before the
      * protected bean is reached;</li>
+     * <li>Aesh CLI command classes are never decorated: like HTTP classes they are entry points, and Aesh refuses the
+     * ArC subclass of an intercepted command, which does not carry {@code @CommandDefinition};</li>
      * <li>classes that can never be CDI beans -- anonymous, local and non-static inner classes -- are never decorated:
      * ArC rejects an interceptor binding on them and the application would fail to start;</li>
      * <li>classes in a {@code goblin.target.exclude-packages} prefix are never decorated;</li>
@@ -312,6 +321,9 @@ public class GoblinBuildStep {
         if (hasInterface(clazz, index, MICROPROFILE_FALLBACK_HANDLER, JAX_RS_PATH)) {
             return false;
         }
+        if (isAeshCommandClass(clazz, index)) {
+            return false;
+        }
         String packageName = name.substring(0, name.lastIndexOf('.'));
         if (isInternalPackage(packageName)) {
             return false;
@@ -329,6 +341,21 @@ public class GoblinBuildStep {
     static boolean isReactiveRouteClass(ClassInfo clazz) {
         return clazz.declaredAnnotation(ROUTE_BASE) != null || !clazz.annotations(ROUTE).isEmpty()
                 || !clazz.annotations(ROUTES).isEmpty() || !clazz.annotations(ROUTE_FILTER).isEmpty();
+    }
+
+    /**
+     * Checks whether a class is an Aesh CLI command ({@code @CommandDefinition}, or an implementation of
+     * {@code org.aesh.command.Command}, group commands included). Like a JAX-RS resource, a command is an entry point,
+     * not the service layer; and Aesh looks its {@code @CommandDefinition} up on the instance's own class, which the
+     * ArC subclass of an intercepted bean does not carry, so decorating a command would keep the CLI from starting.
+     *
+     * @param clazz the class to evaluate
+     * @param index the combined index, used to resolve super types
+     * @return {@code true} for an Aesh command class
+     */
+    static boolean isAeshCommandClass(ClassInfo clazz, IndexView index) {
+        return clazz.declaredAnnotation(AESH_COMMAND_DEFINITION) != null
+                || hasInterface(clazz, index, AESH_COMMAND, null);
     }
 
     /**

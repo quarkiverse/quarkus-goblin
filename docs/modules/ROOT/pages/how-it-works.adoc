@@ -98,6 +98,9 @@ request resolved to the SERVICE layer.
   `MeterFilter` a producer method returns), constructors nor synthetic methods. Methods
   named as the `fallbackMethod` of a `@Fallback` (on a method or on the class) in the same class, and `FallbackHandler`
   implementations, are skipped too, so a fallback can answer the original failure instead of being assaulted itself.
+  Aesh CLI commands (`@CommandDefinition`, `org.aesh.command.Command` implementations) are
+  entry points as well, and are never decorated: Aesh reads `@CommandDefinition` on the command's own class, which the
+  subclass ArC generates for an intercepted bean does not carry, so a decorated command would keep the CLI from starting.
   The service-assault binding is only woven in dev and test builds; Goblin never reaches a production build.
 * **One fault per call chain.** Only the outermost intercepted call of a request is assaulted: when a decorated bean
   calls another decorated bean, the inner call runs untouched. Each further outermost call of the same request (a
