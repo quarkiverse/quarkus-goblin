@@ -9,12 +9,21 @@ include::../partials/attributes.adoc[]
 |===
 |Version |Date
 
+|1.0.2
+|2026-11-19
+
 |1.0.1
 |2026-10-23
 
 |1.0.0
 |2026-10-22
 |===
+
+=== 1.0.2
+
+==== Bug fixes
+
+* Aesh CLI applications keep working with Goblin on the classpath (https://github.com/quarkiverse/quarkus-goblin/issues/95[#95]): the `SERVICE` layer binding turned every Aesh command into an ArC subclass without `@CommandDefinition`, which Aesh refused, so the console never started and every `@QuarkusMainTest` driving the CLI timed out -- whatever `quarkus.goblin.enabled` said, since the binding is woven at build time. Aesh command classes (`@CommandDefinition`, `org.aesh.command.Command` implementations) are now entry points, like JAX-RS resources and reactive routes, and are never decorated; the services they call are still assaulted. On earlier versions, setting `quarkus.goblin.target.exclude-packages` to the commands' package works around it.
 
 === 1.0.1
 
