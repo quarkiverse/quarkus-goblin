@@ -128,6 +128,13 @@ Current status: **stable** (v1.0.1 released)
 
 ---
 
+## v1.0.2 -- Fixes
+
+- [x] **Aesh CLI tests broken by the extension** ([#95](https://github.com/quarkiverse/quarkus-goblin/issues/95))
+  Adding Goblin made every `@QuarkusMainTest` driving an Aesh CLI time out: the service-assault binding turned each command into an ArC subclass without `@CommandDefinition`, which Aesh refuses, so the console never started. Aesh command classes are now never decorated, like the other entry points (JAX-RS resources, reactive routes).
+
+---
+
 ## On demand
 
 > None of these betrays what Goblin is: each is a new injection layer, or a new Dev UI surface. What they share is coupling to a Quarkus area, so they are picked up when someone asks for them in an issue, not scheduled here.

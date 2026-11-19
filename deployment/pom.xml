@@ -83,6 +83,12 @@
             <artifactId>quarkus-reactive-routes</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Aesh command types: fixtures of the service-eligibility tests (#95) -->
+        <dependency>
+            <groupId>org.aesh</groupId>
+            <artifactId>aesh</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- provided in quarkus-goblin-dev: the playbook test reflects on the JSON-RPC service, whose signatures use it -->
         <dependency>
             <groupId>io.vertx</groupId>
